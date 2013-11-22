@@ -1,7 +1,12 @@
 package com.microsoft.reef.simple;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -10,8 +15,10 @@ import java.util.logging.Logger;
 import javax.inject.Inject;
 
 import com.microsoft.reef.driver.activity.ActivityConfiguration;
+import com.microsoft.reef.driver.activity.ActivityMessage;
 import com.microsoft.reef.driver.activity.CompletedActivity;
 import com.microsoft.reef.driver.activity.FailedActivity;
+import com.microsoft.reef.driver.client.JobMessageObserver;
 import com.microsoft.reef.driver.contexts.ActiveContext;
 import com.microsoft.reef.driver.contexts.ContextConfiguration;
 import com.microsoft.reef.driver.contexts.FailedContext;
@@ -34,9 +41,11 @@ public class SimpleDriver {
   private static final Logger LOG = Logger.getLogger(SimpleDriver.class.getName());
 
   private final EvaluatorRequestor requestor;
-  private final ApplicationMaster appClass;
+  private final JobMessageObserver client;
+  private final ApplicationMaster appMaster;
   private final String appArgs;
   private final int numContainers;
+  @SuppressWarnings("unused")
   private final int containerMemory;
   private boolean appMasterDone = false;
 
@@ -51,17 +60,19 @@ public class SimpleDriver {
    */
   @Inject
   public SimpleDriver(final EvaluatorRequestor requestor,
-      @Parameter(Client.AppClass.class) ApplicationMaster appClass,
+      final JobMessageObserver client,
+      @Parameter(Client.AppClass.class) ApplicationMaster appMaster,
       @Parameter(Client.AppArgs.class) String appArgs,
       @Parameter(Client.NumContainers.class) int numContainers,
       @Parameter(Client.ContainerMemory.class) int containerMemory) {
     this.requestor = requestor;
-    this.appClass = appClass;
+    this.client = client;
+    this.appMaster = appMaster;
     this.appArgs = appArgs;
     this.numContainers = numContainers;
     this.containerMemory = containerMemory;
     
-    appClass.setDriver(this);
+    appMaster.setDriver(this);
   }
 
   /**
@@ -74,11 +85,40 @@ public class SimpleDriver {
           // XXX fix reef size API.
           .setNumber(numContainers).setSize(/*containerMemory*/EvaluatorRequest.Size.XLARGE).build());
       LOG.log(Level.INFO, "StartTime: ", startTime);
-      appClass.start(appArgs);
+      appMaster.start(appArgs);
       appMasterDone = true;
     }
   }
 
+  protected final PrintStream out = new PrintStream(/*new BufferedOutputStream(*/new OutputStream() {
+    // XXX this is grossly non-performant!
+    List<Byte> buf = new ArrayList<Byte>();
+    @Override
+    public void write(int arg0) throws IOException {
+      buf.add((byte)arg0);
+    }
+    @Override
+    public void write(byte[] arg0) throws IOException {
+      for(int i = 0; i < arg0.length; i++) {
+        buf.add(arg0[i]);
+      }
+    }
+    @Override
+    public void flush() throws IOException {
+      if(buf.size() != 0) {
+        byte[] b = new byte[buf.size()];
+        for(int i = 0; i < b.length; i++) {
+          b[i] = buf.get(i);
+        }
+        buf.clear();
+        client.onNext(b);
+      }
+    }
+    @Override
+    public void close() throws IOException {
+      flush();
+    }
+  }/*, 64*1024)*/);
   
   private synchronized final void executeTasks() {
     while((!idleEvaluators.isEmpty()) && (!queuedTasks.isEmpty())) {
@@ -100,11 +140,13 @@ public class SimpleDriver {
         throw new RuntimeException("Unable to setup Activity or Context configuration.", ex);
       }
     }
-    if(queuedTasks.isEmpty() && appMasterDone) {
+    if(queuedTasks.isEmpty() && runningTasks.isEmpty() && appMasterDone) {
       for(ActiveContext eval : idleEvaluators) {
         eval.close();
       }
       idleEvaluators.clear();
+      appMaster.onShutdown();
+      out.flush();
     }
   }
   final class EvaluatorAllocatedHandler implements EventHandler<AllocatedEvaluator> {
@@ -134,6 +176,7 @@ public class SimpleDriver {
   private void onFailedActivity(FailedActivity failedActivity) {
     LOG.log(Level.WARNING, failedActivity + " failed: " + failedActivity.getReason().get());
     onFailedContext(failedActivity.getActiveContext().get());
+    appMaster.onTaskFailed(failedActivity);
   }
   final class EvaluatorFailedHandler implements EventHandler<FailedEvaluator> {
     @Override
@@ -141,7 +184,20 @@ public class SimpleDriver {
       if(failedEvaluator.getFailedActivity().isPresent()) {
         onFailedActivity(failedEvaluator.getFailedActivity().get());
       }
+      appMaster.onContainerFailed(failedEvaluator);
     }
+  }
+  final class ActivityMessageHandler implements EventHandler<ActivityMessage> {
+
+    @Override
+    public void onNext(ActivityMessage arg0) {
+      try {
+        out.write(arg0.get());
+      } catch(IOException e) {
+        e.printStackTrace();
+      }
+    }
+    
   }
   final class ContextFailedHandler implements EventHandler<FailedContext> {
     @Override
@@ -157,6 +213,7 @@ public class SimpleDriver {
       synchronized(SimpleDriver.this) {
         idleEvaluators.add(completedActivity.getActiveContext());
         runningTasks.remove(completedActivity.getActiveContext());
+        appMaster.onTaskCompleted(completedActivity);
       }
       executeTasks();
     }
@@ -174,6 +231,7 @@ public class SimpleDriver {
         idleEvaluators.add(activeContext);
       }
       executeTasks();
+      appMaster.onContainerStarted(activeContext);
     }
     
   }

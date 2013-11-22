@@ -1,13 +1,16 @@
 package com.microsoft.reef.simple;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.client.ClientConfigurationOptions;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
+import com.microsoft.reef.client.JobMessage;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.client.REEF;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -22,6 +25,7 @@ import com.microsoft.tang.annotations.NamedParameter;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.formats.CommandLine;
+import com.microsoft.wake.EventHandler;
 
 public class Client {
 
@@ -60,52 +64,16 @@ public class Client {
   
   private static final Logger LOG = Logger.getLogger(Client.class.getName());
 
-  public LauncherStatus run() throws Exception {
-    final JavaConfigurationBuilder driverConf = Tang.Factory.getTang().newConfigurationBuilder(
-        EnvironmentUtils.addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
-          .set(DriverConfiguration.DRIVER_IDENTIFIER, "SimpleDriver")
-          .set(DriverConfiguration.ON_DRIVER_STARTED, SimpleDriver.StartHandler.class)
-          //.set(DriverConfiguration.ON_DRIVER_STOP, SimpleDriver.StopHandler.class)
-          .set(DriverConfiguration.ON_EVALUATOR_ALLOCATED, SimpleDriver.EvaluatorAllocatedHandler.class)
-          //.set(DriverConfiguration.ON_EVALUATOR_COMPLETED, SimpleDriver.EvaluatorCompletedHandler.class)
-          .set(DriverConfiguration.ON_EVALUATOR_FAILED, SimpleDriver.EvaluatorFailedHandler.class)
-          //.set(DriverConfiguration.ON_ACTIVITY_MESSAGE, SimpleDriver.EvaluatorMessageHandler.class)
-          .set(DriverConfiguration.ON_ACTIVITY_COMPLETED, SimpleDriver.ActivityCompletedHandler.class)
-          .set(DriverConfiguration.ON_ACTIVITY_FAILED, SimpleDriver.ActivityFailedHandler.class)
-          //.set(DriverConfiguration.ON_ACTIVITY_RUNNING, SimpleDriver.ActivityRunningHandler.class)
-          //.set(DriverConfiguration.ON_ACTIVITY_SUSPENDED, SimpleDriver.ActivityRunningHandler.class)
-          .set(DriverConfiguration.ON_CONTEXT_ACTIVE, SimpleDriver.ContextActiveHandler.class)
-          //.set(DriverConfiguration.ON_CONTEXT_CLOSED, SimpleDriver.ContextClosedHandler.class)
-          .set(DriverConfiguration.ON_CONTEXT_FAILED, SimpleDriver.ContextFailedHandler.class)
-          //.set(DriverConfiguration.ON_CONTEXT_MESSAGE, SimpleDriver.ContextMessageHandler.class)
-          //.set(DriverConfiguration.ON_CLIENT_MESSAGE, SimpleDriver.ClientMessageHandler.class)
-          //.set(DriverConfiguration.ON_CLIENT_CLOSED, SimpleDriver.ClientClosedHandler.class)
-          //.set(DriverConfiguration.ON_CLIENT_CLOSED_WITH_MESSAGE, SimpleDriver.ClientClosedWithMessageHandler.class)
-        .build(),
-        cmdLineConf
-        );
-    return DriverLauncher.getLauncher(runtimeConf).run(driverConf.build());
-
-  }
 //  private final Class<?> appClass;
-
   private final File appJar;
-
   private final String appArgs;
-
   private final File appArchive;
-  
 //  private final Class<?> taskClass;
-  
   private final File taskJar;
-  
   private final int containerMemory;
-  
   private final int numContainers;
-
   private final Injector injector;
   private final Configuration runtimeConf;
-
   private final Configuration cmdLineConf;
 
   @Inject
@@ -147,17 +115,68 @@ public class Client {
        throw new IllegalArgumentException("ApplicationMaster is not injectable!\n " + injector.getInjectionPlan(AppClass.class).toCantInjectString());
        
      }
+     JavaConfigurationBuilder clientConf = 
+         Tang.Factory.getTang().newConfigurationBuilder();
+     clientConf.bindNamedParameter(ClientConfigurationOptions.JobMessageHandler.class,
+         Client.JobMessageHandler.class);
+//       ClientConfiguration.CONF
+//       .set(ClientConfiguration.ON_JOB_MESSAGE, Client.JobMessageHandler.class)
+//       .build();
+
      if(local) {
-       this.runtimeConf = LocalRuntimeConfiguration.CONF
+       this.runtimeConf = Tang.Factory.getTang().newConfigurationBuilder(clientConf.build(),
+           LocalRuntimeConfiguration.CONF
          .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, numContainers)
-         .build();
+         .build()).build();
      } else {
-       this.runtimeConf = YarnClientConfiguration.CONF
+       this.runtimeConf = Tang.Factory.getTang().newConfigurationBuilder(clientConf.build(),
+           YarnClientConfiguration.CONF
            .set(YarnClientConfiguration.REEF_JAR_FILE, EnvironmentUtils.getClassLocationFile(REEF.class))
-           .build();
+           .build()).build();
      }
   }
+  public LauncherStatus run() throws Exception {
+    final JavaConfigurationBuilder driverConf = Tang.Factory.getTang().newConfigurationBuilder(
+        EnvironmentUtils.addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
+          .set(DriverConfiguration.DRIVER_IDENTIFIER, "SimpleDriver")
+          .set(DriverConfiguration.ON_DRIVER_STARTED, SimpleDriver.StartHandler.class)
+          //.set(DriverConfiguration.ON_DRIVER_STOP, SimpleDriver.StopHandler.class)
+          .set(DriverConfiguration.ON_EVALUATOR_ALLOCATED, SimpleDriver.EvaluatorAllocatedHandler.class)
+          //.set(DriverConfiguration.ON_EVALUATOR_COMPLETED, SimpleDriver.EvaluatorCompletedHandler.class)
+          .set(DriverConfiguration.ON_EVALUATOR_FAILED, SimpleDriver.EvaluatorFailedHandler.class)
+          .set(DriverConfiguration.ON_ACTIVITY_MESSAGE, SimpleDriver.ActivityMessageHandler.class)
+          .set(DriverConfiguration.ON_ACTIVITY_COMPLETED, SimpleDriver.ActivityCompletedHandler.class)
+          .set(DriverConfiguration.ON_ACTIVITY_FAILED, SimpleDriver.ActivityFailedHandler.class)
+          //.set(DriverConfiguration.ON_ACTIVITY_RUNNING, SimpleDriver.ActivityRunningHandler.class)
+          //.set(DriverConfiguration.ON_ACTIVITY_SUSPENDED, SimpleDriver.ActivityRunningHandler.class)
+          .set(DriverConfiguration.ON_CONTEXT_ACTIVE, SimpleDriver.ContextActiveHandler.class)
+          //.set(DriverConfiguration.ON_CONTEXT_CLOSED, SimpleDriver.ContextClosedHandler.class)
+          .set(DriverConfiguration.ON_CONTEXT_FAILED, SimpleDriver.ContextFailedHandler.class)
+          //.set(DriverConfiguration.ON_CONTEXT_MESSAGE, SimpleDriver.ContextMessageHandler.class)
+          //.set(DriverConfiguration.ON_CLIENT_MESSAGE, SimpleDriver.ClientMessageHandler.class)
+          //.set(DriverConfiguration.ON_CLIENT_CLOSED, SimpleDriver.ClientClosedHandler.class)
+          //.set(DriverConfiguration.ON_CLIENT_CLOSED_WITH_MESSAGE, SimpleDriver.ClientClosedWithMessageHandler.class)
+        .build(),
+        cmdLineConf
+        );
+    return DriverLauncher.getLauncher(runtimeConf).run(driverConf.build());
 
+  }
+  public static final class JobMessageHandler implements EventHandler<JobMessage> {
+    @Inject
+    JobMessageHandler() { 
+    }
+    @Override
+    public void onNext(JobMessage arg0) {
+      try {
+        System.out.write(arg0.get());
+        System.out.flush();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    
+  }
   public static void main(String[] args) throws Exception {
     Tang t = Tang.Factory.getTang();
     JavaConfigurationBuilder cb = t.newConfigurationBuilder();

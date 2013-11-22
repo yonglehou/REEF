@@ -2,12 +2,15 @@ package com.microsoft.reef.examples.simple;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.activity.FailedActivity;
 import com.microsoft.reef.simple.ApplicationMaster;
 import com.microsoft.reef.simple.ApplicationTask;
 import com.microsoft.reef.simple.AsyncTaskRequest;
 
 public class TestMaster extends ApplicationMaster {
 
+  int failedTasks;
+  
   @Inject TestMaster() { }
   
   private static class Runme implements ApplicationTask {
@@ -27,8 +30,19 @@ public class TestMaster extends ApplicationMaster {
   
   @Override
   public void start(String appArgs) {
+    out.println("Queuing three tasks");
     queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 1"));
     queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 2"));
     queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 3"));
+  }
+  
+  @Override
+  public synchronized void onTaskFailed(FailedActivity fa) {
+    failedTasks++;
+    out.println("Failed task: " + fa.getReason()); out.flush();
+  }
+  @Override
+  public synchronized void onShutdown() {
+    out.println("Job terminating. " + failedTasks + " failures.");
   }
 }

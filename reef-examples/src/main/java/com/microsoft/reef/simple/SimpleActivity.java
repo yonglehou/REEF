@@ -4,7 +4,6 @@ import javax.inject.Inject;
 
 import com.microsoft.reef.activity.Activity;
 import com.microsoft.tang.annotations.Parameter;
-import com.microsoft.tang.exceptions.InjectionException;
 
 public class SimpleActivity implements Activity {
   private final ApplicationTask task;
