@@ -19,10 +19,10 @@ import com.microsoft.reef.annotations.audience.Private;
 import com.microsoft.reef.client.DriverConfigurationOptions;
 import com.microsoft.reef.driver.activity.*;
 import com.microsoft.reef.driver.catalog.NodeDescriptor;
-import com.microsoft.reef.driver.contexts.ActiveContext;
-import com.microsoft.reef.driver.contexts.ClosedContext;
-import com.microsoft.reef.driver.contexts.ContextMessage;
-import com.microsoft.reef.driver.contexts.FailedContext;
+import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.context.ClosedContext;
+import com.microsoft.reef.driver.context.ContextMessage;
+import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.CompletedEvaluator;
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
@@ -362,14 +362,14 @@ public class EvaluatorManager implements Identifiable, AutoCloseable {
    *
    * @param activityControlProto message contains activity control info.
    */
-  final void handle(EvaluatorRuntimeProtocol.ActivityControlProto activityControlProto) {
+  final void handle(EvaluatorRuntimeProtocol.ContextControlProto activityControlProto) {
     LOG.finest("activity control message from " + this.evaluatorID);
 
     final EvaluatorRuntimeProtocol.EvaluatorControlProto evaluatorControlProto =
         EvaluatorRuntimeProtocol.EvaluatorControlProto.newBuilder()
             .setTimestamp(System.currentTimeMillis())
             .setIdentifier(getId().toString())
-            .setActivityControl(activityControlProto).build();
+            .setContextControl(activityControlProto).build();
     handle(evaluatorControlProto);
   }
 

@@ -5,10 +5,10 @@ import java.util.logging.Logger;
 
 import com.microsoft.reef.driver.activity.CompletedActivity;
 import com.microsoft.reef.driver.activity.FailedActivity;
-import com.microsoft.reef.driver.contexts.ActiveContext;
-import com.microsoft.reef.driver.contexts.ClosedContext;
-import com.microsoft.reef.driver.contexts.ContextMessage;
-import com.microsoft.reef.driver.contexts.FailedContext;
+import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.context.ClosedContext;
+import com.microsoft.reef.driver.context.ContextMessage;
+import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 
 public abstract class ApplicationMaster {

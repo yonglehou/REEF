@@ -19,7 +19,7 @@ import com.microsoft.reef.driver.activity.*;
 import com.microsoft.reef.driver.catalog.NodeDescriptor;
 import com.microsoft.reef.driver.catalog.ResourceCatalog;
 import com.microsoft.reef.driver.client.JobMessageObserver;
-import com.microsoft.reef.driver.contexts.*;
+import com.microsoft.reef.driver.context.*;
 import com.microsoft.reef.driver.evaluator.*;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
@@ -214,7 +214,7 @@ public final class DistributedShellJobDriver {
   final class StopHandler implements EventHandler<StopTime> {
     @Override
     public void onNext(final StopTime stopTime) {
-      // Construct the final result and forward it to the JobObserver
+      // Construct the final result and forward it to the Client
       final StringBuilder sb = new StringBuilder();
       for (final String result : DistributedShellJobDriver.this.results) {
         sb.append('\n').append(result);
