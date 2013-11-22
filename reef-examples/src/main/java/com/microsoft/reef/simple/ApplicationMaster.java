@@ -1,14 +1,6 @@
 package com.microsoft.reef.simple;
 
 import java.io.PrintStream;
-import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.driver.activity.CompletedActivity;
@@ -30,8 +22,15 @@ public abstract class ApplicationMaster {
     this.driver = driver;
     this.out = driver.out;
   }
-  public void queueTaskForExecution(AsyncTaskRequest task) {
+  public void fork(AsyncTaskRequest task) {
     driver.queuedTasks.add(task);
+  }
+  public void join() {
+    try {
+      driver.queuedTasks.wait(); // we'll wait until nothing is running or runnable.
+    } catch (InterruptedException e) {
+      
+    }
   }
   public void onTaskCompleted(CompletedActivity completedActivity) { }
   public void onTaskFailed(FailedActivity failedActivity) { }
@@ -57,56 +56,5 @@ public abstract class ApplicationMaster {
   public void onContainerStopped(ClosedContext context)  { }
   public void onContainerMessage(ContextMessage context) { }
   
-  // ExecutorService-style calls.
-  
-  public void execute(AsyncTaskRequest arg0) {
-    queueTaskForExecution(arg0);
-  }
-  public boolean awaitTermination(long timeout, TimeUnit unit)
-      throws InterruptedException {
-    // TODO Auto-generated method stub
-    return false;
-  }
-  public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
-      throws InterruptedException {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks,
-      long timeout, TimeUnit unit) throws InterruptedException {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
-      throws InterruptedException, ExecutionException {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  public <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout,
-      TimeUnit unit) throws InterruptedException, ExecutionException,
-      TimeoutException {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  public boolean isShutdown() {
-    // TODO Auto-generated method stub
-    return false;
-  }
-  public boolean isTerminated() {
-    // TODO Auto-generated method stub
-    return false;
-  }
-  public void shutdown() {
-    // TODO Auto-generated method stub
-    
-  }
-  public List<Runnable> shutdownNow() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  public <T> Future<T> submit(AsyncTaskRequest task) {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  
+
 }

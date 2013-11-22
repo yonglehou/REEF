@@ -31,9 +31,9 @@ public class TestMaster extends ApplicationMaster {
   @Override
   public void start(String appArgs) {
     out.println("Queuing three tasks");
-    queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 1"));
-    queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 2"));
-    queueTaskForExecution(new AsyncTaskRequest(Runme.class, appArgs + " 3"));
+    fork(new AsyncTaskRequest(Runme.class, appArgs + " 1"));
+    fork(new AsyncTaskRequest(Runme.class, appArgs + " 2"));
+    fork(new AsyncTaskRequest(Runme.class, appArgs + " 3"));
   }
   
   @Override

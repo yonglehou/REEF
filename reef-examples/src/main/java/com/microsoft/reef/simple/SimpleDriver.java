@@ -71,7 +71,6 @@ public class SimpleDriver {
     this.appArgs = appArgs;
     this.numContainers = numContainers;
     this.containerMemory = containerMemory;
-    
     appMaster.setDriver(this);
   }
 
@@ -140,13 +139,16 @@ public class SimpleDriver {
         throw new RuntimeException("Unable to setup Activity or Context configuration.", ex);
       }
     }
-    if(queuedTasks.isEmpty() && runningTasks.isEmpty() && appMasterDone) {
-      for(ActiveContext eval : idleEvaluators) {
-        eval.close();
+    if(queuedTasks.isEmpty() && runningTasks.isEmpty()) {
+      queuedTasks.notifyAll();
+      if(appMasterDone) {
+        for(ActiveContext eval : idleEvaluators) {
+          eval.close();
+        }
+        idleEvaluators.clear();
+        appMaster.onShutdown();
+        out.flush();
       }
-      idleEvaluators.clear();
-      appMaster.onShutdown();
-      out.flush();
     }
   }
   final class EvaluatorAllocatedHandler implements EventHandler<AllocatedEvaluator> {
