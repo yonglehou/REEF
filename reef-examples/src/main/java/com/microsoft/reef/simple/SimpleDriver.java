@@ -40,6 +40,8 @@ public class SimpleDriver {
 
   private static final Logger LOG = Logger.getLogger(SimpleDriver.class.getName());
 
+  private Thread amThread;
+  
   private final EvaluatorRequestor requestor;
   private final JobMessageObserver client;
   private final ApplicationMaster appMaster;
@@ -84,8 +86,22 @@ public class SimpleDriver {
           // XXX fix reef size API.
           .setNumber(numContainers).setSize(/*containerMemory*/EvaluatorRequest.Size.XLARGE).build());
       LOG.log(Level.INFO, "StartTime: ", startTime);
-      appMaster.start(appArgs);
-      appMasterDone = true;
+      amThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          try {
+            appMaster.start(appArgs);
+            appMasterDone = true;
+          } catch(Exception e) {
+            if(!(e instanceof RuntimeException)) {
+              throw new RuntimeException(e);
+            } else {
+              throw (RuntimeException)e;
+            }
+          }
+        }
+      });
+      amThread.start();
     }
   }
 
@@ -119,7 +135,7 @@ public class SimpleDriver {
     }
   }/*, 64*1024)*/);
   
-  private synchronized final void executeTasks() {
+  synchronized final void executeTasks() {
     while((!idleEvaluators.isEmpty()) && (!queuedTasks.isEmpty())) {
       try {
         ActiveContext context = idleEvaluators.iterator().next();
@@ -140,15 +156,32 @@ public class SimpleDriver {
       }
     }
     if(queuedTasks.isEmpty() && runningTasks.isEmpty()) {
-      queuedTasks.notifyAll();
+      notifyAll();
       if(appMasterDone) {
+        out.println("closing evaluators");
         for(ActiveContext eval : idleEvaluators) {
           eval.close();
         }
         idleEvaluators.clear();
         appMaster.onShutdown();
         out.flush();
+        try {
+          amThread.join();
+        } catch (InterruptedException e) {
+          throw new RuntimeException("Interrupted while joining app master thread, which should already be shut down!");
+        }
+        
       }
+    }
+  }
+  synchronized public void fork(AsyncTaskRequest task) {
+    queuedTasks.add(task);
+    executeTasks();
+  }
+  synchronized final void join() throws InterruptedException {
+    // we'll wait until nothing is running or runnable.
+    while(!(queuedTasks.isEmpty() && runningTasks.isEmpty())) {
+      wait(); 
     }
   }
   final class EvaluatorAllocatedHandler implements EventHandler<AllocatedEvaluator> {

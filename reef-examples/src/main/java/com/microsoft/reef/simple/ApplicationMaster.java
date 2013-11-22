@@ -17,20 +17,17 @@ public abstract class ApplicationMaster {
 
   private SimpleDriver driver;
   protected PrintStream out;
-  public abstract void start(String appArgs);
+  public abstract void start(String appArgs) throws Exception;
   public void setDriver(SimpleDriver driver) {
     this.driver = driver;
     this.out = driver.out;
   }
   public void fork(AsyncTaskRequest task) {
-    driver.queuedTasks.add(task);
+    driver.fork(task);
   }
-  public void join() {
-    try {
-      driver.queuedTasks.wait(); // we'll wait until nothing is running or runnable.
-    } catch (InterruptedException e) {
-      
-    }
+
+  public void join() throws InterruptedException {
+    driver.join();
   }
   public void onTaskCompleted(CompletedActivity completedActivity) { }
   public void onTaskFailed(FailedActivity failedActivity) { }

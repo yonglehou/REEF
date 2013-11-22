@@ -188,7 +188,7 @@ public class Client {
     i.bindVolatileInstance(Configuration.class, cb.build());
     final LauncherStatus status = i.getInstance(Client.class).run();
     LOG.log(Level.INFO, "REEF job completed: {0}", status);
-    
+    System.exit(0);
   }
 }
 

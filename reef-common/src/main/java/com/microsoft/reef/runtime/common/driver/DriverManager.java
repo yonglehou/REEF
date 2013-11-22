@@ -435,7 +435,7 @@ final class DriverManager implements EvaluatorRequestor {
         final Exception exception = runtimeStop.getException();
         LOG.log(Level.WARNING, "Sending runtime error: {0}", exception.getMessage());
         DriverManager.this.runtimeErrorHandler.onNext(ReefServiceProtos.RuntimeErrorProto.newBuilder()
-            .setMessage(exception.getMessage())
+            .setMessage(exception.getMessage() == null ? exception.getClass().getName() : exception.getMessage())
             .setException(ByteString.copyFrom(codec.encode(exception)))
             .setName("REEF")
             .build());
