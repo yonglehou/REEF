@@ -37,7 +37,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Manages the stack of contexts in the Evaluator.
+ * Manages the stack of context in the Evaluator.
  */
 @Private
 @EvaluatorSide
@@ -46,7 +46,7 @@ public final class ContextManager implements AutoCloseable {
   private static final Logger LOG = Logger.getLogger(ContextManager.class.getName());
 
   /**
-   * The stack of contexts.
+   * The stack of context.
    */
   private final Stack<ContextRuntime> contextStack = new Stack<>();
   /**
@@ -117,7 +117,7 @@ public final class ContextManager implements AutoCloseable {
    *
    * @param controlMessage the message to process
    */
-  public void handleActivityControl(final EvaluatorRuntimeProtocol.ActivityControlProto controlMessage) {
+  public void handleActivityControl(final EvaluatorRuntimeProtocol.ContextControlProto controlMessage) {
 
     synchronized (this.heartBeatManager) {
       try {
@@ -146,6 +146,19 @@ public final class ContextManager implements AutoCloseable {
           this.contextStack.peek().suspendActivity(message);
         } else if (controlMessage.hasActivityMessage()) {
           this.contextStack.peek().deliverActivityMessage(message);
+        } else if (controlMessage.hasContextMessage()) {
+          final EvaluatorRuntimeProtocol.ContextMessageProto contextMessageProto = controlMessage.getContextMessage();
+          boolean deliveredMessage = false;
+          for (final ContextRuntime context : this.contextStack) {
+            if (context.getIdentifier().equals(contextMessageProto.getContextId())) {
+              context.handleContextMessage(contextMessageProto.getMessage().toByteArray());
+              deliveredMessage = true;
+              break;
+            }
+          }
+          if (!deliveredMessage) {
+            throw new IllegalStateException("Sent message to unknown context " + contextMessageProto.getContextId());
+          }
         } else {
           throw new RuntimeException("Unknown activity control message: " + controlMessage.toString());
         }
@@ -171,7 +184,7 @@ public final class ContextManager implements AutoCloseable {
   }
 
   /**
-   * @return the status of all contexts in the stack.
+   * @return the status of all context in the stack.
    */
   public Collection<ReefServiceProtos.ContextStatusProto> getContextStatusCollection() {
     synchronized (this.contextStack) {

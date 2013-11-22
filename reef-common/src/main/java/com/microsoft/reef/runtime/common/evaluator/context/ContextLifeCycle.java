@@ -16,10 +16,11 @@
 package com.microsoft.reef.runtime.common.evaluator.context;
 
 import com.google.common.collect.ImmutableSet;
-import com.microsoft.reef.driver.contexts.ContextConfiguration;
+import com.microsoft.reef.driver.context.ContextConfigurationOptions;
 import com.microsoft.reef.evaluator.context.ContextMessageSource;
 import com.microsoft.reef.evaluator.context.events.ContextStart;
 import com.microsoft.reef.evaluator.context.events.ContextStop;
+import com.microsoft.reef.runtime.common.utils.BroadCastEventHandler;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 
@@ -35,23 +36,19 @@ final class ContextLifeCycle {
   private final Set<EventHandler<ContextStart>> contextStartHandlers;
   private final Set<EventHandler<ContextStop>> contextStopHandlers;
   private final Set<ContextMessageSource> contextMessageSources;
+  private final EventHandler<byte[]> contextMessageHandler;
 
-  /**
-   * @param identifier
-   * @param services             we need to depend on this to trigger their construction in Tang despite the fact
-   *                             that we don't access them in this class.
-   * @param contextStartHandlers
-   * @param contextStopHandlers
-   */
   @Inject
-  ContextLifeCycle(final @Parameter(ContextConfiguration.ContextIdentifier.class) String identifier,
-                   final @Parameter(ContextConfiguration.StartHandlers.class) Set<EventHandler<ContextStart>> contextStartHandlers,
-                   final @Parameter(ContextConfiguration.StopHandlers.class) Set<EventHandler<ContextStop>> contextStopHandlers,
-                   final @Parameter(ContextConfiguration.ContextMessageSources.class) Set<ContextMessageSource> contextMessageSources) {
+  ContextLifeCycle(final @Parameter(ContextConfigurationOptions.ContextIdentifier.class) String identifier,
+                   final @Parameter(ContextConfigurationOptions.ContextMessageHandlers.class) Set<EventHandler<byte[]>> contextMessageHandlers,
+                   final @Parameter(ContextConfigurationOptions.StartHandlers.class) Set<EventHandler<ContextStart>> contextStartHandlers,
+                   final @Parameter(ContextConfigurationOptions.StopHandlers.class) Set<EventHandler<ContextStop>> contextStopHandlers,
+                   final @Parameter(ContextConfigurationOptions.ContextMessageSources.class) Set<ContextMessageSource> contextMessageSources) {
     this.identifier = identifier;
     this.contextStartHandlers = contextStartHandlers;
     this.contextStopHandlers = contextStopHandlers;
     this.contextMessageSources = contextMessageSources;
+    this.contextMessageHandler = new BroadCastEventHandler<>(contextMessageHandlers);
   }
 
   /**
@@ -72,6 +69,14 @@ final class ContextLifeCycle {
     for (final EventHandler<ContextStop> stopHandler : this.contextStopHandlers) {
       stopHandler.onNext(contextStop);
     }
+  }
+
+  /**
+   * Deliver the driver message to the context message handler
+   * @param message sent by the driver
+   */
+  final void handleContextMessage(final byte[] message) {
+    this.contextMessageHandler.onNext(message);
   }
 
   /**

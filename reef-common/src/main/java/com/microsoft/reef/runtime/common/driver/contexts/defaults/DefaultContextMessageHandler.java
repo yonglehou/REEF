@@ -13,27 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.runtime.common.evaluator.activity;
+package com.microsoft.reef.runtime.common.driver.contexts.defaults;
 
-import com.microsoft.reef.activity.events.ActivityStop;
-import com.microsoft.reef.driver.activity.ActivityConfigurationOptions;
+import com.microsoft.reef.driver.context.ContextConfigurationOptions;
+import com.microsoft.reef.evaluator.context.ContextMessageHandler;
 import com.microsoft.tang.annotations.Parameter;
 
 import javax.inject.Inject;
 
 /**
- * Injectable implementation of ActivityStop
+ * Default handler for ContextStart
  */
-final class ActivityStopImpl implements ActivityStop {
-  private final String id;
+public final class DefaultContextMessageHandler implements ContextMessageHandler {
+
+  private final String contextID;
 
   @Inject
-  ActivityStopImpl(final @Parameter(ActivityConfigurationOptions.Identifier.class) String id) {
-    this.id = id;
+  DefaultContextMessageHandler(final @Parameter(ContextConfigurationOptions.ContextIdentifier.class) String contextID) {
+    this.contextID = contextID;
   }
 
   @Override
-  public String getId() {
-    return this.id;
+  public void onNext(final byte[] message) {
+    throw new IllegalStateException("No message handlers given for context " + this.contextID);
   }
 }
