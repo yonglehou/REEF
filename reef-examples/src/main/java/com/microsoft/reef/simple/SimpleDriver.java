@@ -173,12 +173,20 @@ public class SimpleDriver {
         idleEvaluators.clear();
         appMaster.onShutdown();
         out.flush();
-        try {
-          amThread.join();
-        } catch (InterruptedException e) {
-          throw new RuntimeException("Interrupted while joining app master thread, which should already be shut down!");
+        if(Thread.currentThread() != amThread) {
+          try {
+            while(amThread.isAlive()) {  // XXX executeTasks() generally gets called last in the amThread, so there's no good way to join().
+              out.println("joining am thread");
+              for(StackTraceElement e: amThread.getStackTrace()) {
+                out.println(e);
+              }
+              out.flush();
+              amThread.join(1000);
+            }
+          } catch (InterruptedException e) {
+            throw new RuntimeException("Interrupted while joining app master thread, which should already be shut down!");
+          }
         }
-        
       }
     }
   }

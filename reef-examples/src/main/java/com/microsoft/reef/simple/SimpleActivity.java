@@ -31,9 +31,13 @@ public class SimpleActivity implements Activity {
 
     @Override
     public Optional<ActivityMessage> getMessage() {
-      return Optional.ofNullable(task.getMessageForDriver());
+      byte[] msg = task.getMessageForDriver();
+      if(msg == null) {
+        return Optional.empty();
+      } else {
+        return Optional.of(ActivityMessage.from("unknown id", msg));
+      }
     }
-    
   }
   public final class DriverMessageHandler implements EventHandler<DriverMessage> {
 

@@ -25,7 +25,11 @@ public class TestMaster extends ApplicationMaster {
       System.out.println(taskArgs);
       Runtime.getRuntime().exec("c:\\windows\\notepad.exe");
     }
-    
+    @Override
+    public byte[] getMessageForDriver() {
+      return "Hello from an activity!".getBytes();
+    }
+
   }
   private static class RunmeToo extends ApplicationTask {
 

@@ -13,7 +13,7 @@ public abstract class ApplicationTask {
   
   public abstract void run(String appArgs) throws Exception;
 
-  public ActivityMessage getMessageForDriver() {
+  public byte[] getMessageForDriver() {
     return null;
   }
 
