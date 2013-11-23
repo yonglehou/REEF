@@ -5,7 +5,6 @@ import javax.inject.Inject;
 import com.microsoft.reef.driver.activity.FailedActivity;
 import com.microsoft.reef.simple.ApplicationMaster;
 import com.microsoft.reef.simple.ApplicationTask;
-import com.microsoft.reef.simple.AsyncTaskRequest;
 
 public class TestMaster extends ApplicationMaster {
 
@@ -18,7 +17,7 @@ public class TestMaster extends ApplicationMaster {
     @Inject Runme() {}
     @Override
     public void run(String taskArgs) throws Exception {
-      if(Math.random() > 0.5)
+      if(Math.random() > 0.01)
       {
         throw new IllegalStateException("Failed because I felt like it!");
       }
@@ -44,21 +43,22 @@ public class TestMaster extends ApplicationMaster {
   
   @Override
   public void start(String appArgs) throws InterruptedException {
-    out.println("Queuing three tasks");
-    fork(new AsyncTaskRequest(Runme.class, appArgs + " 1"));
-    fork(new AsyncTaskRequest(Runme.class, appArgs + " 2"));
-    fork(new AsyncTaskRequest(Runme.class, appArgs + " 3"));
-    
+    out.println("Queuing three tasks"); out.flush();
+    fork(Runme.class, appArgs + " 1");
+    fork(Runme.class, appArgs + " 2");
+    fork(Runme.class, appArgs + " 3");
+
     join();
-    out.println("Tasks done running.  now for something completely different!");
-    fork(new AsyncTaskRequest(RunmeToo.class, appArgs));
+    out.println("Tasks done running. (" + failedTasks + " failures)  now for something completely different!"); out.flush();
+    fork(RunmeToo.class, appArgs);
     join();
+    out.println("join 2 complete!"); out.flush();
   }
   
   @Override
   public synchronized void onTaskFailed(FailedActivity fa) {
     failedTasks++;
-    out.println("Failed task: " + fa.getReason()); out.flush();
+//    out.println("Failed task: " + fa.getReason()); out.flush();
   }
   @Override
   public synchronized void onShutdown() {

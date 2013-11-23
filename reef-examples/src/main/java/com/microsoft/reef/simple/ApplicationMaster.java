@@ -22,8 +22,11 @@ public abstract class ApplicationMaster {
     this.driver = driver;
     this.out = driver.out;
   }
-  public void fork(AsyncTaskRequest task) {
-    driver.fork(task);
+  public void fork(Class<? extends ApplicationTask> task, String args) {
+    driver.fork(task, args.getBytes());
+  }
+  public void fork(Class<? extends ApplicationTask> task, byte[] args) {
+    driver.fork(task, args);
   }
 
   public void join() throws InterruptedException {

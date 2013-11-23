@@ -9,6 +9,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -92,6 +96,7 @@ public class SimpleDriver {
           try {
             appMaster.start(appArgs);
             appMasterDone = true;
+            executeTasks();
           } catch(Exception e) {
             if(!(e instanceof RuntimeException)) {
               throw new RuntimeException(e);
@@ -109,17 +114,17 @@ public class SimpleDriver {
     // XXX this is grossly non-performant!
     List<Byte> buf = new ArrayList<Byte>();
     @Override
-    public void write(int arg0) throws IOException {
+    public synchronized void write(int arg0) throws IOException {
       buf.add((byte)arg0);
     }
     @Override
-    public void write(byte[] arg0) throws IOException {
+    public synchronized void write(byte[] arg0) throws IOException {
       for(int i = 0; i < arg0.length; i++) {
         buf.add(arg0[i]);
       }
     }
     @Override
-    public void flush() throws IOException {
+    public synchronized void flush() throws IOException {
       if(buf.size() != 0) {
         byte[] b = new byte[buf.size()];
         for(int i = 0; i < b.length; i++) {
@@ -130,7 +135,7 @@ public class SimpleDriver {
       }
     }
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
       flush();
     }
   }/*, 64*1024)*/);
@@ -149,7 +154,7 @@ public class SimpleDriver {
               .set(ActivityConfiguration.ACTIVITY, SimpleActivity.class)
               .build());
         activityConfiguration.bindNamedParameter(Client.TaskClass.class, task.clazz);
-        activityConfiguration.bindNamedParameter(Client.TaskArgs.class, task.args);
+        activityConfiguration.bindNamedParameter(Client.TaskArgs.class, new String(task.args));
         context.submitActivity(activityConfiguration.build());
       } catch (final BindException ex) {
         throw new RuntimeException("Unable to setup Activity or Context configuration.", ex);
@@ -174,9 +179,44 @@ public class SimpleDriver {
       }
     }
   }
-  synchronized public void fork(AsyncTaskRequest task) {
-    queuedTasks.add(task);
+  synchronized public Future<byte[]> fork(Class<? extends ApplicationTask> clazz, byte[] arg) {
+    Future<byte[]> fut = new Future<byte[]>() {
+
+      @Override
+      public boolean cancel(boolean mayInterruptIfRunning) {
+        // TODO Auto-generated method stub
+        return false;
+      }
+
+      @Override
+      public byte[] get() throws InterruptedException, ExecutionException {
+        // TODO Auto-generated method stub
+        return null;
+      }
+
+      @Override
+      public byte[] get(long timeout, TimeUnit unit)
+          throws InterruptedException, ExecutionException, TimeoutException {
+        // TODO Auto-generated method stub
+        return null;
+      }
+
+      @Override
+      public boolean isCancelled() {
+        // TODO Auto-generated method stub
+        return false;
+      }
+
+      @Override
+      public boolean isDone() {
+        // TODO Auto-generated method stub
+        return false;
+      }
+      
+    };
+    queuedTasks.add(new AsyncTaskRequest(clazz, arg, fut));
     executeTasks();
+    return fut;
   }
   synchronized final void join() throws InterruptedException {
     // we'll wait until nothing is running or runnable.
@@ -200,11 +240,15 @@ public class SimpleDriver {
 
     }
   }
-  private void onFailedContext(ActiveContext context) {
-    synchronized(SimpleDriver.this) {
-      queuedTasks.add(runningTasks.get(context));
-      idleEvaluators.add(context);
-      runningTasks.remove(context);
+  private synchronized void onFailedContext(ActiveContext context) {
+    if(!queuedTasks.add(runningTasks.get(context))) {
+      throw new IllegalStateException("Add to queuedTasks failed (task was already there!)" + runningTasks.get(context) + " running in failed " + context);
+    }
+    if(!idleEvaluators.add(context)) {
+      throw new IllegalStateException("Add to idleEvaluators failed (idle evaluator was already there!)" + context);
+    }
+    if(null == runningTasks.remove(context)) {
+      throw new IllegalStateException("removing running task failed (it went from running to not while I held a lock)" + context);
     }
     executeTasks();
   }
