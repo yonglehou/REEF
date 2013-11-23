@@ -18,6 +18,7 @@ import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.activity.ActivityMessageSource;
 import com.microsoft.reef.driver.activity.ActivityConfiguration;
 import com.microsoft.reef.driver.activity.ActivityMessage;
 import com.microsoft.reef.driver.activity.CompletedActivity;
@@ -152,6 +153,8 @@ public class SimpleDriver {
             ActivityConfiguration.CONF
               .set(ActivityConfiguration.IDENTIFIER, task.clazz.getName())
               .set(ActivityConfiguration.ACTIVITY, SimpleActivity.class)
+              .set(ActivityConfiguration.ON_SEND_MESSAGE, SimpleActivity.ActivityMessageSource.class)
+              .set(ActivityConfiguration.ON_MESSAGE, SimpleActivity.DriverMessageHandler.class)
               .build());
         activityConfiguration.bindNamedParameter(Client.TaskClass.class, task.clazz);
         activityConfiguration.bindNamedParameter(Client.TaskArgs.class, new String(task.args));
@@ -271,6 +274,7 @@ public class SimpleDriver {
     @Override
     public void onNext(ActivityMessage arg0) {
       try {
+        out.print(arg0.getId() + ": ");
         out.write(arg0.get());
       } catch(IOException e) {
         e.printStackTrace();

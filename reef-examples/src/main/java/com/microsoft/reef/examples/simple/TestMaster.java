@@ -12,11 +12,12 @@ public class TestMaster extends ApplicationMaster {
   
   @Inject TestMaster() { }
   
-  private static class Runme implements ApplicationTask {
 
+  private static class Runme extends ApplicationTask {
     @Inject Runme() {}
     @Override
     public void run(String taskArgs) throws Exception {
+//      out.println("taskArgs");
       if(Math.random() > 0.01)
       {
         throw new IllegalStateException("Failed because I felt like it!");
@@ -26,7 +27,7 @@ public class TestMaster extends ApplicationMaster {
     }
     
   }
-  private static class RunmeToo implements ApplicationTask {
+  private static class RunmeToo extends ApplicationTask {
 
     @Inject RunmeToo() {}
     @Override
