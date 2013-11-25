@@ -142,6 +142,27 @@ public final class DriverLauncher {
   }
 
   /**
+   * Run a job without a timeout.
+   *
+   * @param driverConfig the configuration for the driver. See DriverConfiguration for details.
+   * @return the state of the job after execution.
+   */
+  public LauncherStatus run(final Configuration driverConfig) {
+    this.reef.submit(driverConfig);
+    synchronized (this) {
+      while (!this.status.isDone()) {
+        try {
+          this.wait();
+        } catch (final InterruptedException ex) {
+        }
+      }
+    }
+
+    this.reef.close();
+    return this.status;
+  }
+
+  /**
    * Instantiate a launcher for the given Configuration.
    *
    * @param runtimeConfiguration the runtime configuration to be used
