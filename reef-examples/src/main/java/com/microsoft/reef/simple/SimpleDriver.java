@@ -23,6 +23,7 @@ import com.microsoft.reef.driver.activity.ActivityConfiguration;
 import com.microsoft.reef.driver.activity.ActivityMessage;
 import com.microsoft.reef.driver.activity.CompletedActivity;
 import com.microsoft.reef.driver.activity.FailedActivity;
+import com.microsoft.reef.driver.activity.ActivityConfigurationOptions.ActivityMessageSources;
 import com.microsoft.reef.driver.client.JobMessageObserver;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
@@ -282,7 +283,6 @@ public class SimpleDriver {
     @Override
     public void onNext(ActivityMessage arg0) {
       try {
-        out.print(arg0.getId() + ": ");
         out.write(arg0.get());
       } catch(IOException e) {
         e.printStackTrace();

@@ -1,5 +1,11 @@
 package com.microsoft.reef.simple;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.inject.Inject;
 
 import com.microsoft.reef.activity.Activity;
@@ -14,6 +20,7 @@ import com.microsoft.wake.EventHandler;
 public class SimpleActivity implements Activity {
   private final ApplicationTask task;
   private final String taskArgs;
+  
   @Inject
   SimpleActivity(
       @Parameter(Client.TaskClass.class) ApplicationTask task,

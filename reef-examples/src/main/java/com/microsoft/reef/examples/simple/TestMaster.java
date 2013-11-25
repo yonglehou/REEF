@@ -17,19 +17,13 @@ public class TestMaster extends ApplicationMaster {
     @Inject Runme() {}
     @Override
     public void run(String taskArgs) throws Exception {
-//      out.println("taskArgs");
       if(Math.random() > 0.01)
       {
         throw new IllegalStateException("Failed because I felt like it!");
       }
-      System.out.println(taskArgs);
+      out.println(taskArgs + " should succeed");
       Runtime.getRuntime().exec("c:\\windows\\notepad.exe");
     }
-    @Override
-    public byte[] getMessageForDriver() {
-      return "Hello from an activity!".getBytes();
-    }
-
   }
   private static class RunmeToo extends ApplicationTask {
 
@@ -63,7 +57,6 @@ public class TestMaster extends ApplicationMaster {
   @Override
   public synchronized void onTaskFailed(FailedActivity fa) {
     failedTasks++;
-//    out.println("Failed task: " + fa.getReason()); out.flush();
   }
   @Override
   public synchronized void onShutdown() {
