@@ -20,7 +20,7 @@ import com.microsoft.reef.activity.Activity;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.utils.EnvironmentUtils;
+import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
@@ -50,6 +50,6 @@ public final class Client {
     cb.addConfiguration(driverConfig);
     cb.bindNamedParameter(Driver.FailActivityName.class, failActivityClass.getName());
 
-    return DriverLauncher.getLauncher(runtimeConfig).run(cb.build(), timeOut, timeOut / 5);
+    return DriverLauncher.getLauncher(runtimeConfig).run(cb.build(), timeOut);
   }
 }

@@ -51,6 +51,12 @@ final class LocalJobSubmissionHandler implements JobSubmissionHandler {
    * The file name used to store the driver configuration with the driver folder.
    */
   public static final String DRIVER_CONFIGURATION_FILE_NAME = "driver.conf";
+
+  /**
+   * The environment variable to use for the root folder.
+   */
+  public static final String ROOT_FOLDER_ENV_KEY = "com.microsoft.reef.runtime.local.folder";
+
   /**
    * The (hard-coded) amount of memory to be used for the driver.
    */
@@ -67,8 +73,15 @@ final class LocalJobSubmissionHandler implements JobSubmissionHandler {
                                    final @Parameter(LocalRuntimeConfiguration.NumberOfThreads.class) int nThreads) {
     this.executor = executor;
     this.nThreads = nThreads;
-    this.rootFolderName = rootFolderName;
+    this.rootFolderName = new File(rootFolderName).getAbsolutePath();
   }
+
+  @Inject
+  public LocalJobSubmissionHandler(final ExecutorService executor,
+                                   final @Parameter(LocalRuntimeConfiguration.NumberOfThreads.class) int nThreads) {
+    this(executor, System.getProperty(ROOT_FOLDER_ENV_KEY, "REEF_LOCAL_RUNTIME"), nThreads);
+  }
+
 
   @Override
   public final void close() {
@@ -78,7 +91,7 @@ final class LocalJobSubmissionHandler implements JobSubmissionHandler {
   @Override
   public final void onNext(final ClientRuntimeProtocol.JobSubmissionProto t) {
     try {
-      LOG.log(Level.FINE, "Starting Job {0}", t.getIdentifier());
+      LOG.log(Level.FINEST, "Starting Job {0}", t.getIdentifier());
       final File jobFolder = new File(new File(rootFolderName), "/" + t.getIdentifier() + "-" + System.currentTimeMillis() + "/");
       final File driverFolder = new File(jobFolder, DRIVER_FOLDER_NAME);
       driverFolder.mkdirs();

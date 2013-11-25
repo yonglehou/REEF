@@ -19,7 +19,7 @@ package com.microsoft.reef.tests.fail.driver;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.utils.EnvironmentUtils;
+import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
@@ -57,6 +57,6 @@ public final class FailClient {
     cb.addConfiguration(driverConfig);
     cb.bindNamedParameter(FailDriver.FailMsgClassName.class, failMsgClass.getName());
 
-    return DriverLauncher.getLauncher(runtimeConfig).run(cb.build(), timeOut, 1000);
+    return DriverLauncher.getLauncher(runtimeConfig).run(cb.build(), timeOut);
   }
 }

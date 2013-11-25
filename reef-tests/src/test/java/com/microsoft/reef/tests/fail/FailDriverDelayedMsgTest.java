@@ -21,7 +21,7 @@ import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.tests.TestEnvironment;
 import com.microsoft.reef.tests.TestEnvironmentFactory;
 import com.microsoft.reef.tests.fail.driver.FailDriverDelayedMsg;
-import com.microsoft.reef.utils.EnvironmentUtils;
+import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
@@ -63,7 +63,7 @@ public class FailDriverDelayedMsgTest {
         .build();
 
     final LauncherStatus status = DriverLauncher.getLauncher(runtimeConfiguration)
-        .run(driverConfig, this.testEnvironment.getTestTimeout(), 1000);
+        .run(driverConfig, this.testEnvironment.getTestTimeout());
 
     Assert.assertEquals(LauncherStatus.COMPLETED, status);
   }
