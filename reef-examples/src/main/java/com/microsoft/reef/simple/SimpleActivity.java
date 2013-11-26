@@ -11,6 +11,7 @@ import javax.inject.Inject;
 import com.microsoft.reef.activity.Activity;
 import com.microsoft.reef.activity.ActivityMessage;
 import com.microsoft.reef.activity.events.DriverMessage;
+import com.microsoft.reef.activity.events.SuspendEvent;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.annotations.Unit;
@@ -53,5 +54,13 @@ public class SimpleActivity implements Activity {
       task.onDriverMessageRecieved(arg0);
     }
     
+  }
+  public class SuspendHandler implements EventHandler<SuspendEvent> {
+
+    @Override
+    public void onNext(SuspendEvent arg0) {
+      task.out.println("Ignoring suspend event!");
+    }
+
   }
 }

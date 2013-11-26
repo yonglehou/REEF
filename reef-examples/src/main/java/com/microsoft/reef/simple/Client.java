@@ -148,7 +148,7 @@ public class Client {
           .set(DriverConfiguration.ON_ACTIVITY_COMPLETED, SimpleDriver.ActivityCompletedHandler.class)
           .set(DriverConfiguration.ON_ACTIVITY_FAILED, SimpleDriver.ActivityFailedHandler.class)
           //.set(DriverConfiguration.ON_ACTIVITY_RUNNING, SimpleDriver.ActivityRunningHandler.class)
-          //.set(DriverConfiguration.ON_ACTIVITY_SUSPENDED, SimpleDriver.ActivityRunningHandler.class)
+          .set(DriverConfiguration.ON_ACTIVITY_SUSPENDED, SimpleDriver.ActivitySuspendedHandler.class)
           .set(DriverConfiguration.ON_CONTEXT_ACTIVE, SimpleDriver.ContextActiveHandler.class)
           //.set(DriverConfiguration.ON_CONTEXT_CLOSED, SimpleDriver.ContextClosedHandler.class)
           .set(DriverConfiguration.ON_CONTEXT_FAILED, SimpleDriver.ContextFailedHandler.class)

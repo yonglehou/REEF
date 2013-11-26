@@ -24,6 +24,7 @@ import com.microsoft.reef.driver.activity.ActivityMessage;
 import com.microsoft.reef.driver.activity.CompletedActivity;
 import com.microsoft.reef.driver.activity.FailedActivity;
 import com.microsoft.reef.driver.activity.ActivityConfigurationOptions.ActivityMessageSources;
+import com.microsoft.reef.driver.activity.SuspendedActivity;
 import com.microsoft.reef.driver.client.JobMessageObserver;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
@@ -156,6 +157,7 @@ public class SimpleDriver {
               .set(ActivityConfiguration.ACTIVITY, SimpleActivity.class)
               .set(ActivityConfiguration.ON_SEND_MESSAGE, SimpleActivity.ActivityMessageSource.class)
               .set(ActivityConfiguration.ON_MESSAGE, SimpleActivity.DriverMessageHandler.class)
+              .set(ActivityConfiguration.ON_SUSPEND, SimpleActivity.SuspendHandler.class)
               .build());
         activityConfiguration.bindNamedParameter(Client.TaskClass.class, task.clazz);
         activityConfiguration.bindNamedParameter(Client.TaskArgs.class, new String(task.args));
@@ -323,6 +325,13 @@ public class SimpleDriver {
       }
       executeTasks();
       appMaster.onContainerStarted(activeContext);
+    }
+  }
+  final class ActivitySuspendedHandler implements EventHandler<SuspendedActivity> {
+
+    @Override
+    public void onNext(SuspendedActivity arg0) {
+      out.println("Driver ignoring suspended activity");
     }
     
   }
