@@ -13,25 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.runtime.common.driver.defaults;
-
-import com.microsoft.reef.driver.activity.FailedActivity;
-import com.microsoft.wake.EventHandler;
-
-import javax.inject.Inject;
 
 /**
- * Default event handler used for FailedActivity: It crashes the driver.
+ * Allocate N evaluators, submit M activities to them, and measure the time.
+ * Each activity does nothing but sleeps for D seconds.
  */
-public final class DefaultActivityFailureHandler implements EventHandler<FailedActivity> {
-
-  @Inject
-  public DefaultActivityFailureHandler() {
-  }
-
-  @Override
-  public void onNext(final FailedActivity failedActivity) {
-    throw new RuntimeException(
-        "No handler bound for FailedActivity: " + failedActivity, failedActivity.getCause());
-  }
-}
+package com.microsoft.reef.examples.pool;

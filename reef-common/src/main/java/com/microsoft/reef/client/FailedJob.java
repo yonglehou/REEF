@@ -15,28 +15,27 @@
  */
 package com.microsoft.reef.client;
 
+import com.microsoft.reef.common.AbstractFailure;
 import com.microsoft.reef.annotations.Provided;
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.annotations.audience.Public;
-import com.microsoft.reef.exception.JobException;
-import com.microsoft.reef.io.naming.Identifiable;
 
 /**
- * Represents a failed REEF job.
+ * An error message that REEF Client receives when there is a user error in REEF job.
  */
 @Public
 @ClientSide
 @Provided
-public interface FailedJob extends Identifiable {
+public final class FailedJob extends AbstractFailure {
 
   /**
-   * @return the ID of the failed job.
+   * Create an error message given the entity ID and Java Exception.
+   * All accessor methods are provided by the base class.
+   *
+   * @param id ID of the entity (e.g. the Evaluator) that caused the error. Cannot be null.
+   * @param cause Java exception that caused the error. Cannot be null.
    */
-  @Override
-  public String getId();
-
-  /**
-   * @return JobException that triggered the failure
-   */
-  public JobException getJobException();
+  public FailedJob(final String id, final Throwable cause) {
+    super(id, cause);
+  }
 }

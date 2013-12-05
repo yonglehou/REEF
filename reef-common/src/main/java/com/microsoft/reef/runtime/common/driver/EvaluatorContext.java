@@ -16,10 +16,10 @@
 package com.microsoft.reef.runtime.common.driver;
 
 import com.google.protobuf.ByteString;
-import com.microsoft.reef.driver.catalog.NodeDescriptor;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.context.FailedContext;
+import com.microsoft.reef.driver.evaluator.EvaluatorDescriptor;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.Configuration;
@@ -134,8 +134,8 @@ public final class EvaluatorContext implements ActiveContext {
   }
 
   @Override
-  public NodeDescriptor getNodeDescriptor() {
-    return this.evaluatorManager.getNodeDescriptor();
+  public EvaluatorDescriptor getEvaluatorDescriptor() {
+    return this.evaluatorManager.getEvaluatorDescriptor();
   }
 
   @Override
@@ -167,28 +167,20 @@ public final class EvaluatorContext implements ActiveContext {
       }
 
       @Override
-      public NodeDescriptor getNodeDescriptor() {
-        return EvaluatorContext.this.getNodeDescriptor();
+      public EvaluatorDescriptor getEvaluatorDescriptor() {
+        return EvaluatorContext.this.evaluatorManager.getEvaluatorDescriptor();
       }
     };
   }
 
+  final FailedContext getFailedContext(
+      final Optional<ActiveContext> parentContext, final Exception reason) {
 
-  final FailedContext getFailedContext(final Optional<ActiveContext> parentContext, final Exception reason) {
-    return new FailedContext() {
+    return new FailedContext(EvaluatorContext.this.getId(), reason) {
+
       @Override
       public Optional<ActiveContext> getParentContext() {
         return parentContext;
-      }
-
-      @Override
-      public Throwable getReason() {
-        return reason;
-      }
-
-      @Override
-      public String getId() {
-        return EvaluatorContext.this.getId();
       }
 
       @Override
@@ -202,8 +194,8 @@ public final class EvaluatorContext implements ActiveContext {
       }
 
       @Override
-      public NodeDescriptor getNodeDescriptor() {
-        return EvaluatorContext.this.getNodeDescriptor();
+      public EvaluatorDescriptor getEvaluatorDescriptor() {
+        return EvaluatorContext.this.evaluatorManager.getEvaluatorDescriptor();
       }
     };
   }

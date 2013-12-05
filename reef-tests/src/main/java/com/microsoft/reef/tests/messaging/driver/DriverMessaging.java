@@ -17,7 +17,7 @@ package com.microsoft.reef.tests.messaging.driver;
 
 import com.microsoft.reef.client.*;
 import com.microsoft.reef.util.Optional;
-import com.microsoft.reef.util.RuntimeError;
+import com.microsoft.reef.client.FailedRuntime;
 import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Tang;
@@ -52,7 +52,7 @@ public final class DriverMessaging {
       final String msg = new String(message.get());
       synchronized (DriverMessaging.this) {
         if (!msg.equals(DriverMessaging.this.lastMessage)) {
-          LOG.log(Level.SEVERE, "Expected '{0}' but got '{1}",
+          LOG.log(Level.SEVERE, "Expected {0} but got {1}",
                   new Object[] { DriverMessaging.this.lastMessage, msg });
           DriverMessaging.this.status = LauncherStatus.FAILED;
           DriverMessaging.this.notify();
@@ -88,20 +88,20 @@ public final class DriverMessaging {
   final class FailedJobHandler implements EventHandler<FailedJob> {
     @Override
     public void onNext(final FailedJob job) {
-      LOG.log(Level.SEVERE, "Received an error for job " + job.getId(), job.getJobException());
+      LOG.log(Level.SEVERE, "Received an error for job " + job.getId(), job.getCause());
       synchronized (DriverMessaging.this) {
-        DriverMessaging.this.status = LauncherStatus.FAILED(job.getJobException());
+        DriverMessaging.this.status = LauncherStatus.FAILED(job.getCause());
         DriverMessaging.this.notify();
       }
     }
   }
 
-  final class RuntimeErrorHandler implements EventHandler<RuntimeError> {
+  final class RuntimeErrorHandler implements EventHandler<FailedRuntime> {
     @Override
-    public void onNext(final RuntimeError error) {
-      LOG.log(Level.SEVERE, "Received a runtime error: " + error, error.getException());
+    public void onNext(final FailedRuntime error) {
+      LOG.log(Level.SEVERE, "Received a runtime error: " + error, error.getCause());
       synchronized (DriverMessaging.this) {
-        DriverMessaging.this.status = LauncherStatus.FAILED(error.getException());
+        DriverMessaging.this.status = LauncherStatus.FAILED(error.getCause());
         DriverMessaging.this.notify();
       }
     }

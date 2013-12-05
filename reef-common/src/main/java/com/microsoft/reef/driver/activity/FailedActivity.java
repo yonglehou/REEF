@@ -15,43 +15,54 @@
  */
 package com.microsoft.reef.driver.activity;
 
+import com.microsoft.reef.common.AbstractFailure;
 import com.microsoft.reef.annotations.Provided;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Public;
 import com.microsoft.reef.driver.context.ActiveContext;
-import com.microsoft.reef.io.naming.Identifiable;
 import com.microsoft.reef.util.Optional;
 
 /**
- * Represents a failed Activity.
+ * An error message that REEF Driver gets from a failed Activity.
  */
 @DriverSide
 @Provided
 @Public
-public interface FailedActivity extends Identifiable {
+public final class FailedActivity extends AbstractFailure {
+
+  /**
+   * (Optional) Context of the failed Activity.
+   */
+  private final Optional<ActiveContext> context;
+
+  public FailedActivity(final String id, final Throwable cause) {
+    super(id, cause);
+    this.context = Optional.empty();
+  }
+
+  public FailedActivity(final String id, final Throwable cause, final Optional<ActiveContext> context) {
+    super(id, cause);
+    this.context = context;
+  }
+
+  public FailedActivity(final String id, final String message, final Optional<ActiveContext> context) {
+    super(id, message);
+    this.context = context;
+  }
 
   /**
    * Access the context the activity ran (and crashed) on, if it could be recovered.
    * <p/>
-   * An ActiveContext is given when the activity fails but the context remains alive. On context failure, the context
-   * also fails and is surfaced via the FailedContext event.
+   * An ActiveContext is given when the activity fails but the context remains alive.
+   * On context failure, the context also fails and is surfaced via the FailedContext event.
    * <p/>
-   * Note that receiving an ActiveContext here is no guarantee that the context (and evaluator) are in a consistent
-   * state. Application developers need to investigate the reason available via getReason() to make that call.
+   * Note that receiving an ActiveContext here is no guarantee that the context (and evaluator)
+   * are in a consistent state. Application developers need to investigate the reason available
+   * via getCause() to make that call.
    *
    * @return the context the Activity ran on.
    */
-  public Optional<ActiveContext> getActiveContext();
-
-  /**
-   * @return the cause of the failure, if one was caught on the evaluator side.
-   */
-  public Optional<Throwable> getReason();
-
-  /**
-   * @return the Activity Identifier
-   */
-  @Override
-  public String getId();
-
+  public Optional<ActiveContext> getActiveContext() {
+    return this.context;
+  }
 }

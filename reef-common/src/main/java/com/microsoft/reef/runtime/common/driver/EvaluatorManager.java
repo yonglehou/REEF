@@ -25,6 +25,7 @@ import com.microsoft.reef.driver.context.ContextMessage;
 import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.CompletedEvaluator;
+import com.microsoft.reef.driver.evaluator.EvaluatorType;
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.exception.EvaluatorException;
 import com.microsoft.reef.io.naming.Identifiable;
@@ -34,6 +35,7 @@ import com.microsoft.reef.proto.ReefServiceProtos;
 import com.microsoft.reef.runtime.common.REEFErrorHandler;
 import com.microsoft.reef.runtime.common.driver.api.ResourceLaunchHandler;
 import com.microsoft.reef.runtime.common.driver.api.ResourceReleaseHandler;
+import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorDescriptorImpl;
 import com.microsoft.reef.runtime.common.utils.BroadCastEventHandler;
 import com.microsoft.reef.runtime.common.utils.RemoteManager;
 import com.microsoft.reef.util.ExceptionHandlingEventHandler;
@@ -111,6 +113,9 @@ public class EvaluatorManager implements Identifiable, AutoCloseable {
   private final NodeDescriptor nodeDescriptor;
 
   private final Map<String, EvaluatorContext> activeContextMap = new HashMap<>();
+
+  // TODO: Wrap this in a set-once-with-default class
+  private EvaluatorType type = EvaluatorType.JVM;
 
   // Evaluator Handlers
 
@@ -213,6 +218,18 @@ public class EvaluatorManager implements Identifiable, AutoCloseable {
   @Override
   public final String getId() {
     return this.evaluatorID;
+  }
+
+  public EvaluatorType getType() {
+    return type;
+  }
+
+  public void setType(EvaluatorType type) {
+    this.type = type;
+  }
+
+  public final com.microsoft.reef.driver.evaluator.EvaluatorDescriptor getEvaluatorDescriptor() {
+    return new EvaluatorDescriptorImpl(this.nodeDescriptor, this.getType());
   }
 
   @Override
@@ -323,7 +340,7 @@ public class EvaluatorManager implements Identifiable, AutoCloseable {
       }
 
       final Optional<FailedActivity> failedActivityOptional = this.runningActivity != null ?
-          Optional.<FailedActivity>of(new FailedActivityImpl(Optional.<ActiveContext>empty(), evaluatorException, this.runningActivity.getId())) :
+          Optional.<FailedActivity>of(new FailedActivity(this.runningActivity.getId(), evaluatorException)) :
           Optional.<FailedActivity>empty();
 
       failedEvaluatorEventDispatcher.onNext(new FailedEvaluatorImpl(evaluatorException, failedContextList, failedActivityOptional, this.evaluatorID));
@@ -478,12 +495,12 @@ public class EvaluatorManager implements Identifiable, AutoCloseable {
        * The failed activity could have corrupted it, but I can't make this call.  */
       final EvaluatorContext evaluatorContext = this.activeContextMap.get(contextId);
       final FailedActivity activityException = activityStatusProto.hasResult() ?
-          new FailedActivityImpl(Optional.<ActiveContext>of(evaluatorContext), codec.decode(activityStatusProto.getResult().toByteArray()), activityId) :
-          new FailedActivityImpl(Optional.<ActiveContext>of(evaluatorContext), null, activityId);
+          new FailedActivity(activityId, codec.decode(activityStatusProto.getResult().toByteArray()), Optional.<ActiveContext>of(evaluatorContext)) :
+          new FailedActivity(activityId, "Failed Activity: " + activityState, Optional.<ActiveContext>of(evaluatorContext));
 
       activityExceptionEventDispatcher.onNext(activityException);
-    }
-    if (activityStatusProto.getActivityMessageCount() > 0) {
+    } else if (activityStatusProto.getActivityMessageCount() > 0) {
+      assert (this.runningActivity != null);
       for (final ReefServiceProtos.ActivityStatusProto.ActivityMessageProto activityMessageProto : activityStatusProto.getActivityMessageList()) {
         activityMessageEventDispatcher.onNext(new ActivityMessageImpl(activityMessageProto.getMessage().toByteArray(), activityId, contextId, activityMessageProto.getSourceId()));
       }
