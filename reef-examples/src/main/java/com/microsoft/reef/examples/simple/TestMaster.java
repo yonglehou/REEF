@@ -19,6 +19,7 @@ public class TestMaster extends ApplicationMaster {
     public void run(String taskArgs) throws Exception {
       if(Math.random() > 0.01)
       {
+        out.print("f");
         throw new IllegalStateException("Failed because I felt like it!");
       }
       out.println(taskArgs + " should succeed");
@@ -34,7 +35,7 @@ public class TestMaster extends ApplicationMaster {
       {
         throw new IllegalStateException("Failed because I felt like it!");
       }
-      System.out.println(taskArgs);
+//      out.println(taskArgs);
       Runtime.getRuntime().exec("c:\\windows\\system32\\calc.exe");
     }
     

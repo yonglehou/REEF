@@ -32,8 +32,12 @@ public class SimpleActivity implements Activity {
 
   @Override
   public final byte[] call(final byte[] memento) throws Exception {
-    task.run(taskArgs);
-    return null;
+    try {
+      task.run(taskArgs);
+      return task.getMessageForDriver();
+    } catch (Throwable t) {
+      throw new WrappedThrowable(task.getMessageForDriver(), t);
+    }
   }
   public final class ActivityMessageSource implements com.microsoft.reef.activity.ActivityMessageSource {
 

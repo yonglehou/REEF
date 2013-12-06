@@ -18,12 +18,10 @@ import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
-import com.microsoft.reef.activity.ActivityMessageSource;
 import com.microsoft.reef.driver.activity.ActivityConfiguration;
 import com.microsoft.reef.driver.activity.ActivityMessage;
 import com.microsoft.reef.driver.activity.CompletedActivity;
 import com.microsoft.reef.driver.activity.FailedActivity;
-import com.microsoft.reef.driver.activity.ActivityConfigurationOptions.ActivityMessageSources;
 import com.microsoft.reef.driver.activity.SuspendedActivity;
 import com.microsoft.reef.driver.client.JobMessageObserver;
 import com.microsoft.reef.driver.context.ActiveContext;
@@ -122,6 +120,7 @@ public class SimpleDriver {
     }
     @Override
     public synchronized void write(byte[] arg0) throws IOException {
+      if(arg0 == null) { return; }
       for(int i = 0; i < arg0.length; i++) {
         buf.add(arg0[i]);
       }
@@ -267,7 +266,7 @@ public class SimpleDriver {
     executeTasks();
   }
   private void onFailedActivity(FailedActivity failedActivity) {
-    LOG.log(Level.WARNING, failedActivity + " failed: " + failedActivity.getReason().get());
+    LOG.log(Level.WARNING, failedActivity + " failed: " + failedActivity.getCause());
     onFailedContext(failedActivity.getActiveContext().get());
     appMaster.onTaskFailed(failedActivity);
   }
@@ -304,6 +303,14 @@ public class SimpleDriver {
     @Override
     public void onNext(CompletedActivity completedActivity) {
       synchronized(SimpleDriver.this) {
+        try {
+          byte[] msg = completedActivity.get();
+          if(msg != null) {
+            out.write(msg);
+          }
+        } catch(IOException e) {
+          e.printStackTrace();
+        }
         idleEvaluators.add(completedActivity.getActiveContext());
         runningTasks.remove(completedActivity.getActiveContext());
         appMaster.onTaskCompleted(completedActivity);
@@ -314,7 +321,17 @@ public class SimpleDriver {
   final class ActivityFailedHandler implements EventHandler<FailedActivity> {
     @Override
     public void onNext(FailedActivity failedActivity) {
-      onFailedActivity(failedActivity);
+      synchronized(SimpleDriver.this) {
+        WrappedThrowable cause = (WrappedThrowable)failedActivity.getCause();
+        try {
+          if(cause.msg != null) {
+            out.write(cause.msg);
+          }
+        } catch(IOException e) {
+          e.printStackTrace();
+        }
+        onFailedActivity(new FailedActivity(failedActivity.getId(), cause.throwable, failedActivity.getActiveContext()));//failedActivity);
+      }
     }
   }
   final class ContextActiveHandler implements EventHandler<ActiveContext> {
@@ -331,7 +348,14 @@ public class SimpleDriver {
 
     @Override
     public void onNext(SuspendedActivity arg0) {
-      out.println("Driver ignoring suspended activity");
+      synchronized(SimpleDriver.this) {
+        try {
+          out.write(arg0.get());
+        } catch(IOException e) {
+          e.printStackTrace();
+        }
+        out.println("Driver ignoring suspended activity");
+      }
     }
     
   }
