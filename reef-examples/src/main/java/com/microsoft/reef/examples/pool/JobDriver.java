@@ -93,7 +93,7 @@ public final class JobDriver {
   final class StartHandler implements EventHandler<StartTime> {
     @Override
     public void onNext(final StartTime startTime) {
-      LOG.log(Level.INFO, "TIME: Start job on {0} Evaluators.", numEvaluators);
+      LOG.log(Level.INFO, "TIME: Start Driver with {0} Evaluators", numEvaluators);
       evaluatorRequestor.submit(
           EvaluatorRequest.newBuilder()
               .setSize(EvaluatorRequest.Size.SMALL)
@@ -107,7 +107,7 @@ public final class JobDriver {
   final class StopHandler implements EventHandler<StopTime> {
     @Override
     public void onNext(final StopTime stopTime) {
-      LOG.log(Level.INFO, "TIME: Stop");
+      LOG.log(Level.INFO, "TIME: Stop Driver");
     }
   }
 
@@ -118,15 +118,14 @@ public final class JobDriver {
   final class AllocatedEvaluatorHandler implements EventHandler<AllocatedEvaluator> {
     @Override
     public void onNext(final AllocatedEvaluator eval) {
+      LOG.log(Level.INFO, "TIME: Allocated Evaluator {0}", eval.getId());
       synchronized (JobDriver.this) {
         if (numActivitiesStarted < numActivities) {
           ++numActivitiesStarted;
           ++numEvaluatorsStarted;
           final String activityId = String.format("StartActivity_%08d", numActivitiesStarted);
-          LOG.log(Level.INFO, "Request Evaluator {0} # {1} of {2}",
-              new Object[] { eval.getId(), numEvaluatorsStarted, numEvaluators });
-          LOG.log(Level.INFO, "TIME: Submit Activity: {0} # {1} of {2}",
-              new Object[] { activityId, numActivitiesStarted, numActivities });
+          LOG.log(Level.INFO, "TIME: Submit Activity {0} to Evaluator {1}",
+                  new Object[] { activityId, eval.getId() });
           try {
             final JavaConfigurationBuilder contextConfigBuilder =
                 Tang.Factory.getTang().newConfigurationBuilder();
@@ -143,8 +142,21 @@ public final class JobDriver {
               LOG.log(Level.SEVERE, "Failed to submit Context to Evaluator: " + eval.getId(), ex);
               throw new RuntimeException(ex);
           }
+        } else {
+          LOG.log(Level.INFO, "TIME: Close Evaluator {0}", eval.getId());
+          eval.close();
         }
       }
+    }
+  }
+
+  /**
+   * Receive notification that the Activity is running.
+   */
+  final class RunningActivityHandler implements EventHandler<RunningActivity> {
+    @Override
+    public void onNext(final RunningActivity act) {
+      LOG.log(Level.INFO, "TIME: Running Activity {0}", act.getId());
     }
   }
 
@@ -155,13 +167,14 @@ public final class JobDriver {
     @Override
     public void onNext(final CompletedActivity act) {
       final ActiveContext context = act.getActiveContext();
-      LOG.log(Level.INFO, "TIME: Completed Activity: {0}", act.getId());
+      LOG.log(Level.INFO, "TIME: Completed Activity {0} on Evaluator {1}",
+              new Object[] { act.getId(), context.getEvaluatorId() });
       synchronized (JobDriver.this) {
         if (numActivitiesStarted < numActivities) {
           ++numActivitiesStarted;
           final String activityId = String.format("Activity_%08d", numActivitiesStarted);
-          LOG.log(Level.INFO, "TIME: Submit Activity: {0} # {1} of {2}",
-              new Object[] { activityId, numActivitiesStarted, numActivities });
+          LOG.log(Level.INFO, "TIME: Submit Activity {0} to Evaluator {1}",
+                  new Object[] { activityId, context.getEvaluatorId() });
           try {
             final Configuration activityConfig = ActivityConfiguration.CONF
                 .set(ActivityConfiguration.IDENTIFIER, activityId)
@@ -169,14 +182,24 @@ public final class JobDriver {
                 .build();
             context.submitActivity(activityConfig);
           } catch (final BindException ex) {
-            LOG.log(Level.SEVERE, "Failed to submit Activity to Context: "
-                + act.getActiveContext().getId(), ex);
+            LOG.log(Level.SEVERE, "Failed to submit Activity to Context: " + context.getId(), ex);
             throw new RuntimeException(ex);
           }
         } else {
+          LOG.log(Level.INFO, "TIME: Close Evaluator {0}", context.getEvaluatorId());
           context.close();
         }
       }
+    }
+  }
+
+  /**
+   * Receive notification that the Activity is running.
+   */
+  final class CompletedEvaluatorHandler implements EventHandler<CompletedEvaluator> {
+    @Override
+    public void onNext(final CompletedEvaluator eval) {
+      LOG.log(Level.INFO, "TIME: Completed Evaluator {0}", eval.getId());
     }
   }
 }
