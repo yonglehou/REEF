@@ -11,6 +11,25 @@ protocol REEFProtocol{
     bytes message;
   }
 
+  /** The type of evaluator: JVM, CLR, ... */
+  enum AvroEvaluatorType{
+    JVM,
+    CLR
+  }
+
+  /** Errors */
+  record AvroErrorMessage{
+    /** The short description of the errorMessage. */
+    string shortMessage;
+    /** The long description of the errorMessage. */
+    string longMessage;
+    /** The type (JVM, CLR) of the environment where the errorMessage occured. */
+    AvroEvaluatorType type;
+    /** The exception, if any. */
+    bytes serializedException = null;
+
+  }
+
   /** The states an Evaluator can be in. */
   enum AvroEvaluatorState{
       INIT,
@@ -21,6 +40,9 @@ protocol REEFProtocol{
       KILLED
   }
 
+  // ===================================================================================================================
+  // Context heartbeat
+  // ===================================================================================================================
   /** The states a Context can be in. */
   enum AvroContextState{
     READY,
@@ -41,6 +63,16 @@ protocol REEFProtocol{
     KILLED
   }
 
+  /** A task state transition. */
+  record AvroTaskStateTransition{
+    /** The Evaluator heartbeat in which the transition happened.*/
+    int sequenceNumber;
+    /** The old state. */
+    AvroTaskState from;
+    /** The new state. */
+    AvroTaskState to;
+  }
+
   record AvroTaskHeartbeat{
     /** The task ID.*/
     string id;
@@ -49,10 +81,10 @@ protocol REEFProtocol{
     AvroTaskState state;
 
     /** All state transitions of this task.*/
-    // private final Collection<TaskStateTransition> stateTransitions;
+    array<AvroTaskStateTransition> stateTransitions;
 
-    /** The error, if there was one.*/
-    // private final Optional<ErrorProtocol> error;
+    /** The errorMessage, if there was one.*/
+    AvroErrorMessage errorMessage;
 
     /** Messages from the Task.*/
     array<AvroMessage> messages;

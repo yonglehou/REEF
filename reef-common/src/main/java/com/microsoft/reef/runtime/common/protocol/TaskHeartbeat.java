@@ -24,9 +24,9 @@ public final class TaskHeartbeat {
   private final Collection<TaskStateTransition> stateTransitions;
 
   /**
-   * The error, if there was one.
+   * The errorMessage, if there was one.
    */
-  private final Optional<ErrorProtocol> error;
+  private final Optional<ErrorMessage> errorMessage;
 
   /**
    * Messages from the Task.
@@ -36,40 +36,40 @@ public final class TaskHeartbeat {
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
-                       final Optional<ErrorProtocol> error,
+                       final Optional<ErrorMessage> errorMessage,
                        final Iterable<Message> messages) {
     this.id = id;
     this.state = state;
     this.stateTransitions = stateTransitions;
-    this.error = error;
+    this.errorMessage = errorMessage;
     this.messages = messages;
   }
 
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions) {
-    this(id, state, stateTransitions, Optional.<ErrorProtocol>empty(), new ArrayList<Message>(0));
+    this(id, state, stateTransitions, Optional.<ErrorMessage>empty(), new ArrayList<Message>(0));
   }
 
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
-                       final Optional<ErrorProtocol> error) {
-    this(id, state, stateTransitions, error, new ArrayList<Message>(0));
+                       final Optional<ErrorMessage> errorMessage) {
+    this(id, state, stateTransitions, errorMessage, new ArrayList<Message>(0));
   }
 
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
-                       final ErrorProtocol error) {
-    this(id, state, stateTransitions, Optional.of(error), new ArrayList<Message>(0));
+                       final ErrorMessage errorMessage) {
+    this(id, state, stateTransitions, Optional.of(errorMessage), new ArrayList<Message>(0));
   }
 
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
                        final Iterable<Message> messages) {
-    this(id, state, stateTransitions, Optional.<ErrorProtocol>empty(), messages);
+    this(id, state, stateTransitions, Optional.<ErrorMessage>empty(), messages);
 
   }
 
@@ -95,10 +95,10 @@ public final class TaskHeartbeat {
   }
 
   /**
-   * @return the error, if there was one.
+   * @return the errorMessage, if there was one.
    */
-  public Optional<ErrorProtocol> getError() {
-    return error;
+  public Optional<ErrorMessage> getErrorMessage() {
+    return errorMessage;
   }
 
   /**

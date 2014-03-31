@@ -6,7 +6,7 @@ import com.microsoft.reef.util.Optional;
 /**
  * Represents errors when they are sent across the wire.
  */
-public final class ErrorProtocol {
+public final class ErrorMessage {
   /**
    * The short description of the error.
    */
@@ -30,10 +30,10 @@ public final class ErrorProtocol {
    * @param type                The type (JVM, CLR) of the environment where the error occured.
    * @param serializedException The exception, if any.
    */
-  public ErrorProtocol(final String shortMessage,
-                       final String longMessage,
-                       final EvaluatorType type,
-                       final Optional<byte[]> serializedException) {
+  public ErrorMessage(final String shortMessage,
+                      final String longMessage,
+                      final EvaluatorType type,
+                      final Optional<byte[]> serializedException) {
     this.shortMessage = shortMessage;
     this.longMessage = longMessage;
     this.type = type;
@@ -46,10 +46,10 @@ public final class ErrorProtocol {
    * @param type                The type (JVM, CLR) of the environment where the error occured.
    * @param serializedException The exception.
    */
-  public ErrorProtocol(final String shortMessage,
-                       final String longMessage,
-                       final EvaluatorType type,
-                       final byte[] serializedException) {
+  public ErrorMessage(final String shortMessage,
+                      final String longMessage,
+                      final EvaluatorType type,
+                      final byte[] serializedException) {
     this(shortMessage, longMessage, type, Optional.of(serializedException));
   }
 
@@ -58,9 +58,9 @@ public final class ErrorProtocol {
    * @param longMessage  The long description of the error.
    * @param type         The type (JVM, CLR) of the environment where the error occured.
    */
-  public ErrorProtocol(final String shortMessage,
-                       final String longMessage,
-                       final EvaluatorType type) {
+  public ErrorMessage(final String shortMessage,
+                      final String longMessage,
+                      final EvaluatorType type) {
     this(shortMessage, longMessage, type, Optional.<byte[]>empty());
   }
 
@@ -94,7 +94,7 @@ public final class ErrorProtocol {
 
   @Override
   public String toString() {
-    return "ErrorProtocol{" +
+    return "ErrorMessage{" +
         "shortMessage='" + shortMessage + '\'' +
         ", longMessage='" + longMessage + '\'' +
         ", type=" + type +

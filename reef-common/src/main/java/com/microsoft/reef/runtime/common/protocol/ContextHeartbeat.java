@@ -34,7 +34,7 @@ public final class ContextHeartbeat {
   /**
    * The error, if there was one.
    */
-  private final Optional<ErrorProtocol> error;
+  private final Optional<ErrorMessage> error;
 
   /**
    * Messages from the Context.
@@ -53,7 +53,7 @@ public final class ContextHeartbeat {
                           final ContextState state,
                           final String id,
                           final Optional<ContextHeartbeat> parentHeartbeat,
-                          final Optional<ErrorProtocol> error,
+                          final Optional<ErrorMessage> error,
                           final Iterable<Message> messages) {
     this.stateTransitions = stateTransitions;
     this.state = state;
@@ -94,7 +94,7 @@ public final class ContextHeartbeat {
   /**
    * @return the error thrown by this Context, if any.
    */
-  public Optional<ErrorProtocol> getError() {
+  public Optional<ErrorMessage> getError() {
     return error;
   }
 

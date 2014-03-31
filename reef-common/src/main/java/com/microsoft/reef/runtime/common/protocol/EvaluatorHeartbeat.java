@@ -39,7 +39,7 @@ public final class EvaluatorHeartbeat {
   /**
    * The error, if there was one.
    */
-  private final Optional<ErrorProtocol> error;
+  private final Optional<ErrorMessage> error;
 
   /**
    * The heartbeat of the top of the context stack (refers to its parents if there are any).
@@ -66,7 +66,7 @@ public final class EvaluatorHeartbeat {
                             final long timeStamp,
                             final Collection<EvaluatorStateTransition> stateTransitions,
                             final EvaluatorState state,
-                            final Optional<ErrorProtocol> error,
+                            final Optional<ErrorMessage> error,
                             final ContextHeartbeat contextHeartbeat,
                             final Optional<TaskHeartbeat> taskHeartbeat) {
     this.id = id;
@@ -99,7 +99,7 @@ public final class EvaluatorHeartbeat {
     return state;
   }
 
-  public Optional<ErrorProtocol> getError() {
+  public Optional<ErrorMessage> getError() {
     return error;
   }
 
