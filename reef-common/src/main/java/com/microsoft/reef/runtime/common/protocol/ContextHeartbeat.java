@@ -10,11 +10,10 @@ import java.util.Collection;
  */
 @Private
 public final class ContextHeartbeat {
-
   /**
-   * State transitions of this context.
+   * The ID of this context.
    */
-  private final Collection<ContextStateTransition> stateTransitions;
+  private final String id;
 
   /**
    * The current state of this context.
@@ -22,9 +21,9 @@ public final class ContextHeartbeat {
   private final ContextState state;
 
   /**
-   * The ID of this context.
+   * State transitions of this context.
    */
-  private final String id;
+  private final Collection<ContextStateTransition> stateTransitions;
 
   /**
    * The parent heartbeat, if any.

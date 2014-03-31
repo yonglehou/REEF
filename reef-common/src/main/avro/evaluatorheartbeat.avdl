@@ -50,6 +50,40 @@ protocol REEFProtocol{
     FAILED
   }
 
+  /** State transition of a context */
+  record AvroContextStateTransition{
+    /** The evaluator heartbeat sequence number in which the transition was reported. */
+    int sequenceNumber;
+    /** The old state. */
+    AvroContextState from;
+    /** The new state. */
+    AvroContextState to;
+  }
+
+  /** Context heartbeat sent from the Evaluator to the Driver. */
+  record AvroContextHeartbeat{
+
+    /** The ID of the context */
+    string id;
+
+    /** The state of the context */
+    AvroContextState state;
+
+    /** State transitions of this context. */
+    array<AvroContextStateTransition> stateTransitions;
+
+    /** The parent heartbeat, if any. */
+    AvroContextHeartbeat parentHeartbeat = null;
+
+    /** The errorMessage, if there was one.*/
+    AvroErrorMessage errorMessage = null;
+
+    /** Messages from the Context.*/
+    array<AvroMessage> messages;
+
+  }
+
+
   // ===================================================================================================================
   // Task heartbeat
   // ===================================================================================================================
@@ -84,7 +118,7 @@ protocol REEFProtocol{
     array<AvroTaskStateTransition> stateTransitions;
 
     /** The errorMessage, if there was one.*/
-    AvroErrorMessage errorMessage;
+    AvroErrorMessage errorMessage = null;
 
     /** Messages from the Task.*/
     array<AvroMessage> messages;
