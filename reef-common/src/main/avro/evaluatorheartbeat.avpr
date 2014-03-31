@@ -1,0 +1,233 @@
+// =====================================================================================================================
+// WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+// =====================================================================================================================
+//
+// AUTO_GENERATED FROM `evaluatorheartbeat.avdl`. DO NOT EDIT DIRECTLY
+//
+// =====================================================================================================================
+// WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+// =====================================================================================================================
+
+{
+  "protocol" : "REEFProtocol",
+  "namespace" : "com.microsoft.reef.runtime.common.protocol.avro",
+  "types" : [ {
+    "type" : "record",
+    "name" : "AvroMessage",
+    "doc" : "A message",
+    "fields" : [ {
+      "name" : "sourceIdentifier",
+      "type" : "string",
+      "doc" : "The identifier of the source sending this message."
+    }, {
+      "name" : "message",
+      "type" : "bytes",
+      "doc" : "The message."
+    } ]
+  }, {
+    "type" : "enum",
+    "name" : "AvroEvaluatorType",
+    "doc" : "The type of evaluator: JVM, CLR, ...",
+    "symbols" : [ "JVM", "CLR" ]
+  }, {
+    "type" : "record",
+    "name" : "AvroErrorMessage",
+    "doc" : "Errors",
+    "fields" : [ {
+      "name" : "shortMessage",
+      "type" : "string",
+      "doc" : "The short description of the errorMessage."
+    }, {
+      "name" : "longMessage",
+      "type" : "string",
+      "doc" : "The long description of the errorMessage."
+    }, {
+      "name" : "type",
+      "type" : "AvroEvaluatorType",
+      "doc" : "The type (JVM, CLR) of the environment where the errorMessage occured."
+    }, {
+      "name" : "serializedException",
+      "type" : "bytes",
+      "doc" : "The exception, if any.",
+      "default" : null
+    } ]
+  }, {
+    "type" : "enum",
+    "name" : "AvroContextState",
+    "doc" : "The states a Context can be in.",
+    "symbols" : [ "READY", "DONE", "FAILED" ]
+  }, {
+    "type" : "record",
+    "name" : "AvroContextStateTransition",
+    "doc" : "State transition of a context",
+    "fields" : [ {
+      "name" : "sequenceNumber",
+      "type" : "int",
+      "doc" : "The evaluator heartbeat sequence number in which the transition was reported."
+    }, {
+      "name" : "from",
+      "type" : "AvroContextState",
+      "doc" : "The old state."
+    }, {
+      "name" : "to",
+      "type" : "AvroContextState",
+      "doc" : "The new state."
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroContextHeartbeat",
+    "doc" : "Context heartbeat sent from the Evaluator to the Driver.",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "string",
+      "doc" : "The ID of the context"
+    }, {
+      "name" : "state",
+      "type" : "AvroContextState",
+      "doc" : "The state of the context"
+    }, {
+      "name" : "stateTransitions",
+      "type" : {
+        "type" : "array",
+        "items" : "AvroContextStateTransition"
+      },
+      "doc" : "State transitions of this context."
+    }, {
+      "name" : "parentHeartbeat",
+      "type" : "AvroContextHeartbeat",
+      "doc" : "The parent heartbeat, if any.",
+      "default" : null
+    }, {
+      "name" : "errorMessage",
+      "type" : "AvroErrorMessage",
+      "doc" : "The errorMessage, if there was one.",
+      "default" : null
+    }, {
+      "name" : "messages",
+      "type" : {
+        "type" : "array",
+        "items" : "AvroMessage"
+      },
+      "doc" : "Messages from the Context."
+    } ]
+  }, {
+    "type" : "enum",
+    "name" : "AvroTaskState",
+    "doc" : "The states a Task can be in.",
+    "symbols" : [ "INIT", "RUNNING", "DONE", "SUSPEND", "FAILED", "KILLED" ]
+  }, {
+    "type" : "record",
+    "name" : "AvroTaskStateTransition",
+    "doc" : "A task state transition.",
+    "fields" : [ {
+      "name" : "sequenceNumber",
+      "type" : "int",
+      "doc" : "The Evaluator heartbeat in which the transition happened."
+    }, {
+      "name" : "from",
+      "type" : "AvroTaskState",
+      "doc" : "The old state."
+    }, {
+      "name" : "to",
+      "type" : "AvroTaskState",
+      "doc" : "The new state."
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroTaskHeartbeat",
+    "doc" : "The Task heartbeat",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "string",
+      "doc" : "The task ID."
+    }, {
+      "name" : "state",
+      "type" : "AvroTaskState",
+      "doc" : "The current state of the task."
+    }, {
+      "name" : "stateTransitions",
+      "type" : {
+        "type" : "array",
+        "items" : "AvroTaskStateTransition"
+      },
+      "doc" : "All state transitions of this task."
+    }, {
+      "name" : "errorMessage",
+      "type" : "AvroErrorMessage",
+      "doc" : "The errorMessage, if there was one.",
+      "default" : null
+    }, {
+      "name" : "messages",
+      "type" : {
+        "type" : "array",
+        "items" : "AvroMessage"
+      },
+      "doc" : "Messages from the Task."
+    } ]
+  }, {
+    "type" : "enum",
+    "name" : "AvroEvaluatorState",
+    "doc" : "The states an Evaluator can be in.",
+    "symbols" : [ "INIT", "RUNNING", "DONE", "SUSPEND", "FAILED", "KILLED" ]
+  }, {
+    "type" : "record",
+    "name" : "AvroEvaluatorStateTransition",
+    "doc" : "State transition of an Evaluator",
+    "fields" : [ {
+      "name" : "sequenceNumber",
+      "type" : "int",
+      "doc" : "The evaluator heartbeat sequence number in which the transition was reported."
+    }, {
+      "name" : "from",
+      "type" : "AvroEvaluatorState",
+      "doc" : "The old state."
+    }, {
+      "name" : "to",
+      "type" : "AvroEvaluatorState",
+      "doc" : "The new state."
+    } ]
+  }, {
+    "type" : "record",
+    "name" : "AvroEvaluatorHeartbeat",
+    "doc" : "Heartbeat sent from the Evaluator to the Driver.",
+    "fields" : [ {
+      "name" : "id",
+      "type" : "string",
+      "doc" : "The evaluator id."
+    }, {
+      "name" : "sequenceNumber",
+      "type" : "int",
+      "doc" : "The sequence number of this heartbeat."
+    }, {
+      "name" : "timeStamp",
+      "type" : "long",
+      "doc" : "The time at the Evaluator when this heartbeat was generated."
+    }, {
+      "name" : "stateTransitions",
+      "type" : {
+        "type" : "array",
+        "items" : "AvroEvaluatorStateTransition"
+      },
+      "doc" : "All state transitions of this Evaluator."
+    }, {
+      "name" : "state",
+      "type" : "AvroEvaluatorState",
+      "doc" : "The current state of the Evaluator."
+    }, {
+      "name" : "errorMessage",
+      "type" : "AvroErrorMessage",
+      "doc" : "The errorMessage, if there was one.",
+      "default" : null
+    }, {
+      "name" : "contextHeartbeat",
+      "type" : "AvroContextHeartbeat",
+      "doc" : "The heartbeat of the top of the context stack (refers to its parents if there are any)."
+    }, {
+      "name" : "taskHeartbeat",
+      "type" : "AvroTaskHeartbeat",
+      "doc" : "The heartbeat of the currently running task, if there is any.",
+      "default" : null
+    } ]
+  } ],
+  "messages" : { }
+}
