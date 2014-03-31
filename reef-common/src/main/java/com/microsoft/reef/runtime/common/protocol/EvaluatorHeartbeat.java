@@ -37,9 +37,9 @@ public final class EvaluatorHeartbeat {
   private final EvaluatorState state;
 
   /**
-   * The error, if there was one.
+   * The errorMessage, if there was one.
    */
-  private final Optional<ErrorMessage> error;
+  private final Optional<ErrorMessage> errorMessage;
 
   /**
    * The heartbeat of the top of the context stack (refers to its parents if there are any).
@@ -57,7 +57,7 @@ public final class EvaluatorHeartbeat {
    * @param timeStamp        the timestamp of this heartbeat on the Evaluator.
    * @param stateTransitions all state transitions of this Evaluator.
    * @param state            the current state of the Evaluator.
-   * @param error            the error thrown by this Evaluator, if any.
+   * @param errorMessage            the errorMessage thrown by this Evaluator, if any.
    * @param contextHeartbeat the heartbeat of the top Context.
    * @param taskHeartbeat    the heartbeat of the task executing on the Evaluator, if any.
    */
@@ -66,7 +66,7 @@ public final class EvaluatorHeartbeat {
                             final long timeStamp,
                             final Collection<EvaluatorStateTransition> stateTransitions,
                             final EvaluatorState state,
-                            final Optional<ErrorMessage> error,
+                            final Optional<ErrorMessage> errorMessage,
                             final ContextHeartbeat contextHeartbeat,
                             final Optional<TaskHeartbeat> taskHeartbeat) {
     this.id = id;
@@ -74,7 +74,7 @@ public final class EvaluatorHeartbeat {
     this.timeStamp = timeStamp;
     this.stateTransitions = stateTransitions;
     this.state = state;
-    this.error = error;
+    this.errorMessage = errorMessage;
     this.contextHeartbeat = contextHeartbeat;
     this.taskHeartbeat = taskHeartbeat;
   }
@@ -99,8 +99,8 @@ public final class EvaluatorHeartbeat {
     return state;
   }
 
-  public Optional<ErrorMessage> getError() {
-    return error;
+  public Optional<ErrorMessage> getErrorMessage() {
+    return errorMessage;
   }
 
   public ContextHeartbeat getContextHeartbeat() {

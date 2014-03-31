@@ -30,19 +30,13 @@ protocol REEFProtocol{
 
   }
 
-  /** The states an Evaluator can be in. */
-  enum AvroEvaluatorState{
-      INIT,
-      RUNNING,
-      DONE,
-      SUSPEND,
-      FAILED,
-      KILLED
-  }
+
+
 
   // ===================================================================================================================
   // Context heartbeat
   // ===================================================================================================================
+
   /** The states a Context can be in. */
   enum AvroContextState{
     READY,
@@ -122,5 +116,49 @@ protocol REEFProtocol{
 
     /** Messages from the Task.*/
     array<AvroMessage> messages;
+  }
+
+  // ===================================================================================================================
+  // Evaluator heartbeat
+  // ===================================================================================================================
+
+  /** The states an Evaluator can be in. */
+  enum AvroEvaluatorState{
+      INIT,
+      RUNNING,
+      DONE,
+      SUSPEND,
+      FAILED,
+      KILLED
+  }
+
+  /** State transition of an Evaluator */
+  record AvroEvaluatorStateTransition{
+    /** The evaluator heartbeat sequence number in which the transition was reported. */
+    int sequenceNumber;
+    /** The old state. */
+    AvroEvaluatorState from;
+    /** The new state. */
+    AvroEvaluatorState to;
+  }
+
+  /** Heartbeat sent from the Evaluator to the Driver. */
+  record AvroEvaluatorHeartbeat{
+    /** The evaluator id. */
+    string id;
+    /** The sequence number of this heartbeat. */
+    int sequenceNumber;
+    /** The time at the Evaluator when this heartbeat was generated. */
+    long timeStamp;
+    /** All state transitions of this Evaluator. */
+    array<AvroEvaluatorStateTransition> stateTransitions;
+    /** The current state of the Evaluator. */
+    AvroEvaluatorState state;
+    /** The errorMessage, if there was one. */
+    AvroErrorMessage errorMessage = null;
+    /** The heartbeat of the top of the context stack (refers to its parents if there are any). */
+    AvroContextHeartbeat contextHeartbeat;
+    /** The heartbeat of the currently running task, if there is any. */
+    AvroTaskHeartbeat taskHeartbeat = null;
   }
 }
