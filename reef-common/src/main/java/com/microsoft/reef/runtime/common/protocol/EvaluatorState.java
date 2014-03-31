@@ -9,5 +9,5 @@ public enum EvaluatorState {
   DONE,
   SUSPEND,
   FAILED,
-  KILLED,
+  KILLED
 }

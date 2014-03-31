@@ -9,5 +9,5 @@ public enum TaskState {
   DONE,
   SUSPEND,
   FAILED,
-  KILLED,
+  KILLED
 }

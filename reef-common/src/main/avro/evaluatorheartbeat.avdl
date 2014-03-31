@@ -1,0 +1,60 @@
+@namespace("com.microsoft.reef.runtime.common.protocol.avro")
+protocol REEFProtocol{
+  // ===================================================================================================================
+  // General messages
+  // ===================================================================================================================
+  /** A message */
+  record AvroMessage{
+    /** The identifier of the source sending this message. */
+    string sourceIdentifier;
+    /** The message. */
+    bytes message;
+  }
+
+  /** The states an Evaluator can be in. */
+  enum AvroEvaluatorState{
+      INIT,
+      RUNNING,
+      DONE,
+      SUSPEND,
+      FAILED,
+      KILLED
+  }
+
+  /** The states a Context can be in. */
+  enum AvroContextState{
+    READY,
+    DONE,
+    FAILED
+  }
+
+  // ===================================================================================================================
+  // Task heartbeat
+  // ===================================================================================================================
+  /** The states a Task can be in. */
+  enum AvroTaskState{
+    INIT,
+    RUNNING,
+    DONE,
+    SUSPEND,
+    FAILED,
+    KILLED
+  }
+
+  record AvroTaskHeartbeat{
+    /** The task ID.*/
+    string id;
+
+    /** The current state of the task. */
+    AvroTaskState state;
+
+    /** All state transitions of this task.*/
+    // private final Collection<TaskStateTransition> stateTransitions;
+
+    /** The error, if there was one.*/
+    // private final Optional<ErrorProtocol> error;
+
+    /** Messages from the Task.*/
+    array<AvroMessage> messages;
+  }
+}
