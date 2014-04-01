@@ -94,7 +94,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   private EventHandler<EvaluatorRuntimeProtocol.EvaluatorControlProto> evaluatorControlHandler = null;
   private boolean isResourceReleased = false;
 
-  private final ContextManager contextManager = new ContextManager();
+  private final ContextManager contextManager;
 
 
   // Mutable fields
@@ -134,7 +134,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     this.evaluatorId = evaluatorId;
     this.evaluatorDescriptor = evaluatorDescriptor;
     this.configurationSerializer = configurationSerializer;
-
     this.dispatcher = new DispatchingEStage(driverExceptionHandler, 16); // 16 threads
 
     this.dispatcher.register(ActiveContext.class, activeContextEventHandlers);
@@ -154,6 +153,8 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
     this.dispatcher.onNext(AllocatedEvaluator.class,
         new AllocatedEvaluatorImpl(this, remoteManager.getMyIdentifier(), this.configurationSerializer));
+    this.contextManager = new ContextManager(this, configurationSerializer, dispatcher);
+
   }
 
   /**

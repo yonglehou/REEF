@@ -2,12 +2,13 @@ package com.microsoft.reef.runtime.common.driver.evaluator;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Private;
+import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.context.ClosedContext;
+import com.microsoft.reef.runtime.common.driver.DispatchingEStage;
 import com.microsoft.reef.runtime.common.driver.context.EvaluatorContext;
-import com.microsoft.reef.runtime.common.protocol.ContextHeartbeat;
-import com.microsoft.reef.runtime.common.protocol.ContextStateTransition;
-import com.microsoft.reef.runtime.common.protocol.TaskHeartbeat;
-import com.microsoft.reef.runtime.common.protocol.TaskStateTransition;
+import com.microsoft.reef.runtime.common.protocol.*;
 import com.microsoft.reef.util.Optional;
+import com.microsoft.tang.formats.ConfigurationSerializer;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -21,8 +22,20 @@ import java.util.Map;
 @Private
 public final class ContextManager {
 
+  private final EvaluatorManager evaluatorManager;
+  private final ConfigurationSerializer configurationSerializer;
   private final Map<String, EvaluatorContext> contextMap = new HashMap<>();
   private final Deque<EvaluatorContext> contextStack = new ArrayDeque<>();
+  private final DispatchingEStage dispatcher;
+
+  public ContextManager(final EvaluatorManager evaluatorManager,
+                        final ConfigurationSerializer configurationSerializer,
+                        final DispatchingEStage dispatcher) {
+    this.evaluatorManager = evaluatorManager;
+    this.configurationSerializer = configurationSerializer;
+    this.dispatcher = dispatcher;
+  }
+
 
   public synchronized EvaluatorContext pop() {
     final EvaluatorContext result = contextStack.pop();
@@ -34,9 +47,10 @@ public final class ContextManager {
     return Optional.ofNullable(this.contextStack.peek());
   }
 
-  public synchronized void push(final EvaluatorContext context) {
+  private synchronized void push(final EvaluatorContext context) {
     this.contextStack.push(context);
     this.contextMap.put(context.getId(), context);
+    this.dispatcher.onNext(ActiveContext.class, context);
   }
 
   public synchronized Optional<EvaluatorContext> get(final String id) {
@@ -57,23 +71,113 @@ public final class ContextManager {
     return result;
   }
 
+  public synchronized boolean isEmpty() {
+    final boolean result = this.contextStack.isEmpty();
+    if (this.contextMap.isEmpty() != result) {
+      throw new IllegalStateException("Inconsistent state.");
+    }
+    return result;
+  }
+
   public synchronized void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
+    Optional<ContextHeartbeat> hb = Optional.of(heartbeat);
+    while (hb.isPresent()) {
+      processContextHeartbeat(hb.get());
+      hb = hb.get().getParentHeartbeat();
+    }
+  }
+
+  private synchronized void processContextHeartbeat(final ContextHeartbeat heartbeat) {
+    assert (isSane(heartbeat));
+    final String contextId = heartbeat.getId();
+
+    if (!this.contextMap.containsKey(contextId)) {
+      // Register a new context.
+      this.onNewContext(heartbeat);
+    } else {
+      final EvaluatorContext ctx = get(heartbeat.getId()).get();
+      if (!ctx.getState().equals(heartbeat.getState())) {
+        switch (heartbeat.getState()) {
+          case READY:
+            throw new IllegalStateException("Transition from `" + ctx.getState() + "` to `" + heartbeat.getState() + "` is not supported");
+          case DONE:
+            this.onContextClose(heartbeat);
+            break;
+          case FAILED:
+            this.onContextFail(heartbeat);
+            break;
+          default:
+            throw new IllegalArgumentException("Unknown state: " + heartbeat.getState());
+        }
+      }
+    }
+
+    // Send messages upstream
+    processMessages(heartbeat);
+  }
+
+
+  private void onContextClose(final ContextHeartbeat heartbeat) {
+    assert (heartbeat.getState().equals(ContextState.DONE));
+    final String contextId = heartbeat.getId();
+    if (!this.peek().get().getParentId().equals(heartbeat.getId())) {
+      throw new IllegalStateException("Received ClosedContext for `" + contextId + "` which is not the top context.");
+    }
+    final EvaluatorContext ctx = this.pop();
+    if (this.peek().isPresent()) {
+      dispatcher.onNext(ClosedContext.class, ctx.getClosedContext(this.peek().get()));
+    } else {
+      throw new IllegalStateException("Received a closedcontext for the root context. We should instead have gotten a CompletedEvaluator.");
+    }
+  }
+
+  private void onContextFail(final ContextHeartbeat heartbeat) {
+    assert (heartbeat.getState().equals(ContextState.FAILED));
+    // TODO
+  }
+
+  /**
+   * Process the messages in the heartbeat
+   *
+   * @param heartbeat
+   */
+  private void processMessages(final ContextHeartbeat heartbeat) {
+    // TODO
+  }
+
+  private void onNewContext(final ContextHeartbeat heartbeat) {
+    final EvaluatorContext result;
+    if (this.isEmpty()) {
+      result = new EvaluatorContext(evaluatorManager, heartbeat.getId(), Optional.<String>empty(), configurationSerializer);
+    } else {
+      if (!heartbeat.getParentHeartbeat().isPresent()) {
+        throw new IllegalStateException("Received a new context whose parent isn't set.");
+      }
+      final String parentId = heartbeat.getParentHeartbeat().get().getId();
+      if (!this.isTopContext(parentId)) {
+        final String realTopId = peek().get().getId();
+        throw new IllegalStateException("Received a new context whose parent is `" + parentId + "`, but the real top id is `" + realTopId + "`");
+      }
+      result = new EvaluatorContext(evaluatorManager, heartbeat.getId(), Optional.of(parentId), configurationSerializer);
+    }
+    this.push(result);
+  }
+
+  private boolean isSane(final ContextHeartbeat heartbeat) {
     for (final ContextStateTransition transition : heartbeat.getStateTransitions()) {
-      assert (transition.isLegal());
+      if (!transition.isLegal()) {
+        return false;
+      }
     }
-    if (!contextMap.containsKey(heartbeat.getId())) { // this is a new context
-
-    } else { // we know this context
-
-    }
-    // check whether we know this context
-    // figure out whether we need to fire an event to the user.
+    // TODO: Think about more checks
+    return true;
   }
 
   public synchronized void handleTaskHeartbeat(final TaskHeartbeat heartbeat) {
     for (final TaskStateTransition transition : heartbeat.getStateTransitions()) {
       assert (transition.isLegal());
     }
+    // TODO
 
   }
 }

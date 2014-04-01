@@ -22,7 +22,7 @@ import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.EvaluatorDescriptor;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
 import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorManager;
-import com.microsoft.reef.runtime.common.protocol.ContextHeartbeat;
+import com.microsoft.reef.runtime.common.protocol.ContextState;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.formats.ConfigurationSerializer;
@@ -32,7 +32,7 @@ import java.util.logging.Logger;
 
 public final class EvaluatorContext implements ActiveContext {
 
-  private final static Logger LOG = Logger.getLogger(ActiveContext.class.getName());
+  private final static Logger LOG = Logger.getLogger(EvaluatorContext.class.getName());
 
   private final String identifier;
 
@@ -40,6 +40,7 @@ public final class EvaluatorContext implements ActiveContext {
 
   private final EvaluatorManager evaluatorManager;
   private final ConfigurationSerializer configurationSerializer;
+  private ContextState state = ContextState.READY;
 
   private boolean closed = false;
 
@@ -165,10 +166,13 @@ public final class EvaluatorContext implements ActiveContext {
   }
 
 
-  public void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
-
+  public ContextState getState() {
+    return state;
   }
 
+  public void setState(final ContextState state) {
+    this.state = state;
+  }
 
   public final ClosedContext getClosedContext(final ActiveContext parentContext) {
     return new ClosedContextImpl(parentContext, this.getId(), this.getEvaluatorId(), this.getEvaluatorDescriptor());
