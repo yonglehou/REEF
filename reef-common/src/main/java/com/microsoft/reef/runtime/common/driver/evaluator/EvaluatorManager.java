@@ -41,7 +41,10 @@ import com.microsoft.reef.runtime.common.driver.task.RunningTaskImpl;
 import com.microsoft.reef.runtime.common.driver.task.SuspendedTaskImpl;
 import com.microsoft.reef.runtime.common.driver.task.TaskMessageImpl;
 import com.microsoft.reef.runtime.common.launch.REEFErrorHandler;
-import com.microsoft.reef.runtime.common.protocol.*;
+import com.microsoft.reef.runtime.common.protocol.ErrorMessage;
+import com.microsoft.reef.runtime.common.protocol.EvaluatorHeartbeat;
+import com.microsoft.reef.runtime.common.protocol.EvaluatorState;
+import com.microsoft.reef.runtime.common.protocol.EvaluatorStateTransition;
 import com.microsoft.reef.runtime.common.utils.RemoteManager;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.annotations.Name;
@@ -347,7 +350,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
   public void handleEvaluatorHeartbeat(final EvaluatorHeartbeat heartbeat) {
     synchronized (this.evaluatorDescriptor) {
-
       for (final EvaluatorStateTransition transition : heartbeat.getStateTransitions()) {
         assert (transition.isLegal());
       }
@@ -360,10 +362,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       if (this.evaluatorState != heartbeat.getState()) {
         // We need to do something.
         if (EvaluatorState.RUNNING == heartbeat.getState()) {
-          final EvaluatorContext activeContext = getNewRootContext(heartbeat);
-          this.activeContextIds.add(activeContext.getId());
-          this.activeContextList.add(activeContext);
-          this.dispatcher.onNext(ActiveContext.class, activeContext);
+          // We assume there also to be a context in it. contextManager will handle the notification to the user.
         } else if (EvaluatorState.DONE == heartbeat.getState()) {
           final CompletedEvaluator completedEvaluator = getCompletedEvaluator(heartbeat);
           this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
@@ -378,27 +377,18 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
           this.close();
         }
         this.evaluatorState = heartbeat.getState();
-
       }
+      // Process the context heartbeats
+      this.contextManager.handleContextHeartbeat(heartbeat.getContextHeartbeat());
+
+      // Process the task heartbeats
       if (heartbeat.getTaskHeartbeat().isPresent()) {
-        this.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
+        this.contextManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
       }
 
-      this.handleContextHeartbeat(heartbeat.getContextHeartbeat());
     }
 
     LOG.log(Level.FINEST, "DONE with evaluator heartbeat");
-  }
-
-  private EvaluatorContext getNewRootContext(final EvaluatorHeartbeat heartbeat) {
-    assert (EvaluatorState.RUNNING == heartbeat.getState());
-    final ContextHeartbeat rootContextHeartbeat = heartbeat.getContextHeartbeat();
-    if (rootContextHeartbeat.getParentHeartbeat().isPresent()) {
-      throw new RuntimeException("Unexpectedly not called on the root context.");
-    }
-    final String contextIdentifier = rootContextHeartbeat.getId();
-    final Optional<String> parentID = Optional.empty();
-    return new EvaluatorContext(this, contextIdentifier, parentID, this.configurationSerializer);
   }
 
   /**
@@ -449,15 +439,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       serializedException = Optional.empty();
     }
     return new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
-  }
-
-  public void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
-    this.contextManager.handleContextHeartbeat(heartbeat);
-  }
-
-
-  public void handleTaskHeartbeat(final TaskHeartbeat heartbeat) {
-    // TODO
   }
 
   public void handle(final DriverRuntimeProtocol.ResourceLaunchProto resourceLaunchProto) {
