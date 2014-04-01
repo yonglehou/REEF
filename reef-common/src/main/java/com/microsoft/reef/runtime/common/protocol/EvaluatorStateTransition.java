@@ -51,7 +51,6 @@ public final class EvaluatorStateTransition implements Comparable<EvaluatorState
           default:
             return true;
         }
-      case SUSPEND:
       case FAILED:
       case DONE:
         return false;

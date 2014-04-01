@@ -14,7 +14,7 @@ public final class ErrorMessage {
   /**
    * The long description of the error.
    */
-  private final String longMessage;
+  private final Optional<String> longMessage;
   /**
    * The type (JVM, CLR) of the environment where the error occured.
    */
@@ -31,7 +31,7 @@ public final class ErrorMessage {
    * @param serializedException The exception, if any.
    */
   public ErrorMessage(final String shortMessage,
-                      final String longMessage,
+                      final Optional<String> longMessage,
                       final EvaluatorType type,
                       final Optional<byte[]> serializedException) {
     this.shortMessage = shortMessage;
@@ -47,7 +47,7 @@ public final class ErrorMessage {
    * @param serializedException The exception.
    */
   public ErrorMessage(final String shortMessage,
-                      final String longMessage,
+                      final Optional<String> longMessage,
                       final EvaluatorType type,
                       final byte[] serializedException) {
     this(shortMessage, longMessage, type, Optional.of(serializedException));
@@ -59,7 +59,7 @@ public final class ErrorMessage {
    * @param type         The type (JVM, CLR) of the environment where the error occured.
    */
   public ErrorMessage(final String shortMessage,
-                      final String longMessage,
+                      final Optional<String> longMessage,
                       final EvaluatorType type) {
     this(shortMessage, longMessage, type, Optional.<byte[]>empty());
   }
@@ -74,7 +74,7 @@ public final class ErrorMessage {
   /**
    * @return The long description of the error.
    */
-  public String getLongMessage() {
+  public Optional<String> getLongMessage() {
     return longMessage;
   }
 

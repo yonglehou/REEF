@@ -29,6 +29,7 @@ import com.microsoft.reef.runtime.common.driver.catalog.ResourceCatalogImpl;
 import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorDescriptorImpl;
 import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorHeartBeatSanityChecker;
 import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorManager;
+import com.microsoft.reef.runtime.common.protocol.EvaluatorHeartbeat;
 import com.microsoft.reef.runtime.common.utils.RemoteManager;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.InjectionFuture;
@@ -226,6 +227,25 @@ public final class DriverManager {
     eManager.handle(evaluatorHeartbeatProtoRemoteMessage);
   }
 
+  private final void handleEvaluatorHeartbeat(final EvaluatorHeartbeat heartbeat) {
+    final String evaluatorId = heartbeat.getId();
+
+    LOG.log(Level.FINEST, "Heartbeat from Evaluator {0} with state {1} timestamp {2}",
+        new Object[]{evaluatorId, heartbeat.getState(), heartbeat.getTimeStamp()});
+
+    final EvaluatorManager eManager;
+    synchronized (this.evaluators) {
+      if (this.evaluators.containsKey(evaluatorId)) {
+        eManager = this.evaluators.get(evaluatorId);
+      } else {
+        final String msg = "Contact from unknown evaluator identifier `" + evaluatorId + "` and state `" + heartbeat.getState() + "`";
+        LOG.log(Level.SEVERE, msg);
+        throw new RuntimeException(msg);
+      }
+    }
+    eManager.handleEvaluatorHeartbeat(heartbeat);
+  }
+
   /**
    * This resource status message comes from the ResourceManager layer; telling me what it thinks
    * about the state of the resource executing an Evaluator; This method simply passes the message
@@ -312,7 +332,7 @@ public final class DriverManager {
     LOG.log(Level.WARNING, "Runtime error: " + error, error.getCause());
 
     final EvaluatorException evaluatorException = error.getCause() != null ?
-        new EvaluatorException(error.getId(), error.getCause()) :
+        new EvaluatorException(error.getId(), "", error.getCause()) :
         new EvaluatorException(error.getId(), "Runtime error");
     EvaluatorManager eManager = null;
     synchronized (this.evaluators) {

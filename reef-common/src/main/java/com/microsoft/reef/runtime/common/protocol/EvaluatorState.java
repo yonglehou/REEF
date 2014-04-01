@@ -7,7 +7,6 @@ public enum EvaluatorState {
   INIT,
   RUNNING,
   DONE,
-  SUSPEND,
   FAILED,
   KILLED
 }

@@ -4,6 +4,7 @@ import com.microsoft.reef.util.Optional;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * A Task heartbeat sent from the Evaluator to the Driver.
@@ -31,13 +32,13 @@ public final class TaskHeartbeat {
   /**
    * Messages from the Task.
    */
-  private final Iterable<Message> messages;
+  private final List<Message> messages;
 
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
                        final Optional<ErrorMessage> errorMessage,
-                       final Iterable<Message> messages) {
+                       final List<Message> messages) {
     this.id = id;
     this.state = state;
     this.stateTransitions = stateTransitions;
@@ -68,7 +69,7 @@ public final class TaskHeartbeat {
   public TaskHeartbeat(final String id,
                        final TaskState state,
                        final Collection<TaskStateTransition> stateTransitions,
-                       final Iterable<Message> messages) {
+                       final List<Message> messages) {
     this(id, state, stateTransitions, Optional.<ErrorMessage>empty(), messages);
 
   }
@@ -104,7 +105,7 @@ public final class TaskHeartbeat {
   /**
    * @return the messages sent by the Task, if any.
    */
-  public Iterable<Message> getMessages() {
+  public List<Message> getMessages() {
     return messages;
   }
 }
