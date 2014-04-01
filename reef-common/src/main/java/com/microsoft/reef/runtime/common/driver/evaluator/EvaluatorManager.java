@@ -91,6 +91,9 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   private EventHandler<EvaluatorRuntimeProtocol.EvaluatorControlProto> evaluatorControlHandler = null;
   private boolean isResourceReleased = false;
 
+  private final ContextManager contextManager = new ContextManager();
+
+
   // Mutable fields
   private EvaluatorState evaluatorState = EvaluatorState.INIT;
   private int sequenceNumber = 0;
@@ -263,7 +266,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       LOG.log(Level.WARNING, "Failed evaluator: " + getId(), exception);
 
       try {
-
         final List<FailedContext> failedContextList = new ArrayList<>();
         final List<EvaluatorContext> activeContexts = new ArrayList<>(this.activeContextList);
         Collections.reverse(activeContexts);
@@ -358,7 +360,9 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       if (this.evaluatorState != heartbeat.getState()) {
         // We need to do something.
         if (EvaluatorState.RUNNING == heartbeat.getState()) {
-          final ActiveContext activeContext = getActiveContext(heartbeat);
+          final EvaluatorContext activeContext = getNewRootContext(heartbeat);
+          this.activeContextIds.add(activeContext.getId());
+          this.activeContextList.add(activeContext);
           this.dispatcher.onNext(ActiveContext.class, activeContext);
         } else if (EvaluatorState.DONE == heartbeat.getState()) {
           final CompletedEvaluator completedEvaluator = getCompletedEvaluator(heartbeat);
@@ -386,11 +390,15 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     LOG.log(Level.FINEST, "DONE with evaluator heartbeat");
   }
 
-  private ActiveContext getActiveContext(final EvaluatorHeartbeat heartbeat) {
+  private EvaluatorContext getNewRootContext(final EvaluatorHeartbeat heartbeat) {
     assert (EvaluatorState.RUNNING == heartbeat.getState());
-    final String contextIdentifier = "TODO"; // TODO
-    final Optional<String> parentID = Optional.empty(); // TODO
-    return new EvaluatorContext(this, contextIdentifier, parentID, this.configurationSerializer); // TODO
+    final ContextHeartbeat rootContextHeartbeat = heartbeat.getContextHeartbeat();
+    if (rootContextHeartbeat.getParentHeartbeat().isPresent()) {
+      throw new RuntimeException("Unexpectedly not called on the root context.");
+    }
+    final String contextIdentifier = rootContextHeartbeat.getId();
+    final Optional<String> parentID = Optional.empty();
+    return new EvaluatorContext(this, contextIdentifier, parentID, this.configurationSerializer);
   }
 
   /**
@@ -443,9 +451,10 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     return new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
   }
 
-  public void handleContextHeartbeat(final ContextHeartbeat contextHeartbeat) {
-    // TODO
+  public void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
+    this.contextManager.handleContextHeartbeat(heartbeat);
   }
+
 
   public void handleTaskHeartbeat(final TaskHeartbeat heartbeat) {
     // TODO

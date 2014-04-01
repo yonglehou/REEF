@@ -22,6 +22,7 @@ import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.EvaluatorDescriptor;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
 import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorManager;
+import com.microsoft.reef.runtime.common.protocol.ContextHeartbeat;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.formats.ConfigurationSerializer;
@@ -161,6 +162,11 @@ public final class EvaluatorContext implements ActiveContext {
   @Override
   public String getId() {
     return this.identifier;
+  }
+
+
+  public void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
+
   }
 
 

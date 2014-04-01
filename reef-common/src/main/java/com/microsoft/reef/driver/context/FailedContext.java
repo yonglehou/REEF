@@ -15,10 +15,10 @@
  */
 package com.microsoft.reef.driver.context;
 
-import com.microsoft.reef.common.AbstractFailure;
 import com.microsoft.reef.annotations.Provided;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Public;
+import com.microsoft.reef.common.AbstractFailure;
 import com.microsoft.reef.util.Optional;
 
 /**
@@ -39,5 +39,5 @@ public abstract class FailedContext extends AbstractFailure implements ContextBa
   /**
    * @return the new top of the stack of context if there is one.
    */
-  public abstract Optional<ActiveContext> getParentContext();
+  public abstract Optional<? extends ActiveContext> getParentContext();
 }

@@ -30,7 +30,7 @@ import com.microsoft.reef.util.Optional;
 @DriverSide
 public final class FailedContextImpl extends FailedContext {
 
-  private final Optional<ActiveContext> parentContext;
+  private final Optional<? extends ActiveContext> parentContext;
   private final String evaluatorID;
   private final EvaluatorDescriptor evaluatorDescriptor;
 
@@ -43,7 +43,7 @@ public final class FailedContextImpl extends FailedContext {
    */
   public FailedContextImpl(final Throwable cause,
                            final String contextId,
-                           final Optional<ActiveContext> parentContext,
+                           final Optional<? extends ActiveContext> parentContext,
                            final String evaluatorID,
                            final EvaluatorDescriptor evaluatorDescriptor) {
     super(contextId, cause);
@@ -54,7 +54,7 @@ public final class FailedContextImpl extends FailedContext {
 
 
   @Override
-  public Optional<ActiveContext> getParentContext() {
+  public Optional<? extends ActiveContext> getParentContext() {
     return this.parentContext;
   }
 
