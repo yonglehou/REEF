@@ -10,7 +10,6 @@ import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.io.naming.Identifiable;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
-import com.microsoft.reef.runtime.common.driver.DispatchingEStage;
 import com.microsoft.reef.runtime.common.protocol.ErrorMessage;
 import com.microsoft.reef.runtime.common.protocol.EvaluatorHeartbeat;
 import com.microsoft.reef.runtime.common.protocol.EvaluatorState;
@@ -33,17 +32,24 @@ public final class EvaluatorManagerNew implements AutoCloseable, Identifiable {
   private static final Logger LOG = Logger.getLogger(EvaluatorManagerNew.class.getName());
   private final ContextManager contextManager;
   private final EvaluatorDescriptor evaluatorDescriptor;
+  private final String evaluatorId;
+  private final EvaluatorMessageDispatcher messageDispatcher;
   private int sequenceNumber = 0;
   private EvaluatorState evaluatorState = EvaluatorState.INIT;
-  private final String evaluatorId;
-  private final DispatchingEStage dispatcher;
+  private final TaskManager taskManager;
+  private final EvaluatorControlHandler evaluatorControlHandler;
 
   public EvaluatorManagerNew(final ContextManager contextManager,
                              final @Parameter(EvaluatorManager.EvaluatorDescriptorName.class) EvaluatorDescriptorImpl evaluatorDescriptor,
-                             final @Parameter(EvaluatorManager.EvaluatorIdentifier.class) String evaluatorId) {
+                             final @Parameter(EvaluatorManager.EvaluatorIdentifier.class) String evaluatorId,
+                             final EvaluatorMessageDispatcher messageDispatcher,
+                             final TaskManager taskManager, EvaluatorControlHandler evaluatorControlHandler) {
     this.contextManager = contextManager;
     this.evaluatorDescriptor = evaluatorDescriptor;
     this.evaluatorId = evaluatorId;
+    this.messageDispatcher = messageDispatcher;
+    this.taskManager = taskManager;
+    this.evaluatorControlHandler = evaluatorControlHandler;
   }
 
 
@@ -88,7 +94,7 @@ public final class EvaluatorManagerNew implements AutoCloseable, Identifiable {
 
     // Process the task heartbeats
     if (heartbeat.getTaskHeartbeat().isPresent()) {
-      this.contextManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
+      this.taskManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
     }
 
     LOG.log(Level.FINEST, "DONE with evaluator heartbeat");
@@ -103,7 +109,7 @@ public final class EvaluatorManagerNew implements AutoCloseable, Identifiable {
   private synchronized void onEvaluatorCompleted(final EvaluatorHeartbeat heartbeat) {
     assert (EvaluatorState.DONE == heartbeat.getState() || EvaluatorState.KILLED == heartbeat.getState());
     final CompletedEvaluator completedEvaluator = new CompletedEvaluatorImpl(this.getId());
-    this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
+    this.messageDispatcher.onEvaluatorCompleted(completedEvaluator);
     this.close();
   }
 
@@ -142,7 +148,7 @@ public final class EvaluatorManagerNew implements AutoCloseable, Identifiable {
       serializedException = Optional.empty();
     }
     final FailedEvaluator failedEvaluator = new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
-    this.dispatcher.onNext(FailedEvaluator.class, failedEvaluator);
+    this.messageDispatcher.onEvaluatorFailed(failedEvaluator);
     this.close();
   }
 
@@ -158,7 +164,7 @@ public final class EvaluatorManagerNew implements AutoCloseable, Identifiable {
                 .setIdentifier(getId())
                 .setKillEvaluator(EvaluatorRuntimeProtocol.KillEvaluatorProto.newBuilder().build())
                 .build();
-        handle(evaluatorControlProto);
+        this.evaluatorControlHandler.onNext(evaluatorControlProto);
       } finally {
         this.evaluatorState = EvaluatorState.KILLED;
       }

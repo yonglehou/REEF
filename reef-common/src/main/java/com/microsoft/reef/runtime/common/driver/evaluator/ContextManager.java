@@ -3,11 +3,8 @@ package com.microsoft.reef.runtime.common.driver.evaluator;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Private;
 import com.microsoft.reef.driver.context.ActiveContext;
-import com.microsoft.reef.driver.context.ClosedContext;
-import com.microsoft.reef.driver.context.ContextMessage;
 import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.EvaluatorType;
-import com.microsoft.reef.runtime.common.driver.DispatchingEStage;
 import com.microsoft.reef.runtime.common.driver.context.ContextMessageImpl;
 import com.microsoft.reef.runtime.common.driver.context.EvaluatorContext;
 import com.microsoft.reef.runtime.common.driver.context.FailedContextImpl;
@@ -16,6 +13,7 @@ import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.remote.impl.ObjectSerializableCodec;
 
+import javax.inject.Inject;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -26,20 +24,21 @@ import java.util.Map;
  */
 @DriverSide
 @Private
-public final class ContextManager {
+final class ContextManager {
 
   private final EvaluatorManager evaluatorManager;
   private final ConfigurationSerializer configurationSerializer;
   private final Map<String, EvaluatorContext> contextMap = new HashMap<>();
   private final Deque<EvaluatorContext> contextStack = new ArrayDeque<>();
-  private final DispatchingEStage dispatcher;
+  private final EvaluatorMessageDispatcher messageDispatcher;
 
-  public ContextManager(final EvaluatorManager evaluatorManager,
-                        final ConfigurationSerializer configurationSerializer,
-                        final DispatchingEStage dispatcher) {
+  @Inject
+  ContextManager(final EvaluatorManager evaluatorManager,
+                 final ConfigurationSerializer configurationSerializer,
+                 final EvaluatorMessageDispatcher messageDispatcher) {
     this.evaluatorManager = evaluatorManager;
     this.configurationSerializer = configurationSerializer;
-    this.dispatcher = dispatcher;
+    this.messageDispatcher = messageDispatcher;
   }
 
 
@@ -49,12 +48,12 @@ public final class ContextManager {
     return result;
   }
 
-  public synchronized Optional<EvaluatorContext> peek() {
+  synchronized Optional<EvaluatorContext> peek() {
     return Optional.ofNullable(this.contextStack.peek());
   }
 
 
-  public synchronized Optional<EvaluatorContext> get(final String id) {
+  synchronized Optional<EvaluatorContext> get(final String id) {
     return Optional.ofNullable(this.contextMap.get(id));
   }
 
@@ -62,7 +61,7 @@ public final class ContextManager {
    * @param id
    * @return true if the context with the given id is the top of the context stack.
    */
-  public synchronized boolean isTopContext(final String id) {
+  synchronized boolean isTopContext(final String id) {
     final boolean result;
     if (!this.contextMap.containsKey(id)) {
       result = false;
@@ -72,7 +71,7 @@ public final class ContextManager {
     return result;
   }
 
-  public synchronized boolean isEmpty() {
+  synchronized boolean isEmpty() {
     final boolean result = this.contextStack.isEmpty();
     if (this.contextMap.isEmpty() != result) {
       throw new IllegalStateException("Inconsistent state.");
@@ -80,7 +79,7 @@ public final class ContextManager {
     return result;
   }
 
-  public synchronized void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
+  synchronized void handleContextHeartbeat(final ContextHeartbeat heartbeat) {
     Optional<ContextHeartbeat> hb = Optional.of(heartbeat);
     while (hb.isPresent()) {
       processContextHeartbeat(hb.get());
@@ -126,7 +125,7 @@ public final class ContextManager {
     }
     final EvaluatorContext ctx = this.pop();
     if (this.peek().isPresent()) {
-      dispatcher.onNext(ClosedContext.class, ctx.getClosedContext(this.peek().get()));
+      this.messageDispatcher.onContextClose(ctx.getClosedContext(this.peek().get()));
     } else {
       throw new IllegalStateException("Received a closedcontext for the root context. We should instead have gotten a CompletedEvaluator.");
     }
@@ -177,7 +176,7 @@ public final class ContextManager {
 
     final FailedContext failedContext = new FailedContextImpl(contextId, message, description, cause, data,
         parentContext, ctx.getEvaluatorDescriptor(), ctx.getEvaluatorId());
-    dispatcher.onNext(FailedContext.class, failedContext);
+    this.messageDispatcher.onContextFailed(failedContext);
   }
 
 
@@ -189,7 +188,7 @@ public final class ContextManager {
   private void processMessages(final ContextHeartbeat heartbeat) {
     final String contextId = heartbeat.getId();
     for (final Message message : heartbeat.getMessages()) {
-      dispatcher.onNext(ContextMessage.class, new ContextMessageImpl(message.getMessage(), contextId, message.getSourceIdentifier()));
+      this.messageDispatcher.onContextMessage(new ContextMessageImpl(message.getMessage(), contextId, message.getSourceIdentifier()));
     }
   }
 
@@ -210,7 +209,7 @@ public final class ContextManager {
     }
     this.contextStack.push(result);
     this.contextMap.put(result.getId(), result);
-    this.dispatcher.onNext(ActiveContext.class, result);
+    this.messageDispatcher.onContextActive(result);
   }
 
   private boolean isSane(final ContextHeartbeat heartbeat) {
@@ -221,13 +220,5 @@ public final class ContextManager {
     }
     // TODO: Think about more checks
     return true;
-  }
-
-  public synchronized void handleTaskHeartbeat(final TaskHeartbeat heartbeat) {
-    for (final TaskStateTransition transition : heartbeat.getStateTransitions()) {
-      assert (transition.isLegal());
-    }
-    // TODO
-
   }
 }
