@@ -54,6 +54,18 @@ final class FailedEvaluatorImpl implements FailedEvaluator {
     this.task = task;
   }
 
+  /**
+   * @param cause
+   * @param ctx
+   * @param task
+   * @param id
+   * @deprecated use the main constructor instead
+   */
+  @Deprecated
+  FailedEvaluatorImpl(final Throwable cause, final List<FailedContext> ctx, final Optional<FailedTask> task, final String id) {
+    this(id, cause.getMessage(), Optional.<String>empty(), Optional.of(cause), Optional.<byte[]>empty(), ctx, task);
+  }
+
   @Override
   public EvaluatorException getEvaluatorException() {
     if (this.cause.isPresent()) {

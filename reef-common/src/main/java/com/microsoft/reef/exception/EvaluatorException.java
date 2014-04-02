@@ -16,6 +16,7 @@
 package com.microsoft.reef.exception;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
+import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.naming.Identifiable;
 
 import java.util.concurrent.ExecutionException;
@@ -39,6 +40,19 @@ public class EvaluatorException extends ExecutionException implements Identifiab
   public EvaluatorException(final String evaluatorId, final String message) {
     super(message);
     this.evaluatorId = evaluatorId;
+  }
+
+  public EvaluatorException(final String evaluatorId, final Throwable cause) {
+    super(cause);
+    this.evaluatorId = evaluatorId;
+  }
+
+  public EvaluatorException(final String evaluatorId, final Throwable cause, final RunningTask task) {
+    this(evaluatorId, cause);
+  }
+
+  public EvaluatorException(final String evaluatorId, final String message, final RunningTask task) {
+    this(evaluatorId, message);
   }
 
 
