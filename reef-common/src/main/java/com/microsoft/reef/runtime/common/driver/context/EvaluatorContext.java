@@ -179,7 +179,7 @@ public final class EvaluatorContext implements ActiveContext {
   }
 
   public final FailedContext getFailedContext(
-      final Optional<? extends ActiveContext> parentContext, final Exception reason) {
-    return new FailedContextImpl(reason, this.getId(), parentContext, this.getEvaluatorId(), this.getEvaluatorDescriptor());
+      final Optional<ActiveContext> parentContext, final Exception reason) {
+    return new FailedContextImpl(this.getId(), reason.getMessage(), Optional.<String>empty(), Optional.<Throwable>of(reason), Optional.<byte[]>empty(), parentContext, this.getEvaluatorDescriptor(), this.getEvaluatorId());
   }
 }
