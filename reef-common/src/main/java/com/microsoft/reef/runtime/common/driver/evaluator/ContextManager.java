@@ -37,7 +37,7 @@ public final class ContextManager {
   }
 
 
-  public synchronized EvaluatorContext pop() {
+  private synchronized EvaluatorContext pop() {
     final EvaluatorContext result = contextStack.pop();
     this.contextMap.remove(result.getId());
     return result;
@@ -47,11 +47,6 @@ public final class ContextManager {
     return Optional.ofNullable(this.contextStack.peek());
   }
 
-  private synchronized void push(final EvaluatorContext context) {
-    this.contextStack.push(context);
-    this.contextMap.put(context.getId(), context);
-    this.dispatcher.onNext(ActiveContext.class, context);
-  }
 
   public synchronized Optional<EvaluatorContext> get(final String id) {
     return Optional.ofNullable(this.contextMap.get(id));
@@ -133,7 +128,16 @@ public final class ContextManager {
 
   private void onContextFail(final ContextHeartbeat heartbeat) {
     assert (heartbeat.getState().equals(ContextState.FAILED));
+    final String contextId = heartbeat.getId();
+    if (!this.peek().get().getParentId().equals(contextId)) {
+      throw new IllegalStateException("Received FailedContext for `" + contextId + "` which is not the top context.");
+    }
+    final EvaluatorContext ctx = this.pop();
+
     // TODO
+//    dispatcher.onNext(FailedContext.class, ctx.getFailedContext(this.peek(),));
+
+
   }
 
   /**
@@ -160,7 +164,9 @@ public final class ContextManager {
       }
       result = new EvaluatorContext(evaluatorManager, heartbeat.getId(), Optional.of(parentId), configurationSerializer);
     }
-    this.push(result);
+    this.contextStack.push(result);
+    this.contextMap.put(result.getId(), result);
+    this.dispatcher.onNext(ActiveContext.class, result);
   }
 
   private boolean isSane(final ContextHeartbeat heartbeat) {
