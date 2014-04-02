@@ -41,10 +41,7 @@ import com.microsoft.reef.runtime.common.driver.task.RunningTaskImpl;
 import com.microsoft.reef.runtime.common.driver.task.SuspendedTaskImpl;
 import com.microsoft.reef.runtime.common.driver.task.TaskMessageImpl;
 import com.microsoft.reef.runtime.common.launch.REEFErrorHandler;
-import com.microsoft.reef.runtime.common.protocol.ErrorMessage;
-import com.microsoft.reef.runtime.common.protocol.EvaluatorHeartbeat;
 import com.microsoft.reef.runtime.common.protocol.EvaluatorState;
-import com.microsoft.reef.runtime.common.protocol.EvaluatorStateTransition;
 import com.microsoft.reef.runtime.common.utils.RemoteManager;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.annotations.Name;
@@ -348,100 +345,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     }
   }
 
-
-  public void handleEvaluatorHeartbeat(final EvaluatorHeartbeat heartbeat) {
-    synchronized (this.evaluatorDescriptor) {
-      for (final EvaluatorStateTransition transition : heartbeat.getStateTransitions()) {
-        assert (transition.isLegal());
-      }
-
-      { // Handle sequence number
-        assert (heartbeat.getSequenceNumber() > this.sequenceNumber);
-        this.sequenceNumber = heartbeat.getSequenceNumber();
-      }
-      if (this.evaluatorState != heartbeat.getState()) {
-        // We need to do something.
-        switch (heartbeat.getState()) {
-          case RUNNING:
-            // We assume there also to be a context in it. contextManager will handle the notification to the user.
-            break;
-          case DONE:
-            onEvaluatorCompleted(heartbeat);
-            break;
-          case FAILED:
-            this.onEvaluatorFailure(heartbeat);
-            break;
-          case KILLED:
-            this.onEvaluatorCompleted(heartbeat);
-            break;
-          default:
-            throw new RuntimeException("Unknown evaluator state: '" + heartbeat.getState() + "'");
-        }
-        this.evaluatorState = heartbeat.getState();
-      }
-
-    }
-    // Process the context heartbeats
-    this.contextManager.handleContextHeartbeat(heartbeat.getContextHeartbeat());
-
-    // Process the task heartbeats
-    if (heartbeat.getTaskHeartbeat().isPresent()) {
-      this.contextManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
-    }
-    LOG.log(Level.FINEST, "DONE with evaluator heartbeat");
-  }
-
-  /**
-   * Assembles an CompletedEvaluator.
-   *
-   * @param heartbeat
-   * @return an CompletedEvaluator.
-   */
-  private void onEvaluatorCompleted(final EvaluatorHeartbeat heartbeat) {
-    assert (EvaluatorState.DONE == heartbeat.getState() || EvaluatorState.KILLED == heartbeat.getState());
-    final CompletedEvaluator completedEvaluator = new CompletedEvaluatorImpl(this.getId());
-    this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
-    this.close();
-  }
-
-  /**
-   * Assembles a FailedEvaluator.
-   *
-   * @param heartbeat
-   * @return a FailedEvaluator.
-   */
-  private void onEvaluatorFailure(final EvaluatorHeartbeat heartbeat) {
-    assert (heartbeat.getState() == EvaluatorState.FAILED);
-    // TODO: Fix this.
-    final List<FailedContext> failedContexts = null;
-    final Optional<FailedTask> failedTask = null;
-
-    final String evaluatorID = heartbeat.getId();
-    final String shortMessage;
-    final Optional<String> description;
-    final Optional<Throwable> cause;
-    final Optional<byte[]> serializedException;
-
-    if (heartbeat.getErrorMessage().isPresent()) {
-      final ErrorMessage errorMessage = heartbeat.getErrorMessage().get();
-      if (errorMessage.getType() == EvaluatorType.JVM && errorMessage.getSerializedException().isPresent()) {
-        cause = Optional.of(new ObjectSerializableCodec<Throwable>().decode(errorMessage.getSerializedException().get()));
-      } else {
-        cause = Optional.empty();
-      }
-      serializedException = errorMessage.getSerializedException();
-      shortMessage = errorMessage.getShortMessage();
-      description = errorMessage.getLongMessage();
-    } else {
-      shortMessage = "Unknown error.";
-      description = Optional.empty();
-      cause = Optional.empty();
-      serializedException = Optional.empty();
-    }
-    final FailedEvaluator failedEvaluator = new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
-    this.dispatcher.onNext(FailedEvaluator.class, failedEvaluator);
-    this.close();
-  }
 
   public void handle(final DriverRuntimeProtocol.ResourceLaunchProto resourceLaunchProto) {
     synchronized (this.evaluatorDescriptor) {
