@@ -4,11 +4,17 @@ import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Private;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ClosedContext;
+import com.microsoft.reef.driver.context.ContextMessage;
+import com.microsoft.reef.driver.context.FailedContext;
+import com.microsoft.reef.driver.evaluator.EvaluatorType;
 import com.microsoft.reef.runtime.common.driver.DispatchingEStage;
+import com.microsoft.reef.runtime.common.driver.context.ContextMessageImpl;
 import com.microsoft.reef.runtime.common.driver.context.EvaluatorContext;
+import com.microsoft.reef.runtime.common.driver.context.FailedContextImpl;
 import com.microsoft.reef.runtime.common.protocol.*;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.remote.impl.ObjectSerializableCodec;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -134,11 +140,46 @@ public final class ContextManager {
     }
     final EvaluatorContext ctx = this.pop();
 
-    // TODO
-//    dispatcher.onNext(FailedContext.class, ctx.getFailedContext(this.peek(),));
 
+    final Optional<Throwable> cause;
+    final Optional<byte[]> data;
+    final String message;
+    final Optional<String> description;
+    if (heartbeat.getError().isPresent()) {
+      final ErrorMessage errorMessage = heartbeat.getError().get();
+      message = errorMessage.getShortMessage();
+      description = errorMessage.getLongMessage();
+      if (errorMessage.getSerializedException().isPresent()) {
+        data = errorMessage.getSerializedException();
+        if (errorMessage.getType().equals(EvaluatorType.JVM)) {
+          cause = Optional.of(new ObjectSerializableCodec<Throwable>().decode(data.get()));
+        } else {
+          cause = Optional.empty();
+        }
+      } else {
+        data = Optional.empty();
+        cause = Optional.empty();
+      }
+    } else {
+      message = "UNKNOWN_ERROR";
+      description = Optional.empty();
+      cause = Optional.empty();
+      data = Optional.empty();
+    }
 
+    final Optional<ActiveContext> parentContext;
+    if (this.peek().isPresent()) {
+      final ActiveContext parent = this.peek().get();
+      parentContext = Optional.of(parent);
+    } else {
+      parentContext = Optional.empty();
+    }
+
+    final FailedContext failedContext = new FailedContextImpl(contextId, message, description, cause, data,
+        parentContext, ctx.getEvaluatorDescriptor(), ctx.getEvaluatorId());
+    dispatcher.onNext(FailedContext.class, failedContext);
   }
+
 
   /**
    * Process the messages in the heartbeat
@@ -146,7 +187,10 @@ public final class ContextManager {
    * @param heartbeat
    */
   private void processMessages(final ContextHeartbeat heartbeat) {
-    // TODO
+    final String contextId = heartbeat.getId();
+    for (final Message message : heartbeat.getMessages()) {
+      dispatcher.onNext(ContextMessage.class, new ContextMessageImpl(message.getMessage(), contextId, message.getSourceIdentifier()));
+    }
   }
 
   private void onNewContext(final ContextHeartbeat heartbeat) {

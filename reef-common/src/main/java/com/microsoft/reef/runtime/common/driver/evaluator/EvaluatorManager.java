@@ -359,36 +359,35 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
         assert (heartbeat.getSequenceNumber() > this.sequenceNumber);
         this.sequenceNumber = heartbeat.getSequenceNumber();
       }
-
       if (this.evaluatorState != heartbeat.getState()) {
         // We need to do something.
-        if (EvaluatorState.RUNNING == heartbeat.getState()) {
-          // We assume there also to be a context in it. contextManager will handle the notification to the user.
-        } else if (EvaluatorState.DONE == heartbeat.getState()) {
-          final CompletedEvaluator completedEvaluator = getCompletedEvaluator(heartbeat);
-          this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
-          this.close();
-        } else if (EvaluatorState.FAILED == heartbeat.getState()) {
-          final FailedEvaluator failedEvaluator = getFailedEvaluator(heartbeat);
-          this.dispatcher.onNext(FailedEvaluator.class, failedEvaluator);
-          this.close();
-        } else if (EvaluatorState.KILLED == heartbeat.getState()) {
-          final CompletedEvaluator completedEvaluator = getCompletedEvaluator(heartbeat);
-          this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
-          this.close();
+        switch (heartbeat.getState()) {
+          case RUNNING:
+            // We assume there also to be a context in it. contextManager will handle the notification to the user.
+            break;
+          case DONE:
+            onEvaluatorCompleted(heartbeat);
+            break;
+          case FAILED:
+            this.onEvaluatorFailure(heartbeat);
+            break;
+          case KILLED:
+            this.onEvaluatorCompleted(heartbeat);
+            break;
+          default:
+            throw new RuntimeException("Unknown evaluator state: '" + heartbeat.getState() + "'");
         }
         this.evaluatorState = heartbeat.getState();
       }
-      // Process the context heartbeats
-      this.contextManager.handleContextHeartbeat(heartbeat.getContextHeartbeat());
-
-      // Process the task heartbeats
-      if (heartbeat.getTaskHeartbeat().isPresent()) {
-        this.contextManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
-      }
 
     }
+    // Process the context heartbeats
+    this.contextManager.handleContextHeartbeat(heartbeat.getContextHeartbeat());
 
+    // Process the task heartbeats
+    if (heartbeat.getTaskHeartbeat().isPresent()) {
+      this.contextManager.handleTaskHeartbeat(heartbeat.getTaskHeartbeat().get());
+    }
     LOG.log(Level.FINEST, "DONE with evaluator heartbeat");
   }
 
@@ -398,9 +397,11 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
    * @param heartbeat
    * @return an CompletedEvaluator.
    */
-  private CompletedEvaluator getCompletedEvaluator(final EvaluatorHeartbeat heartbeat) {
+  private void onEvaluatorCompleted(final EvaluatorHeartbeat heartbeat) {
     assert (EvaluatorState.DONE == heartbeat.getState() || EvaluatorState.KILLED == heartbeat.getState());
-    return new CompletedEvaluatorImpl(this.getId());
+    final CompletedEvaluator completedEvaluator = new CompletedEvaluatorImpl(this.getId());
+    this.dispatcher.onNext(CompletedEvaluator.class, completedEvaluator);
+    this.close();
   }
 
   /**
@@ -409,10 +410,8 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
    * @param heartbeat
    * @return a FailedEvaluator.
    */
-  private FailedEvaluator getFailedEvaluator(final EvaluatorHeartbeat heartbeat) {
+  private void onEvaluatorFailure(final EvaluatorHeartbeat heartbeat) {
     assert (heartbeat.getState() == EvaluatorState.FAILED);
-    final FailedEvaluator failedEvaluator;
-
     // TODO: Fix this.
     final List<FailedContext> failedContexts = null;
     final Optional<FailedTask> failedTask = null;
@@ -439,7 +438,9 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       cause = Optional.empty();
       serializedException = Optional.empty();
     }
-    return new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
+    final FailedEvaluator failedEvaluator = new FailedEvaluatorImpl(heartbeat.getId(), shortMessage, description, cause, serializedException, failedContexts, failedTask);
+    this.dispatcher.onNext(FailedEvaluator.class, failedEvaluator);
+    this.close();
   }
 
   public void handle(final DriverRuntimeProtocol.ResourceLaunchProto resourceLaunchProto) {
