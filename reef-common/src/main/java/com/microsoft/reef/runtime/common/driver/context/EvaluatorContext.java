@@ -21,8 +21,6 @@ import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.EvaluatorDescriptor;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
-import com.microsoft.reef.runtime.common.driver.evaluator.EvaluatorManager;
-import com.microsoft.reef.runtime.common.protocol.ContextState;
 import com.microsoft.reef.util.Optional;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.formats.ConfigurationSerializer;
@@ -32,26 +30,31 @@ import java.util.logging.Logger;
 
 public final class EvaluatorContext implements ActiveContext {
 
-  private final static Logger LOG = Logger.getLogger(EvaluatorContext.class.getName());
+  private final static Logger LOG = Logger.getLogger(ActiveContext.class.getName());
 
-  private final String identifier;
+  private final String contextIdentifier;
+  private final String evaluatorIdentifier;
+  private final EvaluatorDescriptor evaluatorDescriptor;
+
 
   private final Optional<String> parentID;
-
-  private final EvaluatorManager evaluatorManager;
   private final ConfigurationSerializer configurationSerializer;
-  private ContextState state = ContextState.READY;
+  private final ContextControlHandler contextControlHandler;
 
   private boolean closed = false;
 
-  public EvaluatorContext(final EvaluatorManager evaluatorManager,
-                          final String identifier,
+  public EvaluatorContext(final String contextIdentifier,
+                          final String evaluatorIdentifier,
+                          final EvaluatorDescriptor evaluatorDescriptor,
                           final Optional<String> parentID,
-                          final ConfigurationSerializer configurationSerializer) {
-    this.identifier = identifier;
+                          final ConfigurationSerializer configurationSerializer,
+                          final ContextControlHandler contextControlHandler) {
+    this.contextIdentifier = contextIdentifier;
+    this.evaluatorIdentifier = evaluatorIdentifier;
+    this.evaluatorDescriptor = evaluatorDescriptor;
     this.parentID = parentID;
-    this.evaluatorManager = evaluatorManager;
     this.configurationSerializer = configurationSerializer;
+    this.contextControlHandler = contextControlHandler;
   }
 
   @Override
@@ -68,7 +71,7 @@ public final class EvaluatorContext implements ActiveContext {
                     .setContextId(getId())
                     .build()
             ).build();
-    this.evaluatorManager.handle(contextControlProto);
+    this.contextControlHandler.send(contextControlProto);
     this.closed = true;
   }
 
@@ -82,11 +85,11 @@ public final class EvaluatorContext implements ActiveContext {
     final EvaluatorRuntimeProtocol.ContextControlProto contextControlProto =
         EvaluatorRuntimeProtocol.ContextControlProto.newBuilder()
             .setContextMessage(EvaluatorRuntimeProtocol.ContextMessageProto.newBuilder()
-                .setContextId(this.identifier)
+                .setContextId(this.contextIdentifier)
                 .setMessage(ByteString.copyFrom(message))
                 .build())
             .build();
-    this.evaluatorManager.handle(contextControlProto);
+    this.contextControlHandler.send(contextControlProto);
   }
 
   @Override
@@ -100,11 +103,11 @@ public final class EvaluatorContext implements ActiveContext {
         EvaluatorRuntimeProtocol.ContextControlProto.newBuilder()
             .setStartTask(
                 EvaluatorRuntimeProtocol.StartTaskProto.newBuilder()
-                    .setContextId(this.identifier)
+                    .setContextId(this.contextIdentifier)
                     .setConfiguration(this.configurationSerializer.toString(taskConf))
                     .build()
             ).build();
-    this.evaluatorManager.handle(contextControlProto);
+    this.contextControlHandler.send(contextControlProto);
   }
 
   @Override
@@ -122,8 +125,7 @@ public final class EvaluatorContext implements ActiveContext {
                     .setContextConfiguration(this.configurationSerializer.toString(contextConfiguration))
                     .build()
             ).build();
-    this.evaluatorManager.handle(contextControlProto);
-
+    this.contextControlHandler.send(contextControlProto);
   }
 
   @Override
@@ -142,12 +144,12 @@ public final class EvaluatorContext implements ActiveContext {
                     .setServiceConfiguration(this.configurationSerializer.toString(serviceConfiguration))
                     .build()
             ).build();
-    this.evaluatorManager.handle(contextControlProto);
+    this.contextControlHandler.send(contextControlProto);
   }
 
   @Override
   public String getEvaluatorId() {
-    return this.evaluatorManager.getId();
+    return this.evaluatorIdentifier;
   }
 
   @Override
@@ -157,22 +159,14 @@ public final class EvaluatorContext implements ActiveContext {
 
   @Override
   public EvaluatorDescriptor getEvaluatorDescriptor() {
-    return this.evaluatorManager.getEvaluatorDescriptor();
+    return this.evaluatorDescriptor;
   }
 
   @Override
   public String getId() {
-    return this.identifier;
+    return this.contextIdentifier;
   }
 
-
-  public ContextState getState() {
-    return state;
-  }
-
-  public void setState(final ContextState state) {
-    this.state = state;
-  }
 
   public final ClosedContext getClosedContext(final ActiveContext parentContext) {
     return new ClosedContextImpl(parentContext, this.getId(), this.getEvaluatorId(), this.getEvaluatorDescriptor());
@@ -180,6 +174,6 @@ public final class EvaluatorContext implements ActiveContext {
 
   public final FailedContext getFailedContext(
       final Optional<ActiveContext> parentContext, final Exception reason) {
-    return new FailedContextImpl(this.getId(), reason.getMessage(), Optional.<String>empty(), Optional.<Throwable>of(reason), Optional.<byte[]>empty(), parentContext, this.getEvaluatorDescriptor(), this.getEvaluatorId());
+    return new FailedContextImpl(reason, this.getId(), parentContext, this.getEvaluatorId(), this.getEvaluatorDescriptor());
   }
 }

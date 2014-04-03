@@ -224,7 +224,7 @@ public final class DriverManager {
         throw new RuntimeException(msg);
       }
     }
-    eManager.handle(evaluatorHeartbeatProtoRemoteMessage);
+    eManager.onEvaluatorHeartbeatMessage(evaluatorHeartbeatProtoRemoteMessage);
   }
 
   private final void handleEvaluatorHeartbeat(final EvaluatorHeartbeat heartbeat) {
@@ -265,7 +265,7 @@ public final class DriverManager {
         );
       }
     }
-    eManager.handle(resourceStatusProto);
+    eManager.onResourceStatusMessage(resourceStatusProto);
   }
 
   /**
@@ -342,7 +342,7 @@ public final class DriverManager {
         LOG.log(Level.WARNING, "Unknown evaluator runtime error: " + error, error.getCause());
       }
     }
-    if (null != eManager) eManager.handle(evaluatorException);
+    if (null != eManager) eManager.onEvaluatorException(evaluatorException);
   }
 
   /**
