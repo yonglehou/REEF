@@ -5,6 +5,7 @@ import com.microsoft.reef.annotations.audience.Private;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.EvaluatorType;
+import com.microsoft.reef.runtime.common.driver.context.ContextControlHandler;
 import com.microsoft.reef.runtime.common.driver.context.ContextMessageImpl;
 import com.microsoft.reef.runtime.common.driver.context.EvaluatorContext;
 import com.microsoft.reef.runtime.common.driver.context.FailedContextImpl;
@@ -31,14 +32,17 @@ final class ContextManager {
   private final Map<String, EvaluatorContext> contextMap = new HashMap<>();
   private final Deque<EvaluatorContext> contextStack = new ArrayDeque<>();
   private final EvaluatorMessageDispatcher messageDispatcher;
+  private final ContextControlHandler contextControlHandler;
 
   @Inject
   ContextManager(final EvaluatorManager evaluatorManager,
                  final ConfigurationSerializer configurationSerializer,
-                 final EvaluatorMessageDispatcher messageDispatcher) {
+                 final EvaluatorMessageDispatcher messageDispatcher,
+                 final ContextControlHandler contextControlHandler) {
     this.evaluatorManager = evaluatorManager;
     this.configurationSerializer = configurationSerializer;
     this.messageDispatcher = messageDispatcher;
+    this.contextControlHandler = contextControlHandler;
   }
 
 
@@ -195,7 +199,7 @@ final class ContextManager {
   private void onNewContext(final ContextHeartbeat heartbeat) {
     final EvaluatorContext result;
     if (this.isEmpty()) {
-      result = new EvaluatorContext(evaluatorManager, heartbeat.getId(), Optional.<String>empty(), configurationSerializer);
+      result = new EvaluatorContext(heartbeat.getId(), this.evaluatorManager.getId(), this.evaluatorManager.getEvaluatorDescriptor(), Optional.<String>empty(), configurationSerializer, this.contextControlHandler);
     } else {
       if (!heartbeat.getParentHeartbeat().isPresent()) {
         throw new IllegalStateException("Received a new context whose parent isn't set.");
@@ -205,7 +209,7 @@ final class ContextManager {
         final String realTopId = peek().get().getId();
         throw new IllegalStateException("Received a new context whose parent is `" + parentId + "`, but the real top id is `" + realTopId + "`");
       }
-      result = new EvaluatorContext(evaluatorManager, heartbeat.getId(), Optional.of(parentId), configurationSerializer);
+      result = new EvaluatorContext(heartbeat.getId(), this.evaluatorManager.getId(), this.evaluatorManager.getEvaluatorDescriptor(), Optional.of(parentId), this.configurationSerializer, this.contextControlHandler);
     }
     this.contextStack.push(result);
     this.contextMap.put(result.getId(), result);
