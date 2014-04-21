@@ -18,10 +18,10 @@ package com.microsoft.reef.driver.evaluator;
 import com.microsoft.reef.annotations.Provided;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Public;
-import com.microsoft.reef.common.Failure;
-import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.exception.EvaluatorException;
+import com.microsoft.reef.io.naming.Identifiable;
 import com.microsoft.reef.util.Optional;
 
 import java.util.List;
@@ -32,27 +32,21 @@ import java.util.List;
 @DriverSide
 @Public
 @Provided
-public interface FailedEvaluator extends Failure {
+public interface FailedEvaluator extends Identifiable {
 
   /**
    * @return the reason for the failure.
-   * @deprecated in 0.3
    */
-  @Deprecated
   public EvaluatorException getEvaluatorException();
 
   /**
    * @return the list of all context that failed due to the evaluator failure.
-   * @deprecated in 0.3
    */
-  @Deprecated
   public List<FailedContext> getFailedContextList();
 
   /**
    * @return the failed task, if there was one running at the time of the evaluator failure.
-   * @deprecated in 0.3
    */
-  @Deprecated
   public Optional<FailedTask> getFailedTask();
 
 }

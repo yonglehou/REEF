@@ -29,52 +29,22 @@ import java.util.List;
 @Private
 final class FailedEvaluatorImpl implements FailedEvaluator {
 
-  private final String id;
-  private final String message;
-  private final Optional<String> description;
-  private final Optional<Throwable> cause;
-  private final Optional<byte[]> data;
+  final String id;
+  private final EvaluatorException ex;
   private final List<FailedContext> ctx;
   private final Optional<FailedTask> task;
 
-
-  FailedEvaluatorImpl(final String id,
-                      final String message,
-                      final Optional<String> description,
-                      final Optional<Throwable> cause,
-                      final Optional<byte[]> data,
-                      final List<FailedContext> ctx,
-                      final Optional<FailedTask> task) {
-    this.id = id;
-    this.message = message;
-    this.description = description;
-    this.cause = cause;
-    this.data = data;
+  public FailedEvaluatorImpl(final EvaluatorException ex, final List<FailedContext> ctx, final Optional<FailedTask> task, final String id) {
+    this.ex = ex;
     this.ctx = ctx;
     this.task = task;
-  }
-
-  /**
-   * @param cause
-   * @param ctx
-   * @param task
-   * @param id
-   * @deprecated use the main constructor instead
-   */
-  @Deprecated
-  FailedEvaluatorImpl(final Throwable cause, final List<FailedContext> ctx, final Optional<FailedTask> task, final String id) {
-    this(id, cause.getMessage(), Optional.<String>empty(), Optional.of(cause), Optional.<byte[]>empty(), ctx, task);
+    this.id = id;
   }
 
   @Override
   public EvaluatorException getEvaluatorException() {
-    if (this.cause.isPresent()) {
-      return new EvaluatorException(this.getId(), this.getMessage(), this.cause.get());
-    } else {
-      return new EvaluatorException(this.getId(), this.getMessage());
-    }
+    return this.ex;
   }
-
 
   @Override
   public List<FailedContext> getFailedContextList() {
@@ -86,7 +56,6 @@ final class FailedEvaluatorImpl implements FailedEvaluator {
     return this.task;
   }
 
-
   @Override
   public String getId() {
     return this.id;
@@ -97,35 +66,5 @@ final class FailedEvaluatorImpl implements FailedEvaluator {
     return "FailedEvaluator{" +
         "id='" + id + '\'' +
         '}';
-  }
-
-  @Override
-  public String getMessage() {
-    return this.message;
-  }
-
-  @Override
-  public Optional<String> getDescription() {
-    return this.description;
-  }
-
-  @Override
-  public Throwable getCause() {
-    return this.cause.orElse(null);
-  }
-
-  @Override
-  public Optional<Throwable> getReason() {
-    return this.cause;
-  }
-
-  @Override
-  public Optional<byte[]> getData() {
-    return this.data;
-  }
-
-  @Override
-  public Throwable asError() {
-    return this.cause.isPresent() ? this.cause.get() : new RuntimeException(this.toString());
   }
 }
