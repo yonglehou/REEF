@@ -24,18 +24,21 @@ import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.CompletedEvaluator;
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.task.*;
-import com.microsoft.reef.runtime.common.driver.DispatchingEStage;
 import com.microsoft.reef.runtime.common.driver.DriverExceptionHandler;
+import com.microsoft.reef.runtime.common.utils.DispatchingEStage;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 
 import javax.inject.Inject;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Central dispatcher for all Evaluator related events. This exists once per Evaluator.
  */
 final class EvaluatorMessageDispatcher {
+  private static final Logger LOG = Logger.getLogger(EvaluatorMessageDispatcher.class.getName());
   /**
    * The actual dispatcher used.
    */
@@ -72,6 +75,7 @@ final class EvaluatorMessageDispatcher {
     this.dispatcher.register(FailedEvaluator.class, failedEvaluatorHandlers);
     this.dispatcher.register(CompletedEvaluator.class, completedEvaluatorHandlers);
     this.dispatcher.register(AllocatedEvaluator.class, allocatedEvaluatorEventHandlers);
+    LOG.log(Level.INFO, "Instantiated 'EvaluatorMessageDispatcher'");
   }
 
   void onEvaluatorAllocated(final AllocatedEvaluator allocatedEvaluator) {

@@ -22,7 +22,7 @@ import com.microsoft.tang.exceptions.BindException;
 import java.util.logging.Logger;
 
 /**
- * A TestEnvironment for the local runtime.
+ * A TestEnvironment for the local resourcemanager.
  */
 public final class YarnTestEnvironment implements TestEnvironment {
 
@@ -54,6 +54,6 @@ public final class YarnTestEnvironment implements TestEnvironment {
 
   @Override
   public int getTestTimeout() {
-    return 120000; // 2 minutes
+    return 180000; // 3 minutes
   }
 }
