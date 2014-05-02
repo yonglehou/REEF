@@ -22,6 +22,12 @@ import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
+import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
 
@@ -38,12 +44,12 @@ public class SlaveTask implements Task {
   
   @Inject
   public SlaveTask(GroupCommClient groupCommClient, DataSet<?, ?> dataSet){
-    communicationGroup = groupCommClient.getCommunicationGroup("SUB-GROUP");
-    controlMessageBroadcaster = communicationGroup.getBroadcastReceiver("ControlMessageBroadcaster");
-    modelBroadcaster = communicationGroup.getBroadcastReceiver("ModelBroadcaster");
-    lossAndGradientReducer = communicationGroup.getReduceSender("LossAndGradientReducer");
-    modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver("ModelAndDescentDirectionBroadcaster");
-    lineSearchEvaluationsReducer = communicationGroup.getReduceSender("LineSearchEvaluationsReducer");
+    communicationGroup = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    controlMessageBroadcaster = communicationGroup.getBroadcastReceiver(ControlMessageBroadcaster.class);
+    modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
+    lossAndGradientReducer = communicationGroup.getReduceSender(LossAndGradientReducer.class);
+    modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(ModelAndDescentDirectionBroadcaster.class);
+    lineSearchEvaluationsReducer = communicationGroup.getReduceSender(LineSearchEvaluationsReducer.class);
   }
 
   @Override

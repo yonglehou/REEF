@@ -15,13 +15,21 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import java.util.concurrent.TimeUnit;
+
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.app.ControlMessages;
+import com.microsoft.reef.io.network.nggroup.app.Vector;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.Configuration;
+import com.microsoft.tang.annotations.Name;
 
 /**
  * 
@@ -33,14 +41,15 @@ public interface CommunicationGroup {
    * @param dataCodec 
    * @return
    */
-  CommunicationGroup addBroadcast(String string, Codec<?> dataCodec);
+  CommunicationGroup addBroadcast(Class<? extends Name<String>> operatorName, Codec<?> dataCodec);
 
   /**
    * @param string
    * @param dataCodec 
+   * @param reduceFunction 
    * @return
    */
-  CommunicationGroup addReduce(String string, Codec<?> dataCodec);
+  CommunicationGroup addReduce(Class<? extends Name<String>> operatorName, Codec<?> dataCodec, ReduceFunction<?> reduceFunction);
 
   /**
    * 
@@ -59,59 +68,40 @@ public interface CommunicationGroup {
    */
   void submitTask(ActiveContext activeContext, Class<? extends Task> taskClazz);
 
+  
   /**
-   * marks whether this active context
-   * should be a slave
-   * @param activeContext
+   * @param string
    */
-  void addSlaveContext(ActiveContext activeContext);
+  void setSenderId(String senderId);
 
-  /**
-   * marks whether this active context
-   * should be a master
-   * @param activeContext
-   */
-  void addMasterContext(ActiveContext activeContext);
-
-  /**
-   * @param activeContext
-   * @return
-   */
-  Configuration getContextConf(ActiveContext activeContext);
-
-  /**
-   * @param activeContext
-   * @return
-   */
-  Configuration getServiceConf(ActiveContext activeContext);
 
   
   /***********************************************************/
   //Client Side APIs
   /***********************************************************/
   /**
-   * @param string
+   * @param operatorName
    * @return
    */
-  Broadcast.Sender getBroadcastSender(String string);
+  Broadcast.Sender getBroadcastSender(Class<? extends Name<String>> operatorName);
 
   /**
-   * @param string
+   * @param operatorName
    * @return
    */
-  Reduce.Receiver getReduceReceiver(String string);
+  Reduce.Receiver getReduceReceiver(Class<? extends Name<String>> operatorName);
   
   /**
-   * @param string
+   * @param operatorName
    * @return
    */
-  Broadcast.Receiver getBroadcastReceiver(String string);
+  Broadcast.Receiver getBroadcastReceiver(Class<? extends Name<String>> operatorName);
   
   /**
-   * @param string
+   * @param operatorName
    * @return
    */
-  Reduce.Sender getReduceSender(String string);
+  Reduce.Sender getReduceSender(Class<? extends Name<String>> operatorName);
 
   /**
    * Non-blocking call to find if there are
@@ -125,10 +115,34 @@ public interface CommunicationGroup {
    * @return
    */
   GroupChanges synchronize();
+  
+  /**
+   * blocking call that waits for the numberOfReceivers participants
+   * of this group to be available and times out after timeout timeunits
+   * @param numberOfReceivers
+   * @param timeout
+   * @param unit
+   */
+  void waitFor(int numberOfReceivers, int timeout, TimeUnit unit);
+  
+  /**
+   * blocking call that waits for timeout timeunits
+   * @param numberOfReceivers
+   * @param timeout
+   * @param unit
+   */
+  void waitFor(int timeout, TimeUnit unit);
 
   /**
-   * blocking call that waits for all the participants
-   * of this group to be available
+   * @param operatorName
+   * @return
    */
-  void waitForAll();
+  Configuration getSenderConfiguration(Class<? extends Name<String>> operatorName);
+
+  /**
+   * @param operatorName
+   * @param slaveId 
+   * @return
+   */
+  Configuration getReceiverConfiguration(Class<? extends Name<String>> operatorName, String slaveId);
 }

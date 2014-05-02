@@ -16,6 +16,8 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.tang.Configuration;
+import com.microsoft.tang.annotations.Name;
 
 /**
  * 
@@ -26,12 +28,25 @@ public interface GroupCommDriver {
    * @param string
    * @return
    */
-  CommunicationGroup newCommunicationGroup(String string);
+  CommunicationGroup newCommunicationGroup(Class<? extends Name<String>> groupName);
 
   /**
    * @param activeContext
    * @return
    */
   boolean configured(ActiveContext activeContext);
+  
+
+  /**
+   * @param activeContext
+   * @return
+   */
+  Configuration getContextConf();
+
+  /**
+   * @param activeContext
+   * @return
+   */
+  Configuration getServiceConf();
 
 }

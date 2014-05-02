@@ -15,17 +15,39 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.inject.Inject;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.task.RunningTask;
+import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
+import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
+import com.microsoft.reef.io.network.util.StringIdentifierFactory;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
+import com.microsoft.tang.Configuration;
+import com.microsoft.tang.JavaConfigurationBuilder;
+import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
+import com.microsoft.wake.ComparableIdentifier;
 import com.microsoft.wake.EventHandler;
+import com.microsoft.wake.IdentifierFactory;
 
 /**
  * 
@@ -40,24 +62,30 @@ public class BGDDriver {
   
   private final CommunicationGroup allCommGroup; 
   
+  private final AtomicInteger slaveContextId = new AtomicInteger(0);
+  
+  private final IdentifierFactory idFac = new StringIdentifierFactory();
+  
   @Inject
   public BGDDriver(
       DataLoadingService dataLoadingService,
       GroupCommDriver groupCommDriver){
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
-    allCommGroup = this.groupCommDriver.newCommunicationGroup("ALL");
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class);
     Codec<ControlMessages> controlMsgCodec = null;
     Codec<Vector> modelCodec = null;
     Codec<Pair<Double,Vector>> lossAndGradientCodec = null;
     Codec<Pair<Vector,Vector>> modelAndDesDirCodec = null;
     Codec<Vector> lineSearchCodec = null;
+    ReduceFunction<Pair<Double,Vector>> lossAndGradientReduceFunction = null;
+    ReduceFunction<Vector> lineSearchReduceFunction = null;
     allCommGroup
-      .addBroadcast("ControlMessageBroadcaster", controlMsgCodec)
-      .addBroadcast("ModelBroadcaster",modelCodec)
-      .addReduce("LossAndGradientReducer", lossAndGradientCodec)
-      .addBroadcast("ModelAndDescentDirectionBroadcaster", modelAndDesDirCodec)
-      .addReduce("LineSearchEvaluationsReducer", lineSearchCodec)
+      .addBroadcast(ControlMessageBroadcaster.class, controlMsgCodec)
+      .addBroadcast(ModelBroadcaster.class,modelCodec)
+      .addReduce(LossAndGradientReducer.class, lossAndGradientCodec, lossAndGradientReduceFunction)
+      .addBroadcast(ModelAndDescentDirectionBroadcaster.class, modelAndDesDirCodec)
+      .addReduce(LineSearchEvaluationsReducer.class, lineSearchCodec, lineSearchReduceFunction)
       .finalize();
   }
   
@@ -74,28 +102,65 @@ public class BGDDriver {
        * groups
        */
       if(groupCommDriver.configured(activeContext)){
-        if(allCommGroup.isMaster(activeContext)){
-          allCommGroup.submitTask(activeContext,MasterTask.class);
+        if(!masterTaskSubmitted()){
+          Configuration taskConf = TaskConfiguration.CONF
+              .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+              .set(TaskConfiguration.TASK, MasterTask.class)
+              .build();
+          allCommGroup.setSenderId("MasterTask");
+          Configuration cmbConf = allCommGroup.getSenderConfiguration(ControlMessageBroadcaster.class);
+          Configuration mbConf = allCommGroup.getSenderConfiguration(ModelBroadcaster.class);
+          Configuration lagrConf = allCommGroup.getSenderConfiguration(LossAndGradientReducer.class);
+          Configuration mddbConf = allCommGroup.getSenderConfiguration(ModelAndDescentDirectionBroadcaster.class);
+          Configuration lserConf = allCommGroup.getSenderConfiguration(LineSearchEvaluationsReducer.class);
+          JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(cmbConf,mbConf,lagrConf,mddbConf,lserConf,taskConf);
+          activeContext.submitTask(jcb.build());
         }
         else{
-          allCommGroup.submitTask(activeContext,SlaveTask.class);
+          String slaveId = getSlaveId(activeContext);
+          Configuration taskConf = TaskConfiguration.CONF
+              .set(TaskConfiguration.IDENTIFIER, slaveId)
+              .set(TaskConfiguration.TASK, MasterTask.class)
+              .build();
+          Configuration cmbConf = allCommGroup.getReceiverConfiguration(ControlMessageBroadcaster.class,slaveId);
+          Configuration mbConf = allCommGroup.getReceiverConfiguration(ModelBroadcaster.class,slaveId);
+          Configuration lagrConf = allCommGroup.getReceiverConfiguration(LossAndGradientReducer.class,slaveId);
+          Configuration mddbConf = allCommGroup.getReceiverConfiguration(ModelAndDescentDirectionBroadcaster.class,slaveId);
+          Configuration lserConf = allCommGroup.getReceiverConfiguration(LineSearchEvaluationsReducer.class,slaveId);
+          JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(cmbConf,mbConf,lagrConf,mddbConf,lserConf,taskConf);
+          activeContext.submitTask(jcb.build());
         }
       }
       else{
-        /**
-         * Contexts are added by the CommunicationGroup
-         * because each communication group can treat a
-         * context differently
-         */
-        if(dataLoadingService.isDataLoadedContext(activeContext)){
-          allCommGroup.addSlaveContext(activeContext);
-        }
-        else{
-          allCommGroup.addMasterContext(activeContext);
-        }
-        activeContext.submitContextAndService(allCommGroup.getContextConf(activeContext), allCommGroup.getServiceConf(activeContext));
+        activeContext.submitContextAndService(groupCommDriver.getContextConf(), groupCommDriver.getServiceConf());
       }
     }
+
+    /**
+     * @param activeContext
+     * @return
+     */
+    private String getSlaveId(ActiveContext activeContext) {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    /**
+     * @return
+     */
+    private boolean masterTaskSubmitted() {
+      // TODO Auto-generated method stub
+      return false;
+    }
+  }
+  
+  public class TaskRunningHandler implements EventHandler<RunningTask> {
+
+    @Override
+    public void onNext(RunningTask arg0) {
+      
+    }
+    
   }
 
 }

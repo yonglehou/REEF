@@ -13,20 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.app.parameters;
 
 import com.microsoft.tang.annotations.Name;
 
-
-/**
- * 
- */
-public interface GroupCommClient {
-
-  /**
-   * @param string
-   * @return
-   */
-  CommunicationGroup getCommunicationGroup(Class<? extends Name<String>> groupName);
-
-}
+public final class LossAndGradientReducer implements Name<String> { }
