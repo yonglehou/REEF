@@ -15,6 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import java.util.concurrent.TimeUnit;
+
 import com.microsoft.tang.annotations.Name;
 
 
@@ -28,5 +30,7 @@ public interface GroupCommClient {
    * @return
    */
   CommunicationGroup getCommunicationGroup(Class<? extends Name<String>> groupName);
+  
+  void waitForDriver(long timeout, TimeUnit unit);
 
 }
