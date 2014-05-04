@@ -56,6 +56,7 @@ public class SlaveTask implements Task {
   public byte[] call(byte[] memento) throws Exception {
     boolean stop = false;
     while(!stop){
+      // TODO: Does this implicitly sync on the group? (Markus)
       ControlMessages controlMessage = controlMessageBroadcaster.receive();
       switch(controlMessage){
       case Stop:

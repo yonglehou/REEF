@@ -20,6 +20,7 @@ import com.microsoft.tang.annotations.Name;
 /**
  * 
  */
+// TODO Replace String with some more meaningful type (Markus)
 public final class AllCommunicationGroup implements Name<String> {
 
 }

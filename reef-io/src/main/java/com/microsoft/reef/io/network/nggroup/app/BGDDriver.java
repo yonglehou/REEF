@@ -110,6 +110,7 @@ public class BGDDriver {
           allCommGroup.setSenderId("MasterTask");
           Configuration cmbConf = allCommGroup.getSenderConfiguration(ControlMessageBroadcaster.class);
           Configuration mbConf = allCommGroup.getSenderConfiguration(ModelBroadcaster.class);
+          // TODO: The master task is the receiver for the reduce operator, right? This seems confusing (Markus)
           Configuration lagrConf = allCommGroup.getSenderConfiguration(LossAndGradientReducer.class);
           Configuration mddbConf = allCommGroup.getSenderConfiguration(ModelAndDescentDirectionBroadcaster.class);
           Configuration lserConf = allCommGroup.getSenderConfiguration(LineSearchEvaluationsReducer.class);
@@ -117,6 +118,7 @@ public class BGDDriver {
           activeContext.submitTask(jcb.build());
         }
         else{
+          // TODO: What do we need the special ID for? Can this be arbitrary? Or is this some ID that the group communication layer needs to assign (Markus)
           String slaveId = getSlaveId(activeContext);
           Configuration taskConf = TaskConfiguration.CONF
               .set(TaskConfiguration.IDENTIFIER, slaveId)
@@ -127,6 +129,7 @@ public class BGDDriver {
           Configuration lagrConf = allCommGroup.getReceiverConfiguration(LossAndGradientReducer.class,slaveId);
           Configuration mddbConf = allCommGroup.getReceiverConfiguration(ModelAndDescentDirectionBroadcaster.class,slaveId);
           Configuration lserConf = allCommGroup.getReceiverConfiguration(LineSearchEvaluationsReducer.class,slaveId);
+          // TODO: We added Configurations.merge() in Tang 0.4 for this :-) (Markus)
           JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(cmbConf,mbConf,lagrConf,mddbConf,lserConf,taskConf);
           activeContext.submitTask(jcb.build());
         }

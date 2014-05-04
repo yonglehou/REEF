@@ -62,7 +62,8 @@ public class MasterTask implements Task {
 
   @Override
   public byte[] call(byte[] memento) throws Exception {
-    
+
+    // TODO: What happens if the timeout triggers? Do we throw an exception? Or just return with whatever tasks we have? (Markus)
     communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
     List<Double> losses = new ArrayList<>();
     Codec<List<Double>> lossCodec = null;
