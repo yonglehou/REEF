@@ -15,22 +15,17 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.reef.io.network.nggroup.app.ControlMessages;
-import com.microsoft.reef.io.network.nggroup.app.Vector;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.Name;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 
@@ -61,12 +56,14 @@ public interface CommunicationGroup {
    * @param activeContext
    * @return
    */
+  // TODO: Remove?
   boolean isMaster(ActiveContext activeContext);
 
   /**
    * @param activeContext
    * @param taskClazz
    */
+  // TODO: Remove?
   void submitTask(ActiveContext activeContext, Class<? extends Task> taskClazz);
 
   

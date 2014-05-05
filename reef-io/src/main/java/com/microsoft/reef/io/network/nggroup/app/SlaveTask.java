@@ -15,21 +15,16 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
-import javax.inject.Inject;
-
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.*;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
+
+import javax.inject.Inject;
 
 /**
  * 
@@ -56,10 +51,6 @@ public class SlaveTask implements Task {
   public byte[] call(byte[] memento) throws Exception {
     boolean stop = false;
     while(!stop){
-      // TODO: Does this implicitly sync on the group? (Markus)
-      // No, I am assuming that when the CommunicationGroup.synchronize() method
-      // is called, it notifies all the operators in the group to incorporate
-      // topology changes (Shravan)
       ControlMessages controlMessage = controlMessageBroadcaster.receive();
       switch(controlMessage){
       case Stop:

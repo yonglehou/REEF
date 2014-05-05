@@ -15,15 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
-import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.inject.Inject;
-
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.task.RunningTask;
@@ -32,12 +23,7 @@ import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
-import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.*;
 import com.microsoft.reef.io.network.util.StringIdentifierFactory;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
@@ -45,9 +31,11 @@ import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
-import com.microsoft.wake.ComparableIdentifier;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.IdentifierFactory;
+
+import javax.inject.Inject;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 
@@ -118,8 +106,6 @@ public class BGDDriver {
           activeContext.submitTask(jcb.build());
         }
         else{
-          // TODO: What do we need the special ID for? Can this be arbitrary? Or is this some ID that the group communication layer needs to assign (Markus)
-          // NetworkService uses task ids to communicate. So we need the task ids to do the wire up (Shravan)
           String slaveId = getSlaveId(activeContext);
           Configuration taskConf = TaskConfiguration.CONF
               .set(TaskConfiguration.IDENTIFIER, slaveId)
