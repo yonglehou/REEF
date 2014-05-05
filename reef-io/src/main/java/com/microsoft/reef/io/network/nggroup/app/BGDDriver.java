@@ -119,6 +119,7 @@ public class BGDDriver {
         }
         else{
           // TODO: What do we need the special ID for? Can this be arbitrary? Or is this some ID that the group communication layer needs to assign (Markus)
+          // NetworkService uses task ids to communicate. So we need the task ids to do the wire up (Shravan)
           String slaveId = getSlaveId(activeContext);
           Configuration taskConf = TaskConfiguration.CONF
               .set(TaskConfiguration.IDENTIFIER, slaveId)

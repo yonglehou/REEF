@@ -21,6 +21,7 @@ import com.microsoft.tang.annotations.Name;
  * 
  */
 // TODO Replace String with some more meaningful type (Markus)
+// You mean create a supertype? (Shravan)
 public final class AllCommunicationGroup implements Name<String> {
 
 }

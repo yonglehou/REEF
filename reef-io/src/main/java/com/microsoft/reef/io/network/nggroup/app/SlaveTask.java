@@ -57,6 +57,9 @@ public class SlaveTask implements Task {
     boolean stop = false;
     while(!stop){
       // TODO: Does this implicitly sync on the group? (Markus)
+      // No, I am assuming that when the CommunicationGroup.synchronize() method
+      // is called, it notifies all the operators in the group to incorporate
+      // topology changes (Shravan)
       ControlMessages controlMessage = controlMessageBroadcaster.receive();
       switch(controlMessage){
       case Stop:

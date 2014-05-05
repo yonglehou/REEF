@@ -16,6 +16,7 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
@@ -123,7 +124,7 @@ public interface CommunicationGroup {
    * @param timeout
    * @param unit
    */
-  void waitFor(int numberOfReceivers, int timeout, TimeUnit unit);
+  void waitFor(int numberOfReceivers, int timeout, TimeUnit unit) throws TimeoutException;
   
   /**
    * blocking call that waits for timeout timeunits
@@ -131,7 +132,7 @@ public interface CommunicationGroup {
    * @param timeout
    * @param unit
    */
-  void waitFor(int timeout, TimeUnit unit);
+  void waitFor(int timeout, TimeUnit unit) throws TimeoutException;
 
   /**
    * @param operatorName
