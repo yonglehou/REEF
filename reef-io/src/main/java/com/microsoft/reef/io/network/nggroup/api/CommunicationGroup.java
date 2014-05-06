@@ -15,17 +15,15 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.driver.context.ActiveContext;
-import com.microsoft.reef.io.network.group.operators.Broadcast;
-import com.microsoft.reef.io.network.group.operators.Reduce;
-import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.reef.io.serialization.Codec;
-import com.microsoft.reef.task.Task;
-import com.microsoft.tang.Configuration;
-import com.microsoft.tang.annotations.Name;
-
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import com.microsoft.reef.io.network.group.operators.Broadcast;
+import com.microsoft.reef.io.network.group.operators.Reduce;
+import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
+import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
+import com.microsoft.tang.Configuration;
+import com.microsoft.tang.annotations.Name;
 
 /**
  * 
@@ -37,7 +35,7 @@ public interface CommunicationGroup {
    * @param dataCodec 
    * @return
    */
-  CommunicationGroup addBroadcast(Class<? extends Name<String>> operatorName, Codec<?> dataCodec);
+  CommunicationGroup addBroadcast(Class<? extends Name<String>> operatorName, BroadcastOperatorSpec spec);
 
   /**
    * @param string
@@ -45,7 +43,7 @@ public interface CommunicationGroup {
    * @param reduceFunction 
    * @return
    */
-  CommunicationGroup addReduce(Class<? extends Name<String>> operatorName, Codec<?> dataCodec, ReduceFunction<?> reduceFunction);
+  CommunicationGroup addReduce(Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec);
 
   /**
    * 
@@ -53,24 +51,10 @@ public interface CommunicationGroup {
   void finalize();
 
   /**
-   * @param activeContext
+   * @param build
    * @return
    */
-  // TODO: Remove?
-  boolean isMaster(ActiveContext activeContext);
-
-  /**
-   * @param activeContext
-   * @param taskClazz
-   */
-  // TODO: Remove?
-  void submitTask(ActiveContext activeContext, Class<? extends Task> taskClazz);
-
-  
-  /**
-   * @param string
-   */
-  void setSenderId(String senderId);
+  Configuration getConfiguration(Configuration taskConf);
 
 
   
@@ -130,17 +114,4 @@ public interface CommunicationGroup {
    * @param unit
    */
   void waitFor(int timeout, TimeUnit unit) throws TimeoutException;
-
-  /**
-   * @param operatorName
-   * @return
-   */
-  Configuration getSenderConfiguration(Class<? extends Name<String>> operatorName);
-
-  /**
-   * @param operatorName
-   * @param slaveId 
-   * @return
-   */
-  Configuration getReceiverConfiguration(Class<? extends Name<String>> operatorName, String slaveId);
 }

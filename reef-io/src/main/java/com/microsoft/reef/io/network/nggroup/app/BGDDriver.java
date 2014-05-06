@@ -15,27 +15,28 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
+import javax.inject.Inject;
+
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
-import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
-import com.microsoft.reef.io.network.nggroup.app.parameters.*;
-import com.microsoft.reef.io.network.util.StringIdentifierFactory;
+import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
+import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
+import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
-import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.Configuration;
-import com.microsoft.tang.JavaConfigurationBuilder;
-import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.wake.EventHandler;
-import com.microsoft.wake.IdentifierFactory;
-
-import javax.inject.Inject;
-import java.util.concurrent.atomic.AtomicInteger;
+import com.microsoft.wake.remote.Codec;
 
 /**
  * 
@@ -49,10 +50,6 @@ public class BGDDriver {
   private final GroupCommDriver groupCommDriver;
   
   private final CommunicationGroup allCommGroup; 
-  
-  private final AtomicInteger slaveContextId = new AtomicInteger(0);
-  
-  private final IdentifierFactory idFac = new StringIdentifierFactory();
   
   @Inject
   public BGDDriver(
@@ -69,11 +66,36 @@ public class BGDDriver {
     ReduceFunction<Pair<Double,Vector>> lossAndGradientReduceFunction = null;
     ReduceFunction<Vector> lineSearchReduceFunction = null;
     allCommGroup
-      .addBroadcast(ControlMessageBroadcaster.class, controlMsgCodec)
-      .addBroadcast(ModelBroadcaster.class,modelCodec)
-      .addReduce(LossAndGradientReducer.class, lossAndGradientCodec, lossAndGradientReduceFunction)
-      .addBroadcast(ModelAndDescentDirectionBroadcaster.class, modelAndDesDirCodec)
-      .addReduce(LineSearchEvaluationsReducer.class, lineSearchCodec, lineSearchReduceFunction)
+      .addBroadcast(ControlMessageBroadcaster.class, 
+          BroadcastOperatorSpec
+            .newBuilder()
+            .setSenderId("MasterTask")
+            .setDataCodecClass(controlMsgCodec.getClass())
+            .build())
+      .addBroadcast(ModelBroadcaster.class,
+          BroadcastOperatorSpec
+            .newBuilder()
+            .setSenderId("MasterTask")
+            .setDataCodecClass(modelCodec.getClass())
+            .build())
+      .addReduce(LossAndGradientReducer.class, 
+          ReduceOperatorSpec
+            .newBuilder()
+            .setDataCodecClass(lossAndGradientCodec.getClass())
+            .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
+            .build())
+      .addBroadcast(ModelAndDescentDirectionBroadcaster.class, 
+          BroadcastOperatorSpec
+          .newBuilder()
+          .setSenderId("MasterTask")
+          .setDataCodecClass(modelAndDesDirCodec.getClass())
+          .build())
+      .addReduce(LineSearchEvaluationsReducer.class, 
+          ReduceOperatorSpec
+          .newBuilder()
+          .setDataCodecClass(lineSearchCodec.getClass())
+          .setReduceFunctionClass(lineSearchReduceFunction.getClass())
+          .build())
       .finalize();
   }
   
@@ -91,34 +113,20 @@ public class BGDDriver {
        */
       if(groupCommDriver.configured(activeContext)){
         if(!masterTaskSubmitted()){
-          Configuration taskConf = TaskConfiguration.CONF
-              .set(TaskConfiguration.IDENTIFIER, "MasterTask")
-              .set(TaskConfiguration.TASK, MasterTask.class)
-              .build();
-          allCommGroup.setSenderId("MasterTask");
-          Configuration cmbConf = allCommGroup.getSenderConfiguration(ControlMessageBroadcaster.class);
-          Configuration mbConf = allCommGroup.getSenderConfiguration(ModelBroadcaster.class);
-          // TODO: The master task is the receiver for the reduce operator, right? This seems confusing (Markus)
-          Configuration lagrConf = allCommGroup.getSenderConfiguration(LossAndGradientReducer.class);
-          Configuration mddbConf = allCommGroup.getSenderConfiguration(ModelAndDescentDirectionBroadcaster.class);
-          Configuration lserConf = allCommGroup.getSenderConfiguration(LineSearchEvaluationsReducer.class);
-          JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(cmbConf,mbConf,lagrConf,mddbConf,lserConf,taskConf);
-          activeContext.submitTask(jcb.build());
+          Configuration taskConf = allCommGroup.getConfiguration(
+              TaskConfiguration.CONF
+                .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+                .set(TaskConfiguration.TASK, MasterTask.class)
+                .build());
+          activeContext.submitTask(taskConf);
         }
         else{
-          String slaveId = getSlaveId(activeContext);
-          Configuration taskConf = TaskConfiguration.CONF
-              .set(TaskConfiguration.IDENTIFIER, slaveId)
-              .set(TaskConfiguration.TASK, MasterTask.class)
-              .build();
-          Configuration cmbConf = allCommGroup.getReceiverConfiguration(ControlMessageBroadcaster.class,slaveId);
-          Configuration mbConf = allCommGroup.getReceiverConfiguration(ModelBroadcaster.class,slaveId);
-          Configuration lagrConf = allCommGroup.getReceiverConfiguration(LossAndGradientReducer.class,slaveId);
-          Configuration mddbConf = allCommGroup.getReceiverConfiguration(ModelAndDescentDirectionBroadcaster.class,slaveId);
-          Configuration lserConf = allCommGroup.getReceiverConfiguration(LineSearchEvaluationsReducer.class,slaveId);
-          // TODO: We added Configurations.merge() in Tang 0.4 for this :-) (Markus)
-          JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(cmbConf,mbConf,lagrConf,mddbConf,lserConf,taskConf);
-          activeContext.submitTask(jcb.build());
+          Configuration taskConf = allCommGroup.getConfiguration(
+              TaskConfiguration.CONF
+                .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
+                .set(TaskConfiguration.TASK, SlaveTask.class)
+                .build());
+          activeContext.submitTask(taskConf);
         }
       }
       else{
@@ -143,14 +151,4 @@ public class BGDDriver {
       return false;
     }
   }
-  
-  public class TaskRunningHandler implements EventHandler<RunningTask> {
-
-    @Override
-    public void onNext(RunningTask arg0) {
-      
-    }
-    
-  }
-
 }
