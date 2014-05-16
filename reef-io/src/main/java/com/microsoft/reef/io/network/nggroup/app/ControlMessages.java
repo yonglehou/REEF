@@ -19,6 +19,5 @@ public enum ControlMessages{
   ComputeGradient,
   DoLineSearch,
   Synchronize,
-  SynchronizeAndWaitForChanges,
   Stop
 }

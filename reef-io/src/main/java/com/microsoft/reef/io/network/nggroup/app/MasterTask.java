@@ -18,9 +18,11 @@ package com.microsoft.reef.io.network.nggroup.app;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
@@ -64,39 +66,46 @@ public class MasterTask implements Task {
   public byte[] call(byte[] memento) throws Exception {
 
     // TODO: What happens if the timeout triggers? Do we throw an exception? Or just return with whatever tasks we have? (Markus)
-    communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
-    List<Double> losses = new ArrayList<>();
-    Codec<List<Double>> lossCodec = null;
-    Vector model = null;
-    while(true){
-      controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
-      modelBroadcaster.send(model);
-      Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
-      GroupChanges changes = communicationGroup.synchronize();
-      if(changes.exist() && !ignoreAndContinue){
-        communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
-        continue;
+    // I think throwing an exception is better (Shravan)
+    try{
+      communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
+    
+      List<Double> losses = new ArrayList<>();
+      Codec<List<Double>> lossCodec = null;
+      Vector model = null;
+      while(true){
+        controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
+        modelBroadcaster.send(model);
+        Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
+        GroupChanges changes = communicationGroup.synchronize();
+        if(changes.exist() && !ignoreAndContinue){
+          communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
+          continue;
+        }
+        
+        losses.add(lossAndGradient.first);
+        Vector descentDirection = getDescentDirection(lossAndGradient.second);
+        controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
+        modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
+        Vector lineSearchEvals = lineSearchEvaluationsReducer.reduce();
+        changes = communicationGroup.synchronize();
+        if(changes.exist() && !ignoreAndContinue){
+          communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
+          continue;
+        }
+        double minEta = findMinEta(lineSearchEvals);
+        descentDirection.scale(minEta);
+        model.add(descentDirection);
+        if(converged(model)){
+          controlMessageBroadcaster.send(ControlMessages.Stop);
+          break;
+        }
       }
-      
-      losses.add(lossAndGradient.first);
-      Vector descentDirection = getDescentDirection(lossAndGradient.second);
-      controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
-      modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
-      Vector lineSearchEvals = lineSearchEvaluationsReducer.reduce();
-      changes = communicationGroup.synchronize();
-      if(changes.exist() && !ignoreAndContinue){
-        communicationGroup.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
-        continue;
-      }
-      double minEta = findMinEta(lineSearchEvals);
-      descentDirection.scale(minEta);
-      model.add(descentDirection);
-      if(converged(model)){
-        controlMessageBroadcaster.send(ControlMessages.Stop);
-        break;
-      }
+      return lossCodec.encode(losses);
+    }catch(TimeoutException e){
+      controlMessageBroadcaster.send(ControlMessages.Stop);
+      throw e;
     }
-    return lossCodec.encode(losses);
   }
 
   /**
