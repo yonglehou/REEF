@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
-import java.io.Serializable;
+import java.util.Set;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
+import com.microsoft.tang.annotations.Name;
+
+/**
+ * 
+ */
+public class SerializedOperConfigs implements Name<Set<String>> {
+
 }

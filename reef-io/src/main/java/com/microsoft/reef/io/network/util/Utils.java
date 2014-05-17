@@ -23,6 +23,7 @@ import com.microsoft.wake.ComparableIdentifier;
 import com.microsoft.wake.Identifier;
 import com.microsoft.wake.IdentifierFactory;
 
+import java.io.Serializable;
 import java.net.Inet4Address;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -72,7 +73,7 @@ public class Utils {
     return result;
   }
 
-  public static class Pair<T1, T2> {
+  public static class Pair<T1, T2> implements Serializable {
     public final T1 first;
     public final T2 second;
 

@@ -15,6 +15,9 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.inject.Inject;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
@@ -22,21 +25,26 @@ import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
+import com.microsoft.reef.io.network.nggroup.app.math.Vector;
 import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
 import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
 import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
+import com.microsoft.reef.io.network.nggroup.app.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
+import com.microsoft.reef.io.serialization.Codec;
+import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.tang.Configuration;
+import com.microsoft.tang.JavaConfigurationBuilder;
+import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.wake.EventHandler;
-import com.microsoft.wake.remote.Codec;
 
 /**
  * 
@@ -49,7 +57,11 @@ public class BGDDriver {
   
   private final GroupCommDriver groupCommDriver;
   
-  private final CommunicationGroup allCommGroup; 
+  private final CommunicationGroupDriver allCommGroup;
+  
+  private final AtomicBoolean masterSubmitted = new AtomicBoolean(false);
+  
+  private final AtomicInteger slaveIds = new AtomicInteger(0);
   
   @Inject
   public BGDDriver(
@@ -58,13 +70,13 @@ public class BGDDriver {
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class);
-    Codec<ControlMessages> controlMsgCodec = null;
-    Codec<Vector> modelCodec = null;
-    Codec<Pair<Double,Vector>> lossAndGradientCodec = null;
-    Codec<Pair<Vector,Vector>> modelAndDesDirCodec = null;
-    Codec<Vector> lineSearchCodec = null;
-    ReduceFunction<Pair<Double,Vector>> lossAndGradientReduceFunction = null;
-    ReduceFunction<Vector> lineSearchReduceFunction = null;
+    Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
+    Codec<Vector> modelCodec = new SerializableCodec<>();
+    Codec<Pair<Double,Vector>> lossAndGradientCodec = new SerializableCodec<>();
+    Codec<Pair<Vector,Vector>> modelAndDesDirCodec = new SerializableCodec<>();
+    Codec<Vector> lineSearchCodec = new SerializableCodec<>();
+    ReduceFunction<Pair<Double,Vector>> lossAndGradientReduceFunction = new LossAndGradientReduceFunction();
+    ReduceFunction<Vector> lineSearchReduceFunction = new LineSearchReduceFunction();
     allCommGroup
       .addBroadcast(ControlMessageBroadcaster.class, 
           BroadcastOperatorSpec
@@ -81,6 +93,7 @@ public class BGDDriver {
       .addReduce(LossAndGradientReducer.class, 
           ReduceOperatorSpec
             .newBuilder()
+            .setReceiverId("MasterTask")
             .setDataCodecClass(lossAndGradientCodec.getClass())
             .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
             .build())
@@ -93,10 +106,11 @@ public class BGDDriver {
       .addReduce(LineSearchEvaluationsReducer.class, 
           ReduceOperatorSpec
           .newBuilder()
+          .setReceiverId("MasterTask")
           .setDataCodecClass(lineSearchCodec.getClass())
           .setReduceFunctionClass(lineSearchReduceFunction.getClass())
           .build())
-      .finalize();
+      .finalise();
   }
   
   public class ContextActiveHandler implements EventHandler<ActiveContext> {
@@ -113,19 +127,28 @@ public class BGDDriver {
        */
       if(groupCommDriver.configured(activeContext)){
         if(!masterTaskSubmitted()){
-          Configuration taskConf = allCommGroup.getConfiguration(
-              TaskConfiguration.CONF
-                .set(TaskConfiguration.IDENTIFIER, "MasterTask")
-                .set(TaskConfiguration.TASK, MasterTask.class)
-                .build());
+          final Configuration partialTaskConf = Tang.Factory.getTang()
+              .newConfigurationBuilder(
+                  TaskConfiguration.CONF
+                  .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+                  .set(TaskConfiguration.TASK, MasterTask.class)
+                  .build())
+               .bindNamedParameter(
+                   NumberOfReceivers.class, 
+                   Integer.toString(dataLoadingService.getNumberOfPartitions()))
+               .build();
+          
+          allCommGroup.addTask(partialTaskConf);
+          Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           activeContext.submitTask(taskConf);
         }
         else{
-          Configuration taskConf = allCommGroup.getConfiguration(
-              TaskConfiguration.CONF
-                .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
-                .set(TaskConfiguration.TASK, SlaveTask.class)
-                .build());
+          final Configuration partialTaskConf = TaskConfiguration.CONF
+            .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
+            .set(TaskConfiguration.TASK, SlaveTask.class)
+            .build();
+          allCommGroup.addTask(partialTaskConf);
+          Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           activeContext.submitTask(taskConf);
         }
       }
@@ -139,16 +162,14 @@ public class BGDDriver {
      * @return
      */
     private String getSlaveId(ActiveContext activeContext) {
-      // TODO Auto-generated method stub
-      return null;
+      return "SlaveTask-" + slaveIds.getAndIncrement();
     }
 
     /**
      * @return
      */
     private boolean masterTaskSubmitted() {
-      // TODO Auto-generated method stub
-      return false;
+      return !masterSubmitted.compareAndSet(false, true);
     }
   }
 }

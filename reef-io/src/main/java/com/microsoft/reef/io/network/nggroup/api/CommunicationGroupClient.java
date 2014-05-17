@@ -20,44 +20,15 @@ import java.util.concurrent.TimeoutException;
 
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
-import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
-import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
-import com.microsoft.tang.Configuration;
+import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
 
 /**
  * 
  */
-public interface CommunicationGroup {
+@DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.CommunicationGroupClient.class)
+public interface CommunicationGroupClient {
 
-  /**
-   * @param string
-   * @param dataCodec 
-   * @return
-   */
-  CommunicationGroup addBroadcast(Class<? extends Name<String>> operatorName, BroadcastOperatorSpec spec);
-
-  /**
-   * @param string
-   * @param dataCodec 
-   * @param reduceFunction 
-   * @return
-   */
-  CommunicationGroup addReduce(Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec);
-
-  /**
-   * 
-   */
-  void finalize();
-
-  /**
-   * @param build
-   * @return
-   */
-  Configuration getConfiguration(Configuration taskConf);
-
-
-  
   /***********************************************************/
   //Client Side APIs
   /***********************************************************/
@@ -114,4 +85,9 @@ public interface CommunicationGroup {
    * @param unit
    */
   void waitFor(int timeout, TimeUnit unit) throws TimeoutException;
+
+  /**
+   * @return
+   */
+  Class<? extends Name<String>> getName();
 }

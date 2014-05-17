@@ -13,13 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.group.operators;
 
-import java.io.Serializable;
+/**
+ * 
+ */
+public interface GroupCommOperator {
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
 }

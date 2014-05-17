@@ -13,13 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.nggroup.api;
 
-import java.io.Serializable;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.wake.EventHandler;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
+/**
+ * 
+ */
+public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> {
+
 }

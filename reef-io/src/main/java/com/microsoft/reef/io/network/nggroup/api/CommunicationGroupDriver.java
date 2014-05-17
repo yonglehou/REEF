@@ -15,46 +15,46 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.tang.Configuration;
-import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
 
 /**
  * 
  */
-@DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.GroupCommDriver.class)
-public interface GroupCommDriver {
+public interface CommunicationGroupDriver {
 
   /**
    * @param string
+   * @param dataCodec 
    * @return
    */
-  CommunicationGroupDriver newCommunicationGroup(Class<? extends Name<String>> groupName);
+  public CommunicationGroupDriver addBroadcast(
+      Class<? extends Name<String>> operatorName, OperatorSpec spec);
 
   /**
-   * @param activeContext
+   * @param string
+   * @param dataCodec 
+   * @param reduceFunction 
    * @return
    */
-  boolean configured(ActiveContext activeContext);
-  
+  public CommunicationGroupDriver addReduce(
+      Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec);
 
   /**
-   * @param activeContext
-   * @return
+   * 
    */
-  Configuration getContextConf();
+  public void finalise();
 
   /**
-   * @param activeContext
+   * @param build
    * @return
    */
-  Configuration getServiceConf();
+  public Configuration getConfiguration(Configuration taskConf);
 
   /**
    * @param partialTaskConf
-   * @return
    */
-  Configuration getTaskConfiguration(Configuration partialTaskConf);
+  public void addTask(Configuration partialTaskConf);
 
 }

@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.nggroup.api;
 
-import java.io.Serializable;
+import com.microsoft.reef.io.serialization.Codec;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
+/**
+ * 
+ */
+public interface OperatorSpec {
+
+  public abstract Class<? extends Codec> getDataCodecClass();
+
 }

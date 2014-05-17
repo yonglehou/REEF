@@ -15,12 +15,15 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl.config;
 
-import com.microsoft.wake.remote.Codec;
+import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
+import com.microsoft.reef.io.serialization.Codec;
+
+
 
 /**
  * 
  */
-public class BroadcastOperatorSpec {
+public class BroadcastOperatorSpec implements OperatorSpec{
   private final String senderId;
   
   /** Codec to be used to serialize data */
@@ -38,6 +41,7 @@ public class BroadcastOperatorSpec {
     return senderId;
   }
 
+  @Override
   public Class<? extends Codec> getDataCodecClass() {
     return dataCodecClass;
   }

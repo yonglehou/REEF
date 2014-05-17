@@ -13,13 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
-import java.io.Serializable;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
+/**
+ * 
+ */
+@NamedParameter(doc="Name of the operator")
+public class OperatorName implements Name<Name<String>> {
+
 }

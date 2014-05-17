@@ -16,12 +16,14 @@
 package com.microsoft.reef.io.network.nggroup.impl.config;
 
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.wake.remote.Codec;
+import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
+import com.microsoft.reef.io.serialization.Codec;
+
 
 /**
  * 
  */
-public class ReduceOperatorSpec {
+public class ReduceOperatorSpec implements OperatorSpec{
   private final String receiverId;
   
   /** Codec to be used to serialize data */
@@ -43,7 +45,15 @@ public class ReduceOperatorSpec {
   public String getReceiverId() {
     return receiverId;
   }
+  
+  /**
+   * @return the redFuncClass
+   */
+  public Class<? extends ReduceFunction> getRedFuncClass() {
+    return redFuncClass;
+  }
 
+  @Override
   public Class<? extends Codec> getDataCodecClass() {
     return dataCodecClass;
   }

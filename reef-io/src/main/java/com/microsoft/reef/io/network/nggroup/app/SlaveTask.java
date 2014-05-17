@@ -18,8 +18,9 @@ package com.microsoft.reef.io.network.nggroup.app;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
-import com.microsoft.reef.io.network.nggroup.api.CommunicationGroup;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
+import com.microsoft.reef.io.network.nggroup.app.math.Vector;
 import com.microsoft.reef.io.network.nggroup.app.parameters.*;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
@@ -30,7 +31,7 @@ import javax.inject.Inject;
  * 
  */
 public class SlaveTask implements Task {
-  private final CommunicationGroup communicationGroup;
+  private final CommunicationGroupClient communicationGroup;
   private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
   private final Broadcast.Receiver<Vector> modelBroadcaster;
   private final Reduce.Sender<Pair<Double, Vector>> lossAndGradientReducer;

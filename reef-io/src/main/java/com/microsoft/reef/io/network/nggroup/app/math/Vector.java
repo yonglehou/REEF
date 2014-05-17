@@ -13,12 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.io.network.nggroup.app.math;
+
+import java.io.Serializable;
 
 /**
  * An interface for Linear Alebra Vectors.
  */
-public interface Vector extends ImmutableVector {
+public interface Vector extends ImmutableVector, Serializable {
 
   /**
    * Set dimension i of the Vector to value v

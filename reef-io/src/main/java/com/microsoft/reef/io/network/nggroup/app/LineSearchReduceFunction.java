@@ -15,11 +15,24 @@
  */
 package com.microsoft.reef.io.network.nggroup.app;
 
-import java.io.Serializable;
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
+import com.microsoft.reef.io.network.nggroup.app.math.DenseVector;
+import com.microsoft.reef.io.network.nggroup.app.math.Vector;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
+/**
+ * 
+ */
+public class LineSearchReduceFunction implements ReduceFunction<Vector> {
+
+  @Override
+  public Vector apply(Iterable<Vector> evals) {
+    Vector combinedEvaluations = null;
+    for (Vector eval : evals) {
+      if(combinedEvaluations==null)
+        combinedEvaluations = new DenseVector(eval.size());
+      combinedEvaluations.add(eval);
+    }
+    return combinedEvaluations;
+  }
+
 }
