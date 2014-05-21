@@ -15,18 +15,40 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.tang.annotations.Name;
-import com.microsoft.wake.EventHandler;
-
 /**
  * 
  */
-public interface GroupCommNetworkHandler extends EventHandler<GroupCommMessage> {
+public interface TaskNode {
 
   /**
-   * @param groupName 
-   * @param commGroupNetworkHandler
+   * @param leaf
    */
-  void register(Class<? extends Name<String>> groupName, EventHandler<GroupCommMessage> commGroupNetworkHandler);
+  public void addChild(TaskNode child);
+
+  /**
+   * @param root
+   */
+  public void setParent(TaskNode parent);
+
+  /**
+   * @return
+   */
+  public String taskId();
+
+  /**
+   * @param b 
+   * 
+   */
+  public void setRunning(boolean b);
+
+  /**
+   * @return
+   */
+  public boolean isRunning();
+
+  /**
+   * @return
+   */
+  TaskNode getParent();
+
 }

@@ -16,6 +16,8 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
@@ -56,5 +58,9 @@ public interface GroupCommDriver {
    * @return
    */
   Configuration getTaskConfiguration(Configuration partialTaskConf);
+  
+  void handle(RunningTask runningTask);
+  
+  void handle(FailedTask failedTask);
 
 }

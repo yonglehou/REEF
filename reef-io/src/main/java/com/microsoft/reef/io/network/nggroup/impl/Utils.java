@@ -13,20 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.impl;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.annotations.Name;
-import com.microsoft.wake.EventHandler;
 
 /**
  * 
  */
-public interface GroupCommNetworkHandler extends EventHandler<GroupCommMessage> {
+public class Utils {
 
   /**
-   * @param groupName 
-   * @param commGroupNetworkHandler
+   * @param groupName
+   * @param operName
+   * @param broadcast
+   * @param from
+   * @param to
+   * @param data 
+   * @return
    */
-  void register(Class<? extends Name<String>> groupName, EventHandler<GroupCommMessage> commGroupNetworkHandler);
+  public static GroupCommMessage bldGCM(
+      Class<? extends Name<String>> groupName,
+      Class<? extends Name<String>> operName, Type msgType, String from,
+      String to, byte[] data) {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
 }

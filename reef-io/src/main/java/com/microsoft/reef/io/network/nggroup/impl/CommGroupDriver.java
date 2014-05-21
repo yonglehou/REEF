@@ -20,28 +20,32 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import javax.inject.Inject;
-
+import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
-import com.microsoft.reef.io.network.group.operators.Broadcast;
-import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
+import com.microsoft.reef.io.network.Message;
+import com.microsoft.reef.io.network.group.impl.GCMCodec;
+import com.microsoft.reef.io.network.impl.MessagingTransportFactory;
+import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
+import com.microsoft.reef.io.network.nggroup.api.Topology;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.util.StringIdentifierFactory;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.exceptions.InjectionException;
-import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.IdentifierFactory;
+import com.microsoft.wake.impl.LoggingEventHandler;
 
 /**
  * 
@@ -50,23 +54,38 @@ public class CommGroupDriver implements CommunicationGroupDriver {
   
   private final Class<? extends Name<String>> groupName;
   private final Map<Class<? extends Name<String>>, OperatorSpec> operatorSpecs;
+  private final Map<Class<? extends Name<String>>, Topology> topologies;
   private final Set<String> taskIds = new HashSet<>();
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
+  private final NetworkService<GroupCommMessage> netService;
+  private final IdentifierFactory idFac = new StringIdentifierFactory();
 
-  public CommGroupDriver(Class<? extends Name<String>> groupName, ConfigurationSerializer confSerializer) {
+  public CommGroupDriver(Class<? extends Name<String>> groupName,
+      ConfigurationSerializer confSerializer, String nameServiceAddr,
+      int nameServicePort) {
     super();
     this.groupName = groupName;
     this.operatorSpecs = new HashMap<>();
+    this.topologies = new HashMap<>();
     this.confSerializer = confSerializer;
+    netService = new NetworkService<>(idFac, 0, nameServiceAddr,
+        nameServicePort, 5, 100, new GCMCodec(),
+        new MessagingTransportFactory(),
+        new LoggingEventHandler<Message<GroupCommMessage>>(),
+        new LoggingEventHandler<Exception>());
   }
 
   @Override
   public CommunicationGroupDriver addBroadcast(
-      Class<? extends Name<String>> operatorName, OperatorSpec spec) {
+      Class<? extends Name<String>> operatorName, BroadcastOperatorSpec spec) {
     if(finalised)
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     operatorSpecs.put(operatorName, spec);
+    Topology topology = new FlatTopology(netService, groupName, operatorName);
+    topology.setRoot(spec.getSenderId());
+    topology.setOperSpec(spec);
+    topologies.put(operatorName, topology);
     return this;
   }
 
@@ -76,6 +95,10 @@ public class CommGroupDriver implements CommunicationGroupDriver {
     if(finalised)
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     operatorSpecs.put(operatorName, spec);
+    Topology topology = new FlatTopology(netService, groupName, operatorName);
+    topology.setRoot(spec.getReceiverId());
+    topology.setOperSpec(spec);
+    topologies.put(operatorName, topology);
     return this;
   }
 
@@ -86,29 +109,10 @@ public class CommGroupDriver implements CommunicationGroupDriver {
     if(taskIds.contains(taskId)){
       jcb.bindNamedParameter(CommunicationGroupName.class, groupName);
       for (Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
-        JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder();
-        jcbInner.bindNamedParameter(OperatorName.class, operSpecEntry.getKey());
-        final OperatorSpec operSpec = operSpecEntry.getValue();
-        jcbInner.bindNamedParameter(DataCodec.class, operSpec.getDataCodecClass());
-        if(operSpec instanceof BroadcastOperatorSpec){
-          BroadcastOperatorSpec broadcastOperatorSpec = (BroadcastOperatorSpec) operSpec;
-          if(taskId.equals(broadcastOperatorSpec.getSenderId())){
-            jcbInner.bindImplementation(GroupCommOperator.class, BroadcastSender.class);
-          }
-          else{
-            jcbInner.bindImplementation(GroupCommOperator.class, BroadcastReceiver.class);
-          }
-        }
-        if(operSpec instanceof ReduceOperatorSpec){
-          ReduceOperatorSpec reduceOperatorSpec = (ReduceOperatorSpec) operSpec;
-          jcbInner.bindNamedParameter(ReduceFunction.class, reduceOperatorSpec.getRedFuncClass());
-          if(taskId.equals(reduceOperatorSpec.getReceiverId())){
-            jcbInner.bindImplementation(GroupCommOperator.class, ReduceReceiver.class);
-          }
-          else{
-            jcbInner.bindImplementation(GroupCommOperator.class, ReduceSender.class);
-          }
-        }
+        final Class<? extends Name<String>> operName = operSpecEntry.getKey();
+        Topology topology = topologies.get(operName);
+        JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
+        jcbInner.bindNamedParameter(OperatorName.class, operName);
         jcb.bindSetEntry(SerializedOperConfigs.class, confSerializer.toString(jcbInner.build()));
       }
     }
@@ -123,6 +127,10 @@ public class CommGroupDriver implements CommunicationGroupDriver {
   @Override
   public void addTask(Configuration partialTaskConf) {
     String taskId = taskId(partialTaskConf);
+    for(Class<? extends Name<String>> operName : operatorSpecs.keySet()){
+      Topology topology = topologies.get(operName);
+      topology.addTask(taskId);
+    }
     taskIds.add(taskId);
   }
   
@@ -132,6 +140,22 @@ public class CommGroupDriver implements CommunicationGroupDriver {
       return injector.getNamedInstance(TaskConfigurationOptions.Identifier.class);
     } catch(InjectionException e){
       throw new RuntimeException("Unable to find task identifier", e);
+    }
+  }
+
+  @Override
+  public void handle(RunningTask runningTask) {
+    for(Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
+      Topology topology = topEntry.getValue();
+      topology.handle(runningTask);
+    }
+  }
+
+  @Override
+  public void handle(FailedTask failedTask) {
+    for(Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
+      Topology topology = topEntry.getValue();
+      topology.handle(failedTask);
     }
   }
 

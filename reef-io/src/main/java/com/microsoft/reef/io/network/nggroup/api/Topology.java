@@ -17,51 +17,43 @@ package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
-import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
-import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.Name;
 
 /**
  * 
  */
-public interface CommunicationGroupDriver {
+public interface Topology {
 
   /**
-   * @param string
-   * @param dataCodec 
+   * @param senderId
+   */
+  void setRoot(String senderId);
+
+  /**
+   * @param spec
+   */
+  void setOperSpec(OperatorSpec spec);
+
+  /**
+   * @param taskId
    * @return
    */
-  public CommunicationGroupDriver addBroadcast(
-      Class<? extends Name<String>> operatorName, BroadcastOperatorSpec spec);
+  Configuration getConfig(String taskId);
 
   /**
-   * @param string
-   * @param dataCodec 
-   * @param reduceFunction 
-   * @return
+   * @param taskId
    */
-  public CommunicationGroupDriver addReduce(
-      Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec);
+  void addTask(String taskId);
 
   /**
-   * 
+   * @param runningTask
    */
-  public void finalise();
-
-  /**
-   * @param build
-   * @return
-   */
-  public Configuration getConfiguration(Configuration taskConf);
-
-  /**
-   * @param partialTaskConf
-   */
-  public void addTask(Configuration partialTaskConf);
-  
   void handle(RunningTask runningTask);
-  
+
+  /**
+   * @param failedTask
+   */
   void handle(FailedTask failedTask);
 
 }

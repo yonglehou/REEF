@@ -25,6 +25,8 @@ import javax.inject.Inject;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
 import com.microsoft.reef.driver.context.ServiceConfiguration;
+import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.group.impl.GCMCodec;
 import com.microsoft.reef.io.network.impl.BindNSToTask;
 import com.microsoft.reef.io.network.impl.NetworkService;
@@ -42,6 +44,7 @@ import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.remote.NetUtils;
 
@@ -78,7 +81,7 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
   @Override
   public CommunicationGroupDriver newCommunicationGroup(
       Class<? extends Name<String>> groupName) {
-    CommunicationGroupDriver commGroupDriver = new CommGroupDriver(groupName, confSerializer);
+    CommunicationGroupDriver commGroupDriver = new CommGroupDriver(groupName, confSerializer, nameServiceAddr, nameServicePort);
     commGroupDrivers.add(commGroupDriver);
     return commGroupDriver;
   }
@@ -123,5 +126,21 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
     }
     return jcb.build();
   }
+
+  @Override
+  public void handle(RunningTask runningTask) {
+    for (CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
+      commGroupDriver.handle(runningTask);
+    }
+  }
+
+  @Override
+  public void handle(FailedTask failedTask) {
+    for (CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
+      commGroupDriver.handle(failedTask);
+    }
+  }
+  
+
 
 }

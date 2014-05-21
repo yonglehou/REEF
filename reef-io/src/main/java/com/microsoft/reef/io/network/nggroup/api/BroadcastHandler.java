@@ -16,17 +16,17 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
 
 /**
  * 
  */
-public interface GroupCommNetworkHandler extends EventHandler<GroupCommMessage> {
+public interface BroadcastHandler extends EventHandler<GroupCommMessage> {
 
   /**
-   * @param groupName 
-   * @param commGroupNetworkHandler
+   * @param parent
+   * @return
    */
-  void register(Class<? extends Name<String>> groupName, EventHandler<GroupCommMessage> commGroupNetworkHandler);
+  byte[] get(String parent);
+  
 }
