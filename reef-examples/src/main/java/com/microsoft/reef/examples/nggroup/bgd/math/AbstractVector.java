@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app.math;
-
-import com.microsoft.reef.io.network.nggroup.app.math.AbstractImmutableVector;
+package com.microsoft.reef.examples.nggroup.bgd.math;
 
 /**
  * Abstract base class for {@link Vector} implementations.

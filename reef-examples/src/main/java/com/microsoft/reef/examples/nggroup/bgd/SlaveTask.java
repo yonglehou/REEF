@@ -13,19 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.examples.nggroup.bgd;
 
+import javax.inject.Inject;
+
+import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.app.math.Vector;
-import com.microsoft.reef.io.network.nggroup.app.parameters.*;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
-
-import javax.inject.Inject;
 
 /**
  * 

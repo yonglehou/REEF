@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app.math;
+package com.microsoft.reef.examples.nggroup.bgd.math;
 
 import com.microsoft.wake.remote.Codec;
 

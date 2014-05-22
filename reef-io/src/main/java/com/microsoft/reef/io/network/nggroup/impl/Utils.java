@@ -15,7 +15,9 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import com.google.protobuf.ByteString;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupMessageBody;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.annotations.Name;
 
@@ -36,9 +38,21 @@ public class Utils {
   public static GroupCommMessage bldGCM(
       Class<? extends Name<String>> groupName,
       Class<? extends Name<String>> operName, Type msgType, String from,
-      String to, byte[] data) {
-    // TODO Auto-generated method stub
-    return null;
+      String to, byte[]... data) {
+    final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
+    GCMBuilder.setGroupname(groupName.getName());
+    GCMBuilder.setOperatorname(operName.getName());
+    GCMBuilder.setType(msgType);
+    GCMBuilder.setSrcid(from);
+    GCMBuilder.setDestid(to);
+
+    final GroupMessageBody.Builder bodyBuilder = GroupMessageBody.newBuilder();
+    for (final byte[] element : data) {
+      bodyBuilder.setData(ByteString.copyFrom(element));
+      GCMBuilder.addMsgs(bodyBuilder.build());
+    }
+
+    return GCMBuilder.build();
   }
 
 }

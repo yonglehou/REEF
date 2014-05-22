@@ -13,15 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app.parameters;
+package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.tang.annotations.Name;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.wake.EventHandler;
 
 /**
  * 
  */
-// TODO Replace String with some more meaningful type (Markus)
-// You mean create a supertype? (Shravan)
-public final class AllCommunicationGroup implements Name<String> {
-
+public interface ReduceHandler extends EventHandler<GroupCommMessage> {
+  /**
+   * @param parent
+   * @return
+   */
+  byte[] get(String parent);
 }

@@ -13,8 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app.parameters;
+package com.microsoft.reef.examples.nggroup.bgd;
 
-import com.microsoft.tang.annotations.Name;
+import java.io.Serializable;
 
-public final class LossAndGradientReducer implements Name<String> { }
+public enum ControlMessages implements Serializable{
+  ComputeGradient,
+  DoLineSearch,
+  Synchronize,
+  Stop
+}

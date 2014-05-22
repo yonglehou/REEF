@@ -13,21 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.examples.nggroup.bgd.paramters;
 
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.wake.EventHandler;
+import com.microsoft.tang.annotations.Name;
 
-/**
- * 
- */
-public interface BroadcastHandler extends EventHandler<GroupCommMessage> {
-
-  /**
-   * @param parent
-   * @return
-   * @throws InterruptedException 
-   */
-  byte[] get(String parent) throws InterruptedException;
-  
-}
+public final class ModelBroadcaster implements Name<String> { }

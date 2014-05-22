@@ -13,31 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import javax.inject.Inject;
 
-import com.microsoft.reef.exception.evaluator.NetworkException;
+import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
+import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.NumberOfReceivers;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.app.math.DenseVector;
-import com.microsoft.reef.io.network.nggroup.app.math.Vector;
-import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.Dimensions;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;

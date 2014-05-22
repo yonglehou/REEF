@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.examples.nggroup.bgd;
 
+import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
+import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.reef.io.network.nggroup.app.math.DenseVector;
-import com.microsoft.reef.io.network.nggroup.app.math.Vector;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 
 /**

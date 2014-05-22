@@ -1,4 +1,4 @@
-package com.microsoft.reef.io.network.nggroup.app.math;
+package com.microsoft.reef.examples.nggroup.bgd.math;
 
 
 import com.microsoft.reef.io.Tuple;

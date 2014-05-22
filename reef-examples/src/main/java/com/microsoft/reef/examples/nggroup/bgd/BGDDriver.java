@@ -13,37 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.task.TaskConfiguration;
+import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
+import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.paramters.NumberOfReceivers;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
-import com.microsoft.reef.io.network.nggroup.app.math.Vector;
-import com.microsoft.reef.io.network.nggroup.app.parameters.AllCommunicationGroup;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.LossAndGradientReducer;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.ModelBroadcaster;
-import com.microsoft.reef.io.network.nggroup.app.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.tang.Configuration;
-import com.microsoft.tang.JavaConfigurationBuilder;
+import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
+import com.microsoft.tang.exceptions.InjectionException;
+import com.microsoft.tang.formats.AvroConfigurationSerializer;
+import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EventHandler;
 
 /**
@@ -52,6 +57,7 @@ import com.microsoft.wake.EventHandler;
 @DriverSide
 @Unit
 public class BGDDriver {
+  private static final Logger LOG = Logger.getLogger(BGDDriver.class.getName());
   
   private final DataLoadingService dataLoadingService;
   
@@ -62,14 +68,23 @@ public class BGDDriver {
   private final AtomicBoolean masterSubmitted = new AtomicBoolean(false);
   
   private final AtomicInteger slaveIds = new AtomicInteger(0);
+
+  private String groupCommConfiguredMasterId;
+  
+  private final ConfigurationSerializer confSerializer;
   
   @Inject
   public BGDDriver(
       DataLoadingService dataLoadingService,
-      GroupCommDriver groupCommDriver){
+      GroupCommDriver groupCommDriver,
+      ConfigurationSerializer confSerializer){
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
+    this.confSerializer = confSerializer;
+    
     this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class);
+    LOG.info("Obtained all communication group");
+    
     Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
     Codec<Vector> modelCodec = new SerializableCodec<>();
     Codec<Pair<Double,Vector>> lossAndGradientCodec = new SerializableCodec<>();
@@ -111,12 +126,15 @@ public class BGDDriver {
           .setReduceFunctionClass(lineSearchReduceFunction.getClass())
           .build())
       .finalise();
+    
+    LOG.info("Added operators to allCommGroup");
   }
   
   public class ContextActiveHandler implements EventHandler<ActiveContext> {
 
     @Override
     public void onNext(ActiveContext activeContext) {
+      LOG.info("Got active context-" + activeContext.getId());
       /**
        * The active context can be either from
        * data loading service or after network
@@ -126,7 +144,7 @@ public class BGDDriver {
        * groups
        */
       if(groupCommDriver.configured(activeContext)){
-        if(!masterTaskSubmitted()){
+        if(activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()){
           final Configuration partialTaskConf = Tang.Factory.getTang()
               .newConfigurationBuilder(
                   TaskConfiguration.CONF
@@ -140,7 +158,10 @@ public class BGDDriver {
           
           allCommGroup.addTask(partialTaskConf);
           Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
-          activeContext.submitTask(taskConf);
+          LOG.info("Submitting MasterTask conf");
+          LOG.info(confSerializer.toString(taskConf));
+//          activeContext.submitTask(taskConf);
+          activeContext.close();
         }
         else{
           final Configuration partialTaskConf = TaskConfiguration.CONF
@@ -149,11 +170,39 @@ public class BGDDriver {
             .build();
           allCommGroup.addTask(partialTaskConf);
           Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
-          activeContext.submitTask(taskConf);
+          LOG.info("Submitting SlaveTask conf");
+          LOG.info(confSerializer.toString(taskConf));
+//          activeContext.submitTask(taskConf);
+          activeContext.close();
         }
       }
       else{
-        activeContext.submitContextAndService(groupCommDriver.getContextConf(), groupCommDriver.getServiceConf());
+        final Configuration contextConf = groupCommDriver.getContextConf();
+        String contextId = contextId(contextConf);
+        if(!dataLoadingService.isDataLoadedContext(activeContext)){
+          groupCommConfiguredMasterId = contextId;
+        }
+        LOG.info("Submitting GCContext conf");
+        LOG.info(confSerializer.toString(contextConf));
+        
+        final Configuration serviceConf = groupCommDriver.getServiceConf();
+        LOG.info("Submitting Service conf");
+        LOG.info(confSerializer.toString(serviceConf));
+//        activeContext.submitContextAndService(contextConf, serviceConf);
+        activeContext.close();
+      }
+    }
+
+    /**
+     * @param contextConf
+     * @return
+     */
+    private String contextId(Configuration contextConf) {
+      try{
+        Injector injector = Tang.Factory.getTang().newInjector(contextConf);
+        return injector.getNamedInstance(ContextIdentifier.class);
+      }catch(InjectionException e){
+        throw new RuntimeException("Unable to inject context identifier from context conf", e);
       }
     }
 

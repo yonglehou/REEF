@@ -13,13 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app;
+package com.microsoft.reef.examples.nggroup.bgd.paramters;
 
-import java.io.Serializable;
+import com.microsoft.tang.annotations.Name;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradient,
-  DoLineSearch,
-  Synchronize,
-  Stop
-}
+public final class ModelAndDescentDirectionBroadcaster implements Name<String> { }

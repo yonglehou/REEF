@@ -13,13 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.app.parameters;
+package com.microsoft.reef.examples.nggroup.bgd.paramters;
 
 import com.microsoft.tang.annotations.Name;
 
-/**
- * 
- */
-public class Dimensions implements Name<Integer> {
-
-}
+public final class LineSearchEvaluationsReducer implements Name<String> { }
