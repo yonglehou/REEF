@@ -21,20 +21,25 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
 import com.microsoft.reef.io.network.group.operators.Reduce;
+import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
+import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.exceptions.BindException;
@@ -42,80 +47,89 @@ import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 
 /**
- * 
+ *
  */
-public class CommunicationGroupClient implements com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient{
-  
+public class CommunicationGroupClientImpl implements com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient{
+  private static final Logger LOG = Logger.getLogger(CommunicationGroupClientImpl.class.getName());
+
   private final GroupCommNetworkHandler groupCommNetworkHandler;
   private final Class<? extends Name<String>> groupName;
   private final Map<Class<? extends Name<String>>, GroupCommOperator> operators;
-  
+
   @Inject
-  public CommunicationGroupClient(
-        @Parameter(CommunicationGroupName.class) Class<? extends Name<String>> groupName,
-        GroupCommNetworkHandler groupCommNetworkHandler,
-        @Parameter(SerializedOperConfigs.class) Set<String> operatorConfigs,
-        ConfigurationSerializer configSerializer,
-        Injector injector
+  public CommunicationGroupClientImpl(
+        @Parameter(CommunicationGroupName.class) final String groupName,
+        @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
+        final GroupCommNetworkHandler groupCommNetworkHandler,
+        @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
+        final ConfigurationSerializer configSerializer,
+        final NetworkService<GroupCommMessage> netService
       ){
-    this.groupName = groupName;
+    LOG.info(groupName + " has GroupCommHandler-"
+        + groupCommNetworkHandler.toString());
+    this.groupName = Utils.getClass(groupName);
     this.groupCommNetworkHandler = groupCommNetworkHandler;
     this.operators = new HashMap<>();
-    for (String operatorConfigStr : operatorConfigs) {
+    for (final String operatorConfigStr : operatorConfigs) {
       try {
-        /**
-         * When the operator is instantiated it needs
-         * to get this commGroupNetworkHandler injected
-         * and register its handler with commGroupNetworkHandler
-         * for its name
-         */
-        CommGroupNetworkHandler commGroupNetworkHandler = injector.getInstance(CommGroupNetworkHandler.class);
-        this.groupCommNetworkHandler.register(groupName, commGroupNetworkHandler);
-        Configuration operatorConfig = configSerializer.fromString(operatorConfigStr);
-        Injector forkedInjector = injector.forkInjector(operatorConfig);
-        GroupCommOperator operator = forkedInjector.getInstance(GroupCommOperator.class);
-        Name<String> operName = injector.getNamedInstance(OperatorName.class);
-        this.operators.put((Class<? extends Name<String>>) operName.getClass(), operator);
+        final Configuration operatorConfig = configSerializer.fromString(operatorConfigStr);
+        final Injector injector = Tang.Factory.getTang().newInjector(operatorConfig);
+
+        final CommGroupNetworkHandler commGroupNetworkHandler = injector.getInstance(CommGroupNetworkHandler.class);
+        this.groupCommNetworkHandler.register(this.groupName, commGroupNetworkHandler);
+
+        injector.bindVolatileParameter(CommunicationGroupName.class, groupName);
+        injector.bindVolatileInstance(CommGroupNetworkHandler.class, commGroupNetworkHandler);
+        injector.bindVolatileInstance(NetworkService.class, netService);
+
+        final GroupCommOperator operator = injector.getInstance(GroupCommOperator.class);
+        final String operName = injector.getNamedInstance(OperatorName.class);
+        this.operators.put(Utils.getClass(operName), operator);
+        LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
       } catch (BindException | IOException e) {
         throw new RuntimeException("Unable to deserialize operator config", e);
-      } catch (InjectionException e) {
+      } catch (final InjectionException e) {
         throw new RuntimeException("Unable to deserialize operator config", e);
       }
     }
   }
 
   @Override
-  public Broadcast.Sender getBroadcastSender(Class<? extends Name<String>> operatorName) {
-    GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Broadcast.Sender))
+  public Broadcast.Sender getBroadcastSender(final Class<? extends Name<String>> operatorName) {
+    final GroupCommOperator op = operators.get(operatorName);
+    if(!(op instanceof Broadcast.Sender)) {
       throw new RuntimeException("Configured operator is not a broadcast sender");
-    return (Broadcast.Sender)op;  
+    }
+    return (Broadcast.Sender)op;
   }
 
   @Override
-  public Reduce.Receiver getReduceReceiver(Class<? extends Name<String>> operatorName) {
-    GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Reduce.Receiver))
+  public Reduce.Receiver getReduceReceiver(final Class<? extends Name<String>> operatorName) {
+    final GroupCommOperator op = operators.get(operatorName);
+    if(!(op instanceof Reduce.Receiver)) {
       throw new RuntimeException("Configured operator is not a reduce receiver");
+    }
     return (Reduce.Receiver)op;
   }
 
   @Override
   public Broadcast.Receiver getBroadcastReceiver(
-      Class<? extends Name<String>> operatorName) {
-    GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Broadcast.Receiver))
+      final Class<? extends Name<String>> operatorName) {
+    final GroupCommOperator op = operators.get(operatorName);
+    if(!(op instanceof Broadcast.Receiver)) {
       throw new RuntimeException("Configured operator is not a broadcast receiver");
-    return (Broadcast.Receiver)op; 
+    }
+    return (Broadcast.Receiver)op;
   }
 
   @Override
   public Reduce.Sender getReduceSender(
-      Class<? extends Name<String>> operatorName) {
-    GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Reduce.Sender))
+      final Class<? extends Name<String>> operatorName) {
+    final GroupCommOperator op = operators.get(operatorName);
+    if(!(op instanceof Reduce.Sender)) {
       throw new RuntimeException("Configured operator is not a reduce sender");
-    return (Reduce.Sender)op; 
+    }
+    return (Reduce.Sender)op;
   }
 
   @Override
@@ -125,16 +139,16 @@ public class CommunicationGroupClient implements com.microsoft.reef.io.network.n
   }
 
   @Override
-  public void waitFor(int numberOfReceivers, int timeout, TimeUnit unit)
+  public void waitFor(final int numberOfReceivers, final int timeout, final TimeUnit unit)
       throws TimeoutException {
     // TODO Auto-generated method stub
-    
+
   }
 
   @Override
-  public void waitFor(int timeout, TimeUnit unit) throws TimeoutException {
+  public void waitFor(final int timeout, final TimeUnit unit) throws TimeoutException {
     // TODO Auto-generated method stub
-    
+
   }
 
   @Override

@@ -16,13 +16,16 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.io.network.Message;
+import com.microsoft.reef.io.network.nggroup.impl.GroupCommNetworkHandlerImpl;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
 
 /**
  * 
  */
+@DefaultImplementation(value=GroupCommNetworkHandlerImpl.class)
 public interface GroupCommNetworkHandler extends EventHandler<Message<GroupCommMessage>> {
 
   /**

@@ -42,49 +42,51 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
 
 /**
- * 
+ *
  */
 public class ReduceSender<T> implements Reduce.Sender<T> {
  private static final Logger LOG = Logger.getLogger(ReduceSender.class.getName());
-  
+
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
   private final String selfId;
   private final CommGroupNetworkHandler commGroupNetworkHandler;
   private final Codec<T> dataCodec;
   private final ReduceFunction<T> reduceFunction;
-  private String parent;
+  private final String parent;
   private final Set<String> childIds = new HashSet<>();
   private final NetworkService<GroupCommMessage> netService;
   private final ReduceHandler handler;
   private final Sender sender;
-  
-  
+
+
   @Inject
   public ReduceSender(
-      @Parameter(CommunicationGroupName.class) Name<String> groupName,
-      @Parameter(OperatorName.class) Name<String> operName,
-      @Parameter(TaskConfigurationOptions.Identifier.class) String selfId,
-      @Parameter(DataCodec.class) Codec<T> dataCodec,
-      @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunction.class) ReduceFunction<T> reduceFunction,
-      CommGroupNetworkHandler commGroupNetworkHandler,
-      NetworkService<GroupCommMessage> netService) {
+      @Parameter(CommunicationGroupName.class) final String groupName,
+      @Parameter(OperatorName.class) final String operName,
+      @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
+      @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam.class) final ReduceFunction<T> reduceFunction,
+      final CommGroupNetworkHandler commGroupNetworkHandler,
+      final NetworkService<GroupCommMessage> netService) {
     super();
-    this.groupName = (Class<? extends Name<String>>) groupName.getClass();
-    this.operName = (Class<? extends Name<String>>) operName.getClass();
+    LOG.info(operName + " has CommGroupHandler-"
+        + commGroupNetworkHandler.toString());
+    this.groupName = Utils.getClass(groupName);
+    this.operName = Utils.getClass(operName);
     this.selfId = selfId;
     this.dataCodec = dataCodec;
     this.reduceFunction = reduceFunction;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = null;
+    this.handler = new ReduceHandlerImpl();
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.parent = null;
     this.sender = new Sender(this.netService);
   }
 
   @Override
-  public void send(T myData) throws NetworkException,
+  public void send(final T myData) throws NetworkException,
       InterruptedException {
     LOG.log(Level.FINEST, "I am Reduce sender" + selfId);
     final List<T> vals = new ArrayList<>(this.childIds.size() + 1);
@@ -107,8 +109,10 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
   /**
    * @param childId
    * @return
+   * @throws InterruptedException
    */
-  private Optional<T> getValueForChild(String childId) {
+  private Optional<T> getValueForChild(final String childId)
+      throws InterruptedException {
     LOG.log(Level.FINEST, "Waiting for child: " + childId);
     final T valueFromChild = dataCodec.decode(handler.get(childId));
     LOG.log(Level.FINEST, "Received: " + valueFromChild);

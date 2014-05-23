@@ -15,9 +15,13 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.inject.Inject;
+
+import com.microsoft.reef.io.network.Message;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
@@ -25,23 +29,28 @@ import com.microsoft.wake.EventHandler;
 /**
  * 
  */
-public class CommGroupNetworkHandler implements com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler{
-  private final Map<Class<? extends Name<String>>, EventHandler<GroupCommMessage>> operHandlers = new ConcurrentHashMap<>();
+public class GroupCommNetworkHandlerImpl implements com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler{
+  private final Map<Class<? extends Name<String>>, EventHandler<GroupCommMessage>> commGroupHandlers = new ConcurrentHashMap<>();
+  
+  @Inject
+  public GroupCommNetworkHandlerImpl() {  }
 
   @Override
-  public void onNext(GroupCommMessage msg) {
+  public void onNext(Message<GroupCommMessage> mesg) {
+    final Iterator<GroupCommMessage> iter = mesg.getData().iterator();
+    GroupCommMessage msg = iter.hasNext() ? iter.next() : null; 
     try {
-      Class<? extends Name<String>> operName = (Class<? extends Name<String>>) Class.forName(msg.getOperatorname());
-      operHandlers.get(operName).onNext(msg);
+      Class<? extends Name<String>> groupName = (Class<? extends Name<String>>) Class.forName(msg.getGroupname());
+      commGroupHandlers.get(groupName).onNext(msg);
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("GroupName not found", e);
     }
   }
 
   @Override
-  public void register(Class<? extends Name<String>> operName,
-      EventHandler<GroupCommMessage> operHandler) {
-    operHandlers.put(operName, operHandler);
+  public void register(Class<? extends Name<String>> groupName,
+      EventHandler<GroupCommMessage> commGroupNetworkHandler) {
+    commGroupHandlers.put(groupName, commGroupNetworkHandler);
   }
 
 }

@@ -13,15 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd.paramters;
+package com.microsoft.reef.examples.nggroup.bgd.parameters;
 
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
-/**
- * 
- */
-// TODO Replace String with some more meaningful type (Markus)
-// You mean create a supertype? (Shravan)
-public final class AllCommunicationGroup implements Name<String> {
-
-}
+@NamedParameter()
+public final class ControlMessageBroadcaster implements Name<String> { }

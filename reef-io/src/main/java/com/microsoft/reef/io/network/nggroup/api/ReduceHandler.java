@@ -19,12 +19,13 @@ import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommM
 import com.microsoft.wake.EventHandler;
 
 /**
- * 
+ *
  */
 public interface ReduceHandler extends EventHandler<GroupCommMessage> {
   /**
    * @param parent
    * @return
+   * @throws InterruptedException
    */
-  byte[] get(String parent);
+  byte[] get(String parent) throws InterruptedException;
 }

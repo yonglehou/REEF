@@ -55,4 +55,11 @@ public class Utils {
     return GCMBuilder.build();
   }
 
+  public static Class<? extends Name<String>> getClass(String className){
+    try {
+      return (Class<? extends Name<String>>) Class.forName(className);
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Unable to find class " + className, e);
+    }
+  }
 }

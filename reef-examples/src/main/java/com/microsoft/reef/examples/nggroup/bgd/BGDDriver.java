@@ -23,16 +23,18 @@ import javax.inject.Inject;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.NumberOfReceivers;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -45,6 +47,7 @@ import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
+import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
@@ -73,14 +76,18 @@ public class BGDDriver {
   
   private final ConfigurationSerializer confSerializer;
   
+  private final int dimensions;
+  
   @Inject
   public BGDDriver(
       DataLoadingService dataLoadingService,
       GroupCommDriver groupCommDriver,
-      ConfigurationSerializer confSerializer){
+      ConfigurationSerializer confSerializer,
+      @Parameter(Dimensions.class) int dimensions){
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
+    this.dimensions = dimensions;
     
     this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class);
     LOG.info("Obtained all communication group");
@@ -130,6 +137,20 @@ public class BGDDriver {
     LOG.info("Added operators to allCommGroup");
   }
   
+  public class ContextCloseHandler implements EventHandler<ClosedContext> {
+
+    @Override
+    public void onNext(ClosedContext closedContext) {
+      LOG.info("Got closed context-" + closedContext.getId());
+      ActiveContext parentContext = closedContext.getParentContext();
+      if(parentContext!=null){
+        LOG.info("Closing parent context-" + parentContext.getId());
+        parentContext.close();
+      }
+    }
+    
+  }
+  
   public class ContextActiveHandler implements EventHandler<ActiveContext> {
 
     @Override
@@ -154,14 +175,14 @@ public class BGDDriver {
                .bindNamedParameter(
                    NumberOfReceivers.class, 
                    Integer.toString(dataLoadingService.getNumberOfPartitions()))
+               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
                .build();
           
           allCommGroup.addTask(partialTaskConf);
           Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting MasterTask conf");
           LOG.info(confSerializer.toString(taskConf));
-//          activeContext.submitTask(taskConf);
-          activeContext.close();
+          activeContext.submitTask(taskConf);
         }
         else{
           final Configuration partialTaskConf = TaskConfiguration.CONF
@@ -172,8 +193,7 @@ public class BGDDriver {
           Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting SlaveTask conf");
           LOG.info(confSerializer.toString(taskConf));
-//          activeContext.submitTask(taskConf);
-          activeContext.close();
+          activeContext.submitTask(taskConf);
         }
       }
       else{
@@ -188,8 +208,7 @@ public class BGDDriver {
         final Configuration serviceConf = groupCommDriver.getServiceConf();
         LOG.info("Submitting Service conf");
         LOG.info(confSerializer.toString(serviceConf));
-//        activeContext.submitContextAndService(contextConf, serviceConf);
-        activeContext.close();
+        activeContext.submitContextAndService(contextConf, serviceConf);
       }
     }
 

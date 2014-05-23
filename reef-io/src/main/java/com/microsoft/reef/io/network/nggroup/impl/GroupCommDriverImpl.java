@@ -36,6 +36,7 @@ import com.microsoft.reef.io.network.impl.UnbindNSFromTask;
 import com.microsoft.reef.io.network.naming.NameServer;
 import com.microsoft.reef.io.network.naming.NameServerParameters;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
+import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedGroupConfigs;
 import com.microsoft.reef.io.network.util.StringIdentifierFactory;
@@ -44,15 +45,14 @@ import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.formats.ConfigurationSerializer;
-import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.remote.NetUtils;
 
 /**
  * 
  */
-public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.api.GroupCommDriver {
-  private static final Logger LOG = Logger.getLogger(GroupCommDriver.class.getName());
+public class GroupCommDriverImpl implements GroupCommDriver {
+  private static final Logger LOG = Logger.getLogger(GroupCommDriverImpl.class.getName());
   /**
    * TANG instance
    */
@@ -70,9 +70,9 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
   private final Set<CommunicationGroupDriver> commGroupDrivers = new HashSet<>();
   
   private final ConfigurationSerializer confSerializer;
-  
+
   @Inject
-  public GroupCommDriver(ConfigurationSerializer confSerializer){
+  public GroupCommDriverImpl(ConfigurationSerializer confSerializer){
     this.nameServiceAddr = NetUtils.getLocalAddress();
     this.nameServicePort = nameService.getPort();
     this.confSerializer = confSerializer;
@@ -81,7 +81,7 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
   @Override
   public CommunicationGroupDriver newCommunicationGroup(
       Class<? extends Name<String>> groupName) {
-    CommunicationGroupDriver commGroupDriver = new CommGroupDriver(groupName, confSerializer, nameServiceAddr, nameServicePort);
+    CommunicationGroupDriver commGroupDriver = new CommunicationGroupDriverImpl(groupName, confSerializer, nameServiceAddr, nameServicePort);
     commGroupDrivers.add(commGroupDriver);
     return commGroupDriver;
   }
@@ -102,14 +102,14 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
   public Configuration getServiceConf() {
     final Configuration serviceConfiguration = ServiceConfiguration.CONF
         .set(ServiceConfiguration.SERVICES, NetworkService.class)
-        .set(ServiceConfiguration.SERVICES, GroupCommNetworkHandler.class)
+        .set(ServiceConfiguration.SERVICES, GroupCommNetworkHandlerImpl.class)
         .set(ServiceConfiguration.ON_CONTEXT_STOP,NetworkServiceClosingHandler.class)
         .set(ServiceConfiguration.ON_TASK_STARTED, BindNSToTask.class)
         .set(ServiceConfiguration.ON_TASK_STOP, UnbindNSFromTask.class)
         .build();
     return tang.newConfigurationBuilder(serviceConfiguration)
       .bindNamedParameter(NetworkServiceParameters.NetworkServiceCodec.class, GCMCodec.class)
-      .bindNamedParameter(NetworkServiceParameters.NetworkServiceHandler.class, GroupCommNetworkHandler.class)
+      .bindNamedParameter(NetworkServiceParameters.NetworkServiceHandler.class, GroupCommNetworkHandlerImpl.class)
       .bindNamedParameter(NetworkServiceParameters.NetworkServiceExceptionHandler.class, ExceptionHandler.class)
       .bindNamedParameter(NameServerParameters.NameServerAddr.class, nameServiceAddr)
       .bindNamedParameter(NameServerParameters.NameServerPort.class, Integer.toString(nameServicePort))
@@ -119,7 +119,7 @@ public class GroupCommDriver implements com.microsoft.reef.io.network.nggroup.ap
 
   @Override
   public Configuration getTaskConfiguration(Configuration partialTaskConf) {
-    JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
+    JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(partialTaskConf);
     for (CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
       Configuration commGroupConf = commGroupDriver.getConfiguration(partialTaskConf);
       jcb.bindSetEntry(SerializedGroupConfigs.class, confSerializer.toString(commGroupConf));

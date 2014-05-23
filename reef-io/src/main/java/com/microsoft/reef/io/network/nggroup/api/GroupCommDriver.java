@@ -18,6 +18,7 @@ package com.microsoft.reef.io.network.nggroup.api;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
+import com.microsoft.reef.io.network.nggroup.impl.GroupCommDriverImpl;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
@@ -25,7 +26,7 @@ import com.microsoft.tang.annotations.Name;
 /**
  * 
  */
-@DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.GroupCommDriver.class)
+@DefaultImplementation(value=GroupCommDriverImpl.class)
 public interface GroupCommDriver {
 
   /**

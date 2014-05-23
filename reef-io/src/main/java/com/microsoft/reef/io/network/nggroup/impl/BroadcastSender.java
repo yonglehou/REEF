@@ -17,6 +17,7 @@ package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
@@ -36,10 +37,11 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
 
 /**
- * 
+ *
  */
 public class BroadcastSender<T> implements Broadcast.Sender<T> {
-  
+  private static final Logger LOG = Logger.getLogger(BroadcastSender.class.getName());
+
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
   private final String selfId;
@@ -49,23 +51,24 @@ public class BroadcastSender<T> implements Broadcast.Sender<T> {
   private final NetworkService<GroupCommMessage> netService;
   private final BroadcastHandler handler;
   private final Sender sender;
-  
+
   @Inject
   public BroadcastSender(
-      @Parameter(CommunicationGroupName.class) Name<String> groupName,
-      @Parameter(OperatorName.class) Name<String> operName,
-      @Parameter(TaskConfigurationOptions.Identifier.class) String selfId,
-      @Parameter(DataCodec.class) Codec<T> dataCodec,
-      CommGroupNetworkHandler commGroupNetworkHandler,
-      NetworkService<GroupCommMessage> netService) {
+      @Parameter(CommunicationGroupName.class) final String groupName,
+      @Parameter(OperatorName.class) final String operName,
+      @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
+      @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      final CommGroupNetworkHandler commGroupNetworkHandler,
+      final NetworkService<GroupCommMessage> netService) {
     super();
-    this.groupName = (Class<? extends Name<String>>) groupName.getClass();
-    this.operName = (Class<? extends Name<String>>) operName.getClass();
+    LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
+    this.groupName = Utils.getClass(groupName);
+    this.operName = Utils.getClass(operName);
     this.selfId = selfId;
     this.dataCodec = dataCodec;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = null;
+    this.handler = new BroadcastHandlerImpl();
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.sender = new Sender(this.netService);
   }
@@ -73,9 +76,9 @@ public class BroadcastSender<T> implements Broadcast.Sender<T> {
 
 
   @Override
-  public void send(T element) throws NetworkException,
+  public void send(final T element) throws NetworkException,
       InterruptedException {
-    for(String child : childIds){
+    for(final String child : childIds){
       sender.send(Utils.bldGCM(groupName, operName, Type.Broadcast, selfId, child, dataCodec.encode(element)), child);
     }
   }

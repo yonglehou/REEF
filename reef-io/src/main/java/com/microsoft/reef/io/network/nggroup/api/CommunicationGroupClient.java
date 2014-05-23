@@ -26,7 +26,7 @@ import com.microsoft.tang.annotations.Name;
 /**
  * 
  */
-@DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.CommunicationGroupClient.class)
+@DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.CommunicationGroupClientImpl.class)
 public interface CommunicationGroupClient {
 
   /***********************************************************/

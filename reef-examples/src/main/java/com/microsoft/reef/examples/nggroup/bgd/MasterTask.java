@@ -23,14 +23,14 @@ import javax.inject.Inject;
 
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.Dimensions;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.NumberOfReceivers;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
@@ -73,7 +73,8 @@ public class MasterTask implements Task {
 
   @Override
   public byte[] call(byte[] memento) throws Exception {
-    try{
+    return null;
+    /*try{
       communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
     
       ArrayList<Double> losses = new ArrayList<>();
@@ -111,7 +112,7 @@ public class MasterTask implements Task {
     }catch(TimeoutException e){
       controlMessageBroadcaster.send(ControlMessages.Stop);
       throw e;
-    }
+    }*/
   }
 
   /**

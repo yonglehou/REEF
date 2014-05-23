@@ -22,6 +22,6 @@ import com.microsoft.tang.annotations.NamedParameter;
  * 
  */
 @NamedParameter(doc="Name of the operator")
-public class OperatorName implements Name<Name<String>> {
+public class OperatorName implements Name<String> {
 
 }

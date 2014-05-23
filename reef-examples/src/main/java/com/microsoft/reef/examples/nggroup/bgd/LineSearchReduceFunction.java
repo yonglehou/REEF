@@ -15,6 +15,8 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import javax.inject.Inject;
+
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
@@ -23,6 +25,9 @@ import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
  * 
  */
 public class LineSearchReduceFunction implements ReduceFunction<Vector> {
+  
+  @Inject
+  public LineSearchReduceFunction() {  }
 
   @Override
   public Vector apply(Iterable<Vector> evals) {

@@ -28,7 +28,7 @@ import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
-import com.microsoft.reef.examples.data.loading.LineCounter;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
 import com.microsoft.reef.runtime.yarn.client.YarnClientConfiguration;
@@ -41,6 +41,7 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.NamedParameter;
 import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
+import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
 
 /**
@@ -70,6 +71,7 @@ public class BGDREEF {
 
   private static boolean local;
   private static String input;
+  private static int dimensions;
   
   private static Configuration parseCommandLine(final String[] aArgs) {
     final JavaConfigurationBuilder cb = Tang.Factory.getTang().newConfigurationBuilder();
@@ -77,6 +79,7 @@ public class BGDREEF {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
       cl.registerShortNameOfClass(BGDREEF.InputDir.class);
+      cl.registerShortNameOfClass(Dimensions.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
       final String msg = "Unable to parse command line";
@@ -94,6 +97,7 @@ public class BGDREEF {
     final Injector injector = Tang.Factory.getTang().newInjector(commandLineConf);
     local = injector.getNamedInstance(Local.class);
     input = injector.getNamedInstance(BGDREEF.InputDir.class);
+    dimensions = injector.getNamedInstance(Dimensions.class);
   }
 
   /**
@@ -134,13 +138,17 @@ public class BGDREEF {
         .setDriverConfigurationModule(EnvironmentUtils
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
+            .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
 //            .set(DriverConfiguration.ON_TASK_COMPLETED, LineCounter.TaskCompletedHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))
         .build();
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
-        .newConfigurationBuilder(dataLoadConfiguration)//, driverConfiguration)
+        .newConfigurationBuilder(dataLoadConfiguration)
+        .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
         .build();
+    
+    LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));
 
     return DriverLauncher.getLauncher(runtimeConfiguration).run(mergedDriverConfiguration, JOB_TIMEOUT);
   }

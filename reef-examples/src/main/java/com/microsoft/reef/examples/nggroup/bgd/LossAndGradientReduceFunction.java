@@ -15,21 +15,32 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import java.util.logging.Logger;
+
+import javax.inject.Inject;
+
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 
 /**
- * 
+ *
  */
 public class LossAndGradientReduceFunction implements ReduceFunction<Pair<Double,Vector>>{
 
+  private static final Logger LOG = Logger
+      .getLogger(LossAndGradientReduceFunction.class.getName());
+
+  @Inject
+  public LossAndGradientReduceFunction() {
+  }
+
   @Override
-  public Pair<Double, Vector> apply(Iterable<Pair<Double, Vector>> lags) {
+  public Pair<Double, Vector> apply(final Iterable<Pair<Double, Vector>> lags) {
     double lossSum = 0.0;
     Vector combinedGradient = null;
-    for (Pair<Double, Vector> lag : lags) {
+    for (final Pair<Double, Vector> lag : lags) {
       if(combinedGradient==null){
         combinedGradient = new DenseVector(lag.second.size());
       }

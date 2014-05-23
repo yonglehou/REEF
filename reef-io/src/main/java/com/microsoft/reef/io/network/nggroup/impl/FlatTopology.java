@@ -23,7 +23,7 @@ import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunction;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
@@ -72,7 +72,7 @@ public class FlatTopology implements com.microsoft.reef.io.network.nggroup.api.T
     }
     if(operatorSpec instanceof ReduceOperatorSpec){
       ReduceOperatorSpec reduceOperatorSpec = (ReduceOperatorSpec) operatorSpec;
-      jcb.bindNamedParameter(ReduceFunction.class, reduceOperatorSpec.getRedFuncClass());
+      jcb.bindNamedParameter(ReduceFunctionParam.class, reduceOperatorSpec.getRedFuncClass());
       if(taskId.equals(reduceOperatorSpec.getReceiverId())){
         jcb.bindImplementation(GroupCommOperator.class, ReduceReceiver.class);
       }

@@ -50,7 +50,7 @@ import com.microsoft.wake.impl.LoggingEventHandler;
 /**
  * 
  */
-public class CommGroupDriver implements CommunicationGroupDriver {
+public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   
   private final Class<? extends Name<String>> groupName;
   private final Map<Class<? extends Name<String>>, OperatorSpec> operatorSpecs;
@@ -61,7 +61,7 @@ public class CommGroupDriver implements CommunicationGroupDriver {
   private final NetworkService<GroupCommMessage> netService;
   private final IdentifierFactory idFac = new StringIdentifierFactory();
 
-  public CommGroupDriver(Class<? extends Name<String>> groupName,
+  public CommunicationGroupDriverImpl(Class<? extends Name<String>> groupName,
       ConfigurationSerializer confSerializer, String nameServiceAddr,
       int nameServicePort) {
     super();
@@ -107,12 +107,12 @@ public class CommGroupDriver implements CommunicationGroupDriver {
     JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     String taskId = taskId(taskConf);
     if(taskIds.contains(taskId)){
-      jcb.bindNamedParameter(CommunicationGroupName.class, groupName);
+      jcb.bindNamedParameter(CommunicationGroupName.class, groupName.getName());
       for (Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
         final Class<? extends Name<String>> operName = operSpecEntry.getKey();
         Topology topology = topologies.get(operName);
         JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
-        jcbInner.bindNamedParameter(OperatorName.class, operName);
+        jcbInner.bindNamedParameter(OperatorName.class, operName.getName());
         jcb.bindSetEntry(SerializedOperConfigs.class, confSerializer.toString(jcbInner.build()));
       }
     }

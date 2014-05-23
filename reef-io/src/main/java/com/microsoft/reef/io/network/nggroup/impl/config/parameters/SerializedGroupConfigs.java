@@ -18,10 +18,12 @@ package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 import java.util.Set;
 
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
  * 
  */
+@NamedParameter()
 public class SerializedGroupConfigs implements Name<Set<String>> {
 
 }

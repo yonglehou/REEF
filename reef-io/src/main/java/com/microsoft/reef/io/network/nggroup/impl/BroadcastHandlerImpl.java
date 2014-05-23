@@ -31,16 +31,16 @@ import com.microsoft.wake.Identifier;
 /**
  * 
  */
-public class BroadcastHandler implements com.microsoft.reef.io.network.nggroup.api.BroadcastHandler{
+public class BroadcastHandlerImpl implements com.microsoft.reef.io.network.nggroup.api.BroadcastHandler{
   
-  private static final Logger LOG = Logger.getLogger(BroadcastHandler.class.getName());
+  private static final Logger LOG = Logger.getLogger(BroadcastHandlerImpl.class.getName());
   
   private final ConcurrentMap<String, BlockingQueue<GroupCommMessage>> id2dataQue = new ConcurrentHashMap<>();
   
   private final BlockingQueue<GroupCommMessage> ctrlQue = new LinkedBlockingQueue<>();
 
   @Inject
-  public BroadcastHandler() {  }
+  public BroadcastHandlerImpl() {  }
   
   public synchronized void addNeighbor(final String id) {
     LOG.log(Level.FINEST, "Adding {0} as one of the neighbors from which I can listen from", id);

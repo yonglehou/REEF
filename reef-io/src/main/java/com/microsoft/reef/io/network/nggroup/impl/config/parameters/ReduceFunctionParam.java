@@ -16,10 +16,12 @@
 package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
  * 
  */
-public class ReduceFunction implements Name<com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction> {
+@NamedParameter()
+public class ReduceFunctionParam implements Name<com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction> {
 
 }

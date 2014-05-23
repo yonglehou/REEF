@@ -18,12 +18,12 @@ package com.microsoft.reef.examples.nggroup.bgd;
 import javax.inject.Inject;
 
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.paramters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -55,7 +55,7 @@ public class SlaveTask implements Task {
 
   @Override
   public byte[] call(byte[] memento) throws Exception {
-    boolean stop = false;
+    /*boolean stop = false;
     while(!stop){
       ControlMessages controlMessage = controlMessageBroadcaster.receive();
       switch(controlMessage){
@@ -78,7 +78,7 @@ public class SlaveTask implements Task {
         default:
           break;
       }
-    }
+    }*/
     return null;
   }
 
