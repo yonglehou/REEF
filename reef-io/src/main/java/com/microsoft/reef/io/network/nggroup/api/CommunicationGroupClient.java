@@ -24,7 +24,7 @@ import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
 
 /**
- * 
+ *
  */
 @DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.CommunicationGroupClientImpl.class)
 public interface CommunicationGroupClient {
@@ -43,13 +43,13 @@ public interface CommunicationGroupClient {
    * @return
    */
   Reduce.Receiver getReduceReceiver(Class<? extends Name<String>> operatorName);
-  
+
   /**
    * @param operatorName
    * @return
    */
   Broadcast.Receiver getBroadcastReceiver(Class<? extends Name<String>> operatorName);
-  
+
   /**
    * @param operatorName
    * @return
@@ -68,7 +68,7 @@ public interface CommunicationGroupClient {
    * @return
    */
   GroupChanges synchronize();
-  
+
   /**
    * blocking call that waits for the numberOfReceivers participants
    * of this group to be available and times out after timeout timeunits
@@ -77,7 +77,7 @@ public interface CommunicationGroupClient {
    * @param unit
    */
   void waitFor(int numberOfReceivers, int timeout, TimeUnit unit) throws TimeoutException;
-  
+
   /**
    * blocking call that waits for timeout timeunits
    * @param numberOfReceivers
@@ -90,4 +90,9 @@ public interface CommunicationGroupClient {
    * @return
    */
   Class<? extends Name<String>> getName();
+
+  /**
+   *
+   */
+  void waitForSetup();
 }

@@ -28,8 +28,10 @@ import com.microsoft.reef.io.network.group.operators.Broadcast.Receiver;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.BroadcastHandler;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
@@ -49,7 +51,7 @@ public class BroadcastReceiver<T> implements Receiver<T> {
   private final String selfId;
   private final CommGroupNetworkHandler commGroupNetworkHandler;
   private final Codec<T> dataCodec;
-  private final String parent;
+  private String parent;
   private final Set<String> childIds = new HashSet<>();
   private final NetworkService<GroupCommMessage> netService;
   private final BroadcastHandler handler;
@@ -62,6 +64,7 @@ public class BroadcastReceiver<T> implements Receiver<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
     super();
@@ -73,12 +76,45 @@ public class BroadcastReceiver<T> implements Receiver<T> {
     this.dataCodec = dataCodec;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new BroadcastHandlerImpl();
+    this.handler = new BroadcastHandlerImpl(1,0);
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.parent = null;
     this.sender = new Sender(this.netService);
   }
 
+  @Override
+  public void waitForSetup() {
+    handler.waitForSetup();
+    updateTopology();
+  }
+
+  @Override
+  public void updateTopology() {
+    TopologyUpdateHelper.updateTopology(this, childIds);
+  }
+
+  /**
+   * @param parent the parent to set
+   */
+  @Override
+  public void setParent(final String parent) {
+    this.parent = parent;
+  }
+
+  @Override
+  public Class<? extends Name<String>> getGroupName() {
+    return groupName;
+  }
+
+  @Override
+  public Class<? extends Name<String>> getOperName() {
+    return operName;
+  }
+
+  @Override
+  public OperatorHandler getHandler() {
+    return handler;
+  }
 
   @Override
   public T receive() throws NetworkException, InterruptedException {
@@ -86,13 +122,13 @@ public class BroadcastReceiver<T> implements Receiver<T> {
     final T retVal;
     if (this.parent != null) {
       //Wait for parent to send
-      LOG.log(Level.FINEST, "Waiting for parent: " + parent);
+      LOG.log(Level.INFO, "Waiting for parent: " + parent);
       retVal = dataCodec.decode(handler.get(parent));
-      LOG.log(Level.FINEST, "Received: " + retVal);
+      LOG.log(Level.INFO, "Received: " + retVal);
 
-      LOG.log(Level.FINEST, "Sending " + retVal + " to " + childIds);
+      LOG.log(Level.INFO, "Sending " + retVal + " to " + childIds);
       for (final String child : childIds) {
-        LOG.log(Level.FINEST, "Sending " + retVal + " to child: " + child);
+        LOG.log(Level.INFO, "Sending " + retVal + " to child: " + child);
         sender.send(Utils.bldGCM(groupName, operName, Type.Broadcast, selfId, child, dataCodec.encode(retVal)), child);
       }
     } else {

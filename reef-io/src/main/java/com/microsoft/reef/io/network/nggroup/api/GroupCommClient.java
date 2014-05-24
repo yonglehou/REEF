@@ -23,7 +23,7 @@ import com.microsoft.tang.annotations.Name;
 
 
 /**
- * 
+ *
  */
 @DefaultImplementation(value=com.microsoft.reef.io.network.nggroup.impl.GroupCommClientImpl.class)
 public interface GroupCommClient {
@@ -33,7 +33,12 @@ public interface GroupCommClient {
    * @return
    */
   CommunicationGroupClient getCommunicationGroup(Class<? extends Name<String>> groupName);
-  
+
   void waitForDriver(long timeout, TimeUnit unit) throws TimeoutException;
+
+  /**
+   *
+   */
+  void waitForSetup();
 
 }

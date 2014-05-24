@@ -21,36 +21,35 @@ import com.microsoft.tang.annotations.Name;
 /**
  *
  */
-public interface GroupCommOperator {
+public abstract class AbstractGroupCommOperator implements GroupCommOperator{
 
-  /**
-   *
-   */
-  void updateTopology();
+  @Override
+  public void updateTopology() {
+    throw new UnsupportedOperationException();
+  }
 
-  /**
-   * @param parent
-   */
-  void setParent(String parent);
+  @Override
+  public void setParent(final String parent) {
+    throw new UnsupportedOperationException();
+  }
 
-  /**
-   * @return
-   */
-  OperatorHandler getHandler();
+  @Override
+  public OperatorHandler getHandler() {
+    throw new UnsupportedOperationException();
+  }
 
-  /**
-   *
-   */
-  void waitForSetup();
+  @Override
+  public void waitForSetup() {
+    throw new UnsupportedOperationException();
+  }
 
-  /**
-   * @return
-   */
-  Class<? extends Name<String>> getOperName();
+  @Override
+  public Class<? extends Name<String>> getOperName() {
+    throw new UnsupportedOperationException();
+  }
 
-  /**
-   * @return
-   */
-  Class<? extends Name<String>> getGroupName();
-
+  @Override
+  public Class<? extends Name<String>> getGroupName() {
+    throw new UnsupportedOperationException();
+  }
 }

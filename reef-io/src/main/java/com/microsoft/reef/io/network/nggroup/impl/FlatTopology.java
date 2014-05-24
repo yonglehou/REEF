@@ -18,7 +18,6 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
-import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
@@ -29,40 +28,41 @@ import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.wake.EStage;
 
 /**
- * 
+ *
  */
 public class FlatTopology implements com.microsoft.reef.io.network.nggroup.api.Topology{
-  
-  private TaskGraph taskGraph;
+
+  private final TaskGraph taskGraph;
   private OperatorSpec operatorSpec;
-  
+
 
   public FlatTopology(
-      NetworkService<GroupCommMessage> netService, 
-      Class<? extends Name<String>> groupName, 
-      Class<? extends Name<String>> operName) {
+      final EStage<GroupCommMessage> senderStage,
+      final Class<? extends Name<String>> groupName,
+      final Class<? extends Name<String>> operName) {
     super();
-    this.taskGraph = new TaskGraph(netService,groupName,operName);
+    this.taskGraph = new TaskGraph(senderStage,groupName,operName);
   }
 
   @Override
-  public void setRoot(String senderId) {
+  public void setRoot(final String senderId) {
     taskGraph.setParent(senderId);
   }
 
   @Override
-  public void setOperSpec(OperatorSpec spec) {
+  public void setOperSpec(final OperatorSpec spec) {
     operatorSpec = spec;
   }
 
   @Override
-  public Configuration getConfig(String taskId) {
-    JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
+  public Configuration getConfig(final String taskId) {
+    final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
     if(operatorSpec instanceof BroadcastOperatorSpec){
-      BroadcastOperatorSpec broadcastOperatorSpec = (BroadcastOperatorSpec) operatorSpec;
+      final BroadcastOperatorSpec broadcastOperatorSpec = (BroadcastOperatorSpec) operatorSpec;
       if(taskId.equals(broadcastOperatorSpec.getSenderId())){
         jcb.bindImplementation(GroupCommOperator.class, BroadcastSender.class);
       }
@@ -71,7 +71,7 @@ public class FlatTopology implements com.microsoft.reef.io.network.nggroup.api.T
       }
     }
     if(operatorSpec instanceof ReduceOperatorSpec){
-      ReduceOperatorSpec reduceOperatorSpec = (ReduceOperatorSpec) operatorSpec;
+      final ReduceOperatorSpec reduceOperatorSpec = (ReduceOperatorSpec) operatorSpec;
       jcb.bindNamedParameter(ReduceFunctionParam.class, reduceOperatorSpec.getRedFuncClass());
       if(taskId.equals(reduceOperatorSpec.getReceiverId())){
         jcb.bindImplementation(GroupCommOperator.class, ReduceReceiver.class);
@@ -84,19 +84,19 @@ public class FlatTopology implements com.microsoft.reef.io.network.nggroup.api.T
   }
 
   @Override
-  public void addTask(String taskId) {
+  public void addTask(final String taskId) {
     taskGraph.addChild(taskId);
   }
 
   @Override
-  public void handle(RunningTask runningTask) {
-    String taskId = runningTask.getId();
+  public void handle(final RunningTask runningTask) {
+    final String taskId = runningTask.getId();
     taskGraph.setRunning(taskId);
   }
 
   @Override
-  public void handle(FailedTask failedTask) {
-    String taskId = failedTask.getId();
+  public void handle(final FailedTask failedTask) {
+    final String taskId = failedTask.getId();
     taskGraph.setFailed(taskId);
   }
 

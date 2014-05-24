@@ -15,13 +15,8 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import javax.inject.Inject;
 
-import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
@@ -30,53 +25,54 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsR
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
-import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.util.Utils.Pair;
-import com.microsoft.reef.io.serialization.Codec;
-import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.annotations.Parameter;
 
 /**
- * 
+ *
  */
 public class MasterTask implements Task {
+
   private final CommunicationGroupClient communicationGroupClient;
   private final Broadcast.Sender<ControlMessages> controlMessageBroadcaster;
   private final Broadcast.Sender<Vector> modelBroadcaster;
   private final Reduce.Receiver<Pair<Double, Vector>> lossAndGradientReducer;
   private final Broadcast.Sender<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
   private final Reduce.Receiver<Vector> lineSearchEvaluationsReducer;
-  private int numberOfReceivers;
+  private final int numberOfReceivers;
   private final int dimensions;
   private final boolean ignoreAndContinue = false;
-  
+  private final GroupCommClient groupCommClient;
+
   @Inject
   public MasterTask(
-      GroupCommClient groupCommClient, 
-      @Parameter(NumberOfReceivers.class) int numberOfReceivers,
-      @Parameter(Dimensions.class) int dimensions){
-    communicationGroupClient = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
-    controlMessageBroadcaster = communicationGroupClient.getBroadcastSender(ControlMessageBroadcaster.class);
-    modelBroadcaster = communicationGroupClient.getBroadcastSender(ModelBroadcaster.class);
-    lossAndGradientReducer = communicationGroupClient.getReduceReceiver(LossAndGradientReducer.class);
-    modelAndDescentDirectionBroadcaster = communicationGroupClient.getBroadcastSender(ModelAndDescentDirectionBroadcaster.class);
-    lineSearchEvaluationsReducer = communicationGroupClient.getReduceReceiver(LineSearchEvaluationsReducer.class);
+      final GroupCommClient groupCommClient,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
+      @Parameter(Dimensions.class) final int dimensions){
+    this.groupCommClient = groupCommClient;
+    this.communicationGroupClient = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    this.controlMessageBroadcaster = communicationGroupClient.getBroadcastSender(ControlMessageBroadcaster.class);
+    this.modelBroadcaster = communicationGroupClient.getBroadcastSender(ModelBroadcaster.class);
+    this.lossAndGradientReducer = communicationGroupClient.getReduceReceiver(LossAndGradientReducer.class);
+    this.modelAndDescentDirectionBroadcaster = communicationGroupClient.getBroadcastSender(ModelAndDescentDirectionBroadcaster.class);
+    this.lineSearchEvaluationsReducer = communicationGroupClient.getReduceReceiver(LineSearchEvaluationsReducer.class);
     this.numberOfReceivers = numberOfReceivers;
     this.dimensions = dimensions;
   }
 
   @Override
-  public byte[] call(byte[] memento) throws Exception {
+  public byte[] call(final byte[] memento) throws Exception {
+    groupCommClient.waitForSetup();
     return null;
     /*try{
       communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
-    
+
       ArrayList<Double> losses = new ArrayList<>();
       Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
       Vector model = new DenseVector(dimensions);
@@ -89,7 +85,7 @@ public class MasterTask implements Task {
           communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
           continue;
         }
-        
+
         losses.add(lossAndGradient.first);
         Vector descentDirection = getDescentDirection(lossAndGradient.second);
         controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
@@ -119,7 +115,7 @@ public class MasterTask implements Task {
    * @param model
    * @return
    */
-  private boolean converged(Vector model) {
+  private boolean converged(final Vector model) {
     // TODO Auto-generated method stub
     return false;
   }
@@ -128,7 +124,7 @@ public class MasterTask implements Task {
    * @param lineSearchEvals
    * @return
    */
-  private double findMinEta(Vector lineSearchEvals) {
+  private double findMinEta(final Vector lineSearchEvals) {
     // TODO Auto-generated method stub
     return 0;
   }
@@ -137,7 +133,7 @@ public class MasterTask implements Task {
    * @param second
    * @return
    */
-  private Vector getDescentDirection(Vector second) {
+  private Vector getDescentDirection(final Vector second) {
     // TODO Auto-generated method stub
     return null;
   }

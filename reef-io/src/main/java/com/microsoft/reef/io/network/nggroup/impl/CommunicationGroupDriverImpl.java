@@ -23,10 +23,6 @@ import java.util.Set;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
-import com.microsoft.reef.io.network.Message;
-import com.microsoft.reef.io.network.group.impl.GCMCodec;
-import com.microsoft.reef.io.network.impl.MessagingTransportFactory;
-import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.api.Topology;
@@ -44,45 +40,41 @@ import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.EStage;
 import com.microsoft.wake.IdentifierFactory;
-import com.microsoft.wake.impl.LoggingEventHandler;
 
 /**
- * 
+ *
  */
 public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
-  
+
   private final Class<? extends Name<String>> groupName;
   private final Map<Class<? extends Name<String>>, OperatorSpec> operatorSpecs;
   private final Map<Class<? extends Name<String>>, Topology> topologies;
   private final Set<String> taskIds = new HashSet<>();
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
-  private final NetworkService<GroupCommMessage> netService;
   private final IdentifierFactory idFac = new StringIdentifierFactory();
+  private final EStage<GroupCommMessage> senderStage;
 
-  public CommunicationGroupDriverImpl(Class<? extends Name<String>> groupName,
-      ConfigurationSerializer confSerializer, String nameServiceAddr,
-      int nameServicePort) {
+  public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
+      final ConfigurationSerializer confSerializer, final EStage<GroupCommMessage> senderStage) {
     super();
     this.groupName = groupName;
     this.operatorSpecs = new HashMap<>();
     this.topologies = new HashMap<>();
     this.confSerializer = confSerializer;
-    netService = new NetworkService<>(idFac, 0, nameServiceAddr,
-        nameServicePort, 5, 100, new GCMCodec(),
-        new MessagingTransportFactory(),
-        new LoggingEventHandler<Message<GroupCommMessage>>(),
-        new LoggingEventHandler<Exception>());
+    this.senderStage = senderStage;
   }
 
   @Override
   public CommunicationGroupDriver addBroadcast(
-      Class<? extends Name<String>> operatorName, BroadcastOperatorSpec spec) {
-    if(finalised)
+      final Class<? extends Name<String>> operatorName, final BroadcastOperatorSpec spec) {
+    if(finalised) {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
+    }
     operatorSpecs.put(operatorName, spec);
-    Topology topology = new FlatTopology(netService, groupName, operatorName);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -91,11 +83,12 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
 
   @Override
   public CommunicationGroupDriver addReduce(
-      Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec) {
-    if(finalised)
+      final Class<? extends Name<String>> operatorName, final ReduceOperatorSpec spec) {
+    if(finalised) {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
+    }
     operatorSpecs.put(operatorName, spec);
-    Topology topology = new FlatTopology(netService, groupName, operatorName);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -103,15 +96,15 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   }
 
   @Override
-  public Configuration getConfiguration(Configuration taskConf) {
-    JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
-    String taskId = taskId(taskConf);
+  public Configuration getConfiguration(final Configuration taskConf) {
+    final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
+    final String taskId = taskId(taskConf);
     if(taskIds.contains(taskId)){
       jcb.bindNamedParameter(CommunicationGroupName.class, groupName.getName());
-      for (Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
+      for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
         final Class<? extends Name<String>> operName = operSpecEntry.getKey();
-        Topology topology = topologies.get(operName);
-        JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
+        final Topology topology = topologies.get(operName);
+        final JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
         jcbInner.bindNamedParameter(OperatorName.class, operName.getName());
         jcb.bindSetEntry(SerializedOperConfigs.class, confSerializer.toString(jcbInner.build()));
       }
@@ -125,36 +118,36 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   }
 
   @Override
-  public void addTask(Configuration partialTaskConf) {
-    String taskId = taskId(partialTaskConf);
-    for(Class<? extends Name<String>> operName : operatorSpecs.keySet()){
-      Topology topology = topologies.get(operName);
+  public void addTask(final Configuration partialTaskConf) {
+    final String taskId = taskId(partialTaskConf);
+    for(final Class<? extends Name<String>> operName : operatorSpecs.keySet()){
+      final Topology topology = topologies.get(operName);
       topology.addTask(taskId);
     }
     taskIds.add(taskId);
   }
-  
-  private String taskId(Configuration partialTaskConf){
+
+  private String taskId(final Configuration partialTaskConf){
     try{
-      Injector injector = Tang.Factory.getTang().newInjector(partialTaskConf);
+      final Injector injector = Tang.Factory.getTang().newInjector(partialTaskConf);
       return injector.getNamedInstance(TaskConfigurationOptions.Identifier.class);
-    } catch(InjectionException e){
+    } catch(final InjectionException e){
       throw new RuntimeException("Unable to find task identifier", e);
     }
   }
 
   @Override
-  public void handle(RunningTask runningTask) {
-    for(Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
-      Topology topology = topEntry.getValue();
+  public void handle(final RunningTask runningTask) {
+    for(final Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
+      final Topology topology = topEntry.getValue();
       topology.handle(runningTask);
     }
   }
 
   @Override
-  public void handle(FailedTask failedTask) {
-    for(Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
-      Topology topology = topEntry.getValue();
+  public void handle(final FailedTask failedTask) {
+    for(final Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
+      final Topology topology = topEntry.getValue();
       topology.handle(failedTask);
     }
   }

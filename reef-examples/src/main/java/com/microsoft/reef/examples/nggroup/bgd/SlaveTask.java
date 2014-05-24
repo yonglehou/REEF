@@ -33,7 +33,7 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
 
 /**
- * 
+ *
  */
 public class SlaveTask implements Task {
   private final CommunicationGroupClient communicationGroup;
@@ -42,9 +42,11 @@ public class SlaveTask implements Task {
   private final Reduce.Sender<Pair<Double, Vector>> lossAndGradientReducer;
   private final Broadcast.Receiver<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
   private final Reduce.Sender<Vector> lineSearchEvaluationsReducer;
-  
+  private final GroupCommClient groupCommClient;
+
   @Inject
-  public SlaveTask(GroupCommClient groupCommClient, DataSet<?, ?> dataSet){
+  public SlaveTask(final GroupCommClient groupCommClient, final DataSet<?, ?> dataSet){
+    this.groupCommClient = groupCommClient;
     communicationGroup = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     controlMessageBroadcaster = communicationGroup.getBroadcastReceiver(ControlMessageBroadcaster.class);
     modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
@@ -54,7 +56,8 @@ public class SlaveTask implements Task {
   }
 
   @Override
-  public byte[] call(byte[] memento) throws Exception {
+  public byte[] call(final byte[] memento) throws Exception {
+    groupCommClient.waitForSetup();
     /*boolean stop = false;
     while(!stop){
       ControlMessages controlMessage = controlMessageBroadcaster.receive();
@@ -62,19 +65,19 @@ public class SlaveTask implements Task {
       case Stop:
         stop = true;
         break;
-        
+
       case ComputeGradient:
         Vector model = modelBroadcaster.receive();
         Pair<Double, Vector> lossAndGradient = computeLossAndGradient(model);
         lossAndGradientReducer.send(lossAndGradient);
         break;
-        
+
       case DoLineSearch:
         Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
         Vector lineSearchEvals = lineSearchEvals(modelAndDescentDir);
         lineSearchEvaluationsReducer.send(lineSearchEvals);
         break;
-        
+
         default:
           break;
       }
@@ -86,7 +89,7 @@ public class SlaveTask implements Task {
    * @param modelAndDescentDir
    * @return
    */
-  private Vector lineSearchEvals(Pair<Vector, Vector> modelAndDescentDir) {
+  private Vector lineSearchEvals(final Pair<Vector, Vector> modelAndDescentDir) {
     // TODO Auto-generated method stub
     return null;
   }
@@ -95,7 +98,7 @@ public class SlaveTask implements Task {
    * @param model
    * @return
    */
-  private Pair<Double, Vector> computeLossAndGradient(Vector model) {
+  private Pair<Double, Vector> computeLossAndGradient(final Vector model) {
     // TODO Auto-generated method stub
     return null;
   }

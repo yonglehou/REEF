@@ -13,20 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.wake.EventHandler;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
- *
+ * 
  */
-public interface BroadcastHandler extends EventHandler<GroupCommMessage>, OperatorHandler {
+@NamedParameter(doc="The number of receivers for the operators")
+public class NumberOfReceivers implements Name<Integer> {
 
-  /**
-   * @param parent
-   * @return
-   * @throws InterruptedException
-   */
-  byte[] get(String parent) throws InterruptedException;
 }

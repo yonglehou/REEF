@@ -13,15 +13,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd.parameters;
+package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.tang.annotations.Name;
-import com.microsoft.tang.annotations.NamedParameter;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 
 /**
- * 
+ *
  */
-@NamedParameter(doc="The number of receivers for the operators")
-public class NumberOfReceivers implements Name<Integer> {
+public interface NeighborStatus extends Iterable<String>{
+
+  /**
+   * @param from
+   * @param type
+   */
+  void add(String from, Type type);
+
+  /**
+   * @param neigbor
+   * @return
+   */
+  Type getStatus(String neigbor);
+
+  /**
+   *
+   */
+  void updateDone();
+
+  /**
+   *
+   */
+  void updateProcessed();
 
 }

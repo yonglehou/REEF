@@ -27,8 +27,10 @@ import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.BroadcastHandler;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
@@ -58,6 +60,7 @@ public class BroadcastSender<T> implements Broadcast.Sender<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
     super();
@@ -68,19 +71,59 @@ public class BroadcastSender<T> implements Broadcast.Sender<T> {
     this.dataCodec = dataCodec;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new BroadcastHandlerImpl();
+    this.handler = new BroadcastHandlerImpl(0,numberOfReceivers);
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.sender = new Sender(this.netService);
   }
 
+  @Override
+  public void waitForSetup() {
+    handler.waitForSetup();
+    updateTopology();
+  }
+
+  @Override
+  public void updateTopology() {
+    TopologyUpdateHelper.updateTopology(this, childIds);
+  }
+
+  /**
+   * @return the handler
+   */
+  @Override
+  public OperatorHandler getHandler() {
+    return handler;
+  }
+
+  @Override
+  public void setParent(final String parent) {
+    //Don't do anything
+  }
 
 
   @Override
   public void send(final T element) throws NetworkException,
       InterruptedException {
     for(final String child : childIds){
-      sender.send(Utils.bldGCM(groupName, operName, Type.Broadcast, selfId, child, dataCodec.encode(element)), child);
+      final GroupCommMessage msg = Utils.bldGCM(groupName, operName, Type.Broadcast, selfId, child, dataCodec.encode(element));
+      LOG.info("Group-" + groupName + " oper-" + operName + " sending " + msg.getType() + " msg from " + msg.getSrcid() + " to " + child);
+      sender.send(msg, child);
     }
   }
 
+  /**
+   * @return the groupName
+   */
+  @Override
+  public Class<? extends Name<String>> getGroupName() {
+    return groupName;
+  }
+
+  /**
+   * @return the operName
+   */
+  @Override
+  public Class<? extends Name<String>> getOperName() {
+    return operName;
+  }
 }

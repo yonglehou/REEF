@@ -30,9 +30,11 @@ import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.reef.io.network.nggroup.api.ReduceHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.serialization.Codec;
@@ -65,6 +67,7 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam.class) final ReduceFunction<T> reduceFunction,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
@@ -78,10 +81,44 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
     this.reduceFunction = reduceFunction;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new ReduceHandlerImpl();
+    this.handler = new ReduceHandlerImpl(0,numberOfReceivers);
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.parent = null;
     this.sender = new Sender(this.netService);
+  }
+
+  @Override
+  public void updateTopology() {
+    TopologyUpdateHelper.updateTopology(this, childIds);
+  }
+
+  @Override
+  public void waitForSetup() {
+    handler.waitForSetup();
+    updateTopology();
+  }
+
+  /**
+   * @param parent the parent to set
+   */
+  @Override
+  public void setParent(final String parent) {
+    //Don't do anything
+  }
+
+  @Override
+  public Class<? extends Name<String>> getGroupName() {
+    return groupName;
+  }
+
+  @Override
+  public Class<? extends Name<String>> getOperName() {
+    return operName;
+  }
+
+  @Override
+  public OperatorHandler getHandler() {
+    return handler;
   }
 
   @Override
@@ -92,14 +129,14 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
   @Override
   public T reduce() throws InterruptedException, NetworkException {
     //I am root.
-    LOG.log(Level.FINEST, "I am root " + selfId);
+    LOG.log(Level.INFO, "I am root " + selfId);
     //Wait for children to send
     final List<T> vals = new ArrayList<>(this.childIds.size());
 
     for (final String childIdentifier : this.childIds) {
-      LOG.log(Level.FINEST, "Waiting for child: " + childIdentifier);
+      LOG.log(Level.INFO, "Waiting for child: " + childIdentifier);
       final T cVal = dataCodec.decode(handler.get(childIdentifier));
-      LOG.log(Level.FINEST, "Received: " + cVal);
+      LOG.log(Level.INFO, "Received: " + cVal);
       if (cVal != null) {
         vals.add(cVal);
       }
@@ -107,7 +144,7 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
 
     //Reduce the received values
     final T redVal = reduceFunction.apply(vals);
-    LOG.log(Level.FINEST, "Local Reduced value: " + redVal);
+    LOG.log(Level.INFO, "Local Reduced value: " + redVal);
     return redVal;
   }
 

@@ -18,15 +18,16 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.io.network.nggroup.api.NeighborStatus;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
-import com.microsoft.wake.Identifier;
 
 /**
  *
@@ -40,56 +41,68 @@ public class ReduceHandlerImpl implements
 
   private final BlockingQueue<GroupCommMessage> ctrlQue = new LinkedBlockingQueue<>();
 
-  @Inject
-  public ReduceHandlerImpl() {  }
+  private final int numChildrenToWaitFor;
 
+  private final CountDownLatch parentLatch;
+
+  private final CountDownLatch childLatch;
+
+  @Inject
+  public ReduceHandlerImpl(final int numParentsToWaitFor, final int numChildrenToWaitFor) {
+    this.numChildrenToWaitFor = numChildrenToWaitFor;
+    this.parentLatch = new CountDownLatch(numParentsToWaitFor);
+    this.childLatch = new CountDownLatch(numChildrenToWaitFor);
+
+  }
+
+  @Override
   public synchronized void addNeighbor(final String id) {
-    LOG.log(Level.FINEST, "Adding {0} as one of the neighbors from which I can listen from", id);
+    LOG.log(Level.INFO, "Adding {0} as one of the neighbors from which I can listen from", id);
     this.id2dataQue.put(id, new LinkedBlockingQueue<GroupCommMessage>());
   }
 
-  public synchronized void removeNeighbor(final Identifier id) {
-    LOG.log(Level.FINEST, "Removing {0} as one of the neighbors from which I can listen from", id);
+  @Override
+  public synchronized void removeNeighbor(final String id) {
+    LOG.log(Level.INFO, "Removing {0} as one of the neighbors from which I can listen from", id);
     this.id2dataQue.remove(id);
   }
 
   @Override
-  public void onNext(final GroupCommMessage msg) {
-    final String srcId = msg.getSrcid();
-    LOG.log(
-        Level.FINE,
-        "Message for " + msg.getDestid() + "  operator "
-            + msg.getOperatorname() + " in group-" + msg.getGroupname()
-            + " from " + srcId);
-    try{
-      switch(msg.getType()){
-      case ParentAdd:
-      case ChildAdd:
-        this.ctrlQue.put(msg);
-        break;
-      case SourceDead:
-        this.ctrlQue.put(msg);
-        default:
-          if(this.id2dataQue.containsKey(srcId)){
-            this.id2dataQue.get(srcId).put(msg);
-          }
-      }
-    }catch(final InterruptedException e){
-      throw new RuntimeException("Could not put " + msg + " into the queue", e);
+  public void waitForSetup(){
+    try {
+      LOG.info("Waiting for parent add");
+      parentLatch.await();
+      LOG.info("Parent added");
+      LOG.info("Waiting for " + numChildrenToWaitFor + " children to be added");
+      childLatch.await();
+      LOG.info(numChildrenToWaitFor + " children added");
+    } catch (final InterruptedException e) {
+      throw new RuntimeException("Interrupted while waiting for setup of Broadcast operator", e);
     }
+  }
+
+
+  @Override
+  public synchronized void onNext(final GroupCommMessage msg) {
+    HandlerHelper.handleMsg(msg, this);
+  }
+
+  @Override
+  public NeighborStatus updateTopology(){
+    return HandlerHelper.updateTopology(this);
   }
 
   @Override
   public byte[] get(final String id) throws InterruptedException {
-    LOG.log(Level.FINEST, "\t\tget from {0}", id);
+    LOG.log(Level.INFO, "\t\tget from {0}", id);
 
     if (!this.id2dataQue.containsKey(id)) {
       throw new RuntimeException("Can't receive from a non-child");
     }
 
     final GroupCommMessage gcm = id2dataQue.get(id).take();
-    if (gcm.getType() == Type.SourceDead) {
-      LOG.log(Level.WARNING, "\t\tGot src dead msg from driver. Terminating wait and returning null");
+    if (gcm.getType() == Type.ChildDead) {
+      LOG.log(Level.WARNING, "\t\tGot child dead msg from driver. Terminating wait and returning null");
       return null;
     }
 
@@ -98,6 +111,26 @@ public class ReduceHandlerImpl implements
     } else {
       return null;
     }
+  }
+
+  @Override
+  public ConcurrentMap<String, BlockingQueue<GroupCommMessage>> getDataQue() {
+    return id2dataQue;
+  }
+
+  @Override
+  public BlockingQueue<GroupCommMessage> getCtrlQue() {
+    return ctrlQue;
+  }
+
+  @Override
+  public CountDownLatch getParentLatch() {
+    return parentLatch;
+  }
+
+  @Override
+  public CountDownLatch getChildLatch() {
+    return childLatch;
   }
 
 }

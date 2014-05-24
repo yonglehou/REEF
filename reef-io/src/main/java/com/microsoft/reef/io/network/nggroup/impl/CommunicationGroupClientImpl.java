@@ -34,6 +34,7 @@ import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
@@ -60,6 +61,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public CommunicationGroupClientImpl(
         @Parameter(CommunicationGroupName.class) final String groupName,
         @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
+        @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
         final GroupCommNetworkHandler groupCommNetworkHandler,
         @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
         final ConfigurationSerializer configSerializer,
@@ -70,15 +72,17 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     this.groupName = Utils.getClass(groupName);
     this.groupCommNetworkHandler = groupCommNetworkHandler;
     this.operators = new HashMap<>();
-    for (final String operatorConfigStr : operatorConfigs) {
-      try {
+    try {
+      final CommGroupNetworkHandler commGroupNetworkHandler = Tang.Factory.getTang().newInjector().getInstance(CommGroupNetworkHandler.class);
+      this.groupCommNetworkHandler.register(this.groupName, commGroupNetworkHandler);
+
+      for (final String operatorConfigStr : operatorConfigs) {
+
         final Configuration operatorConfig = configSerializer.fromString(operatorConfigStr);
         final Injector injector = Tang.Factory.getTang().newInjector(operatorConfig);
 
-        final CommGroupNetworkHandler commGroupNetworkHandler = injector.getInstance(CommGroupNetworkHandler.class);
-        this.groupCommNetworkHandler.register(this.groupName, commGroupNetworkHandler);
-
         injector.bindVolatileParameter(CommunicationGroupName.class, groupName);
+        injector.bindVolatileParameter(NumberOfReceivers.class, numberOfReceivers);
         injector.bindVolatileInstance(CommGroupNetworkHandler.class, commGroupNetworkHandler);
         injector.bindVolatileInstance(NetworkService.class, netService);
 
@@ -86,11 +90,11 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
         final String operName = injector.getNamedInstance(OperatorName.class);
         this.operators.put(Utils.getClass(operName), operator);
         LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
-      } catch (BindException | IOException e) {
-        throw new RuntimeException("Unable to deserialize operator config", e);
-      } catch (final InjectionException e) {
-        throw new RuntimeException("Unable to deserialize operator config", e);
       }
+    } catch (BindException | IOException e) {
+      throw new RuntimeException("Unable to deserialize operator config", e);
+    } catch (final InjectionException e) {
+      throw new RuntimeException("Unable to deserialize operator config", e);
     }
   }
 
@@ -154,6 +158,16 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   @Override
   public Class<? extends Name<String>> getName() {
     return groupName;
+  }
+
+  @Override
+  public void waitForSetup() {
+    for(final Map.Entry<Class<? extends Name<String>>, GroupCommOperator> operEntry : operators.entrySet()) {
+      final Class<? extends Name<String>> operName = operEntry.getKey();
+      LOG.info("Waiting for set up of operator: " + operName.getName());
+      final GroupCommOperator operator = operEntry.getValue();
+      operator.waitForSetup();
+    }
   }
 
 }

@@ -17,77 +17,53 @@ package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.microsoft.reef.exception.evaluator.NetworkException;
-import com.microsoft.reef.io.network.Connection;
-import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
-import com.microsoft.reef.io.network.util.StringIdentifierFactory;
 import com.microsoft.tang.annotations.Name;
-import com.microsoft.wake.EventHandler;
-import com.microsoft.wake.Identifier;
-import com.microsoft.wake.IdentifierFactory;
-import com.microsoft.wake.impl.ThreadPoolStage;
+import com.microsoft.wake.EStage;
 
 /**
- * 
+ *
  */
 public class TaskGraph{
+  /**
+   *
+   */
+  private static final byte[] emptyByteArr = new byte[0];
   private static final Logger LOG = Logger.getLogger(TaskGraph.class.getName());
   private TaskNode root;
   private final Set<TaskNode> leaves = new HashSet<>();
-  private final NetworkService<GroupCommMessage> netService;
-  private final ThreadPoolStage<GroupCommMessage> senderStage;
-  private final IdentifierFactory idFac = new StringIdentifierFactory();
+  private final EStage<GroupCommMessage> senderStage;
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
-  
+
   /**
    * @param nameServiceAddr
    * @param nameServicePort
    */
   public TaskGraph(
-          NetworkService<GroupCommMessage> netService, 
-          Class<? extends Name<String>> groupName, 
-          Class<? extends Name<String>> operName
+          final EStage<GroupCommMessage> senderStage,
+          final Class<? extends Name<String>> groupName,
+          final Class<? extends Name<String>> operName
       ) {
-    this.netService = netService;
+    this.senderStage = senderStage;
     this.groupName = groupName;
     this.operName = operName;
-    this.senderStage = new ThreadPoolStage<>(
-        "SrcCtrlMsgSender", new EventHandler<GroupCommMessage>() {
-      @Override
-      public void onNext(GroupCommMessage srcCtrlMsg) {
 
-        final Identifier id = TaskGraph.this.idFac.getNewInstance(srcCtrlMsg.getDestid());
-
-        final Connection<GroupCommMessage> link = TaskGraph.this.netService.newConnection(id);
-        try {
-          link.open();
-          LOG.log(Level.FINEST, "Sending source ctrl msg {0} for {1} to {2}",
-              new Object[] { srcCtrlMsg.getType(), srcCtrlMsg.getSrcid(), id });
-          link.write(srcCtrlMsg);
-        } catch (final NetworkException e) {
-          LOG.log(Level.WARNING, "Unable to send ctrl task msg to parent " + id, e);
-          throw new RuntimeException("Unable to send ctrl task msg to parent " + id, e);
-        }
-      }
-    }, 5);
   }
 
-  public synchronized void setParent(String rootId){
+  public synchronized void setParent(final String rootId){
     this.root = createTaskNode(rootId);
-    for (TaskNode leaf : leaves) {
+    for (final TaskNode leaf : leaves) {
       root.addChild(leaf);
       leaf.setParent(root);
     }
   }
-  
-  public synchronized void addChild(String leafId){
+
+  public synchronized void addChild(final String leafId){
     final TaskNode task = createTaskNode(leafId);
     if(root!=null){
       task.setParent(root);
@@ -95,30 +71,31 @@ public class TaskGraph{
     }
     leaves.add(task);
   }
-  
-  public synchronized void removeLeaf(String leafId){
+
+  public synchronized void removeLeaf(final String leafId){
     leaves.remove(createTaskNode(leafId));
   }
-  
+
   /**
    * @param senderId
    * @return
    */
-  private TaskNode createTaskNode(String taskId) {
+  private TaskNode createTaskNode(final String taskId) {
     return new TaskNodeImpl(taskId);
   }
 
   /**
    * @param taskId
    */
-  public synchronized void setRunning(String taskId) {
-    TaskNode task = findTask(taskId);
+  public synchronized void setRunning(final String taskId) {
+    final TaskNode task = findTask(taskId);
     task.setRunning(true);
     final String rootId = root.taskId();
     if(taskId.equals(rootId)){
-      for (TaskNode child : leaves) {
-        if(!child.isRunning())
+      for (final TaskNode child : leaves) {
+        if(!child.isRunning()) {
           continue;
+        }
         sendSrcAdd(rootId, child.taskId());
       }
     }
@@ -129,21 +106,23 @@ public class TaskGraph{
     }
   }
 
-  private void sendSrcAdd(final String parentId, String childId) {
-    senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ChildAdd, childId, parentId, new byte[0]));
-    senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ParentAdd, parentId, childId, new byte[0]));
+  private void sendSrcAdd(final String parentId, final String childId) {
+    senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ChildAdd, childId, parentId, emptyByteArr));
+    senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ParentAdd, parentId, childId, emptyByteArr));
   }
 
   /**
    * @param taskId
    * @return
    */
-  private synchronized TaskNode findTask(String taskId) {
-    if(root.taskId().equals(taskId))
+  private synchronized TaskNode findTask(final String taskId) {
+    if(root.taskId().equals(taskId)) {
       return root;
-    for(TaskNode task : leaves){
-      if(task.taskId().equals(taskId))
+    }
+    for(final TaskNode task : leaves){
+      if(task.taskId().equals(taskId)) {
         return task;
+      }
     }
     return null;
   }
@@ -151,8 +130,22 @@ public class TaskGraph{
   /**
    * @param taskId
    */
-  public synchronized void setFailed(String taskId) {
-    // TODO Auto-generated method stub
-    
+  public synchronized void setFailed(final String taskId) {
+    final TaskNode task = findTask(taskId);
+    task.setRunning(false);
+    final String rootId = root.taskId();
+    if(taskId.equals(rootId)){
+      for (final TaskNode child : leaves) {
+        if(!child.isRunning()) {
+          continue;
+        }
+        senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ParentDead, taskId, child.taskId(), emptyByteArr));
+      }
+    }
+    else {
+      if(root!=null && root.isRunning()) {
+        senderStage.onNext(Utils.bldGCM(groupName, operName, Type.ChildDead, taskId, rootId, emptyByteArr));
+      }
+    }
   }
 }

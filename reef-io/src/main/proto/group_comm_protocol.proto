@@ -4,7 +4,21 @@ option java_generic_services = true;
 option java_generate_equals_and_hash = true;
 
 message GroupCommMessage {
-  enum Type { Scatter=1; Gather=2; Broadcast=3; Reduce=4; AllGather=5; AllReduce=6; ReduceScatter=7; SourceDead=8; SourceAdd=9; ParentAdd=10; ChildAdd=11; }
+  enum Type { 
+  	Scatter=1; 
+  	Gather=2; 
+  	Broadcast=3; 
+  	Reduce=4; 
+  	AllGather=5; 
+  	AllReduce=6; 
+  	ReduceScatter=7; 
+  	SourceDead=8; 
+  	SourceAdd=9; 
+  	ParentAdd=10; 
+  	ChildAdd=11;
+  	ParentDead=12; 
+  	ChildDead=13;
+  }
 
   // identifies which field is filled in
   required Type type = 1;

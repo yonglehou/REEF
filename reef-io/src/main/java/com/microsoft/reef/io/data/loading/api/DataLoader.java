@@ -61,19 +61,19 @@ public class DataLoader {
   private final SingleThreadStage<EvaluatorRequest> resourceRequestStage;
   private final ResourceRequestHandler resourceRequestHandler;
 
-  
+
   @Inject
   public DataLoader(
       final Clock clock,
-      final EvaluatorRequestor requestor, 
+      final EvaluatorRequestor requestor,
       final DataLoadingService dataLoadingService,
       @Parameter(DataLoadingRequestBuilder.DataLoadingEvaluatorMemoryMB.class) final int memoryMB,
       @Parameter(DataLoadingRequestBuilder.DataLoadingComputeRequest.class) final String serializedComputeRequest
       ) {
     clock.scheduleAlarm(30000, new EventHandler<Alarm>() {
-      
+
       @Override
-      public void onNext(Alarm arg0) {
+      public void onNext(final Alarm arg0) {
         LOG.log(Level.FINE,"Received Alarm");
       }
     });
@@ -92,7 +92,7 @@ public class DataLoader {
     }
     resourceRequestStage.onNext(getDataLoadingRequest());
   }
-  
+
   private EvaluatorRequest getDataLoadingRequest() {
     return EvaluatorRequest.newBuilder()
             .setNumber(dataLoadingService.getNumberOfPartitions())
@@ -103,12 +103,12 @@ public class DataLoader {
   public class StartHandler implements EventHandler<StartTime> {
 
     @Override
-    public void onNext(StartTime startTime) {
+    public void onNext(final StartTime startTime) {
       LOG.log(Level.INFO,"StartTime: " + startTime.toString());
       resourceRequestHandler.releaseResourceRequestGate();
     }
   }
-  
+
   public class EvaluatorAllocatedHandler implements EventHandler<AllocatedEvaluator> {
 
     @Override
@@ -127,18 +127,18 @@ public class DataLoader {
             LOG.log(Level.FINE,"All Compute requests satisfied. Releasing gate");
             resourceRequestHandler.releaseResourceRequestGate();
           }
-        } catch (BindException e) {
+        } catch (final BindException e) {
           throw new RuntimeException("Unable to bind context id for Compute request", e);
         }
-        
+
       }
       else{
-        LOG.log(Level.FINE,"Getting evals for data loading");
-        final Configuration dataLoadConfiguration = dataLoadingService.getConfiguration(allocatedEvaluator);
         LOG.log(Level.FINE,"Submitting data loading context");
-        allocatedEvaluator.submitContext(dataLoadConfiguration);
+        final Configuration contextConfiguration = dataLoadingService.getContextConfiguration(allocatedEvaluator);
+        final Configuration serviceConfiguration = dataLoadingService.getServiceConfiguration(allocatedEvaluator);
+        allocatedEvaluator.submitContextAndService(contextConfiguration,serviceConfiguration);
       }
     }
   }
-  
+
 }

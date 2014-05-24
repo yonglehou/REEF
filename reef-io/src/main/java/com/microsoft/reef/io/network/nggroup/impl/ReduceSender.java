@@ -30,9 +30,11 @@ import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.reef.io.network.nggroup.api.ReduceHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
@@ -53,7 +55,7 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
   private final CommGroupNetworkHandler commGroupNetworkHandler;
   private final Codec<T> dataCodec;
   private final ReduceFunction<T> reduceFunction;
-  private final String parent;
+  private String parent;
   private final Set<String> childIds = new HashSet<>();
   private final NetworkService<GroupCommMessage> netService;
   private final ReduceHandler handler;
@@ -66,6 +68,7 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam.class) final ReduceFunction<T> reduceFunction,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
@@ -79,20 +82,57 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
     this.reduceFunction = reduceFunction;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new ReduceHandlerImpl();
+    this.handler = new ReduceHandlerImpl(1,0);
     this.commGroupNetworkHandler.register(this.operName,handler);
     this.parent = null;
     this.sender = new Sender(this.netService);
   }
 
+
+  @Override
+  public void updateTopology() {
+    TopologyUpdateHelper.updateTopology(this, childIds);
+  }
+
+  @Override
+  public void waitForSetup() {
+    handler.waitForSetup();
+    updateTopology();
+  }
+
+  /**
+   * @param parent the parent to set
+   */
+  @Override
+  public void setParent(final String parent) {
+    this.parent = parent;
+  }
+
+  @Override
+  public Class<? extends Name<String>> getGroupName() {
+    return groupName;
+  }
+
+
+  @Override
+  public Class<? extends Name<String>> getOperName() {
+    return operName;
+  }
+
+
+  @Override
+  public OperatorHandler getHandler() {
+    return handler;
+  }
+
   @Override
   public void send(final T myData) throws NetworkException,
       InterruptedException {
-    LOG.log(Level.FINEST, "I am Reduce sender" + selfId);
+    LOG.log(Level.INFO, "I am Reduce sender" + selfId);
     final List<T> vals = new ArrayList<>(this.childIds.size() + 1);
     vals.add(myData);
     for (final String childId : childIds) {
-      LOG.log(Level.FINEST, "Waiting for child: " + childId);
+      LOG.log(Level.INFO, "Waiting for child: " + childId);
       final Optional<T> valueFromChild = getValueForChild(childId);
       if (valueFromChild.isPresent()) {
         vals.add(valueFromChild.get());
@@ -101,7 +141,7 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
 
     //Reduce the received values
     final T reducedValue = reduceFunction.apply(vals);
-    LOG.log(Level.FINEST, "Sending " + reducedValue + " to parent: " + parent);
+    LOG.log(Level.INFO, "Sending " + reducedValue + " to parent: " + parent);
     assert (parent != null);
     sender.send(Utils.bldGCM(groupName, operName, Type.Reduce, selfId, parent, dataCodec.encode(reducedValue)), parent);
   }
@@ -113,9 +153,9 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
    */
   private Optional<T> getValueForChild(final String childId)
       throws InterruptedException {
-    LOG.log(Level.FINEST, "Waiting for child: " + childId);
+    LOG.log(Level.INFO, "Waiting for child: " + childId);
     final T valueFromChild = dataCodec.decode(handler.get(childId));
-    LOG.log(Level.FINEST, "Received: " + valueFromChild);
+    LOG.log(Level.INFO, "Received: " + valueFromChild);
     final Optional<T> returnValue;
     if (valueFromChild != null) {
       returnValue = Optional.of(valueFromChild);
@@ -130,5 +170,4 @@ public class ReduceSender<T> implements Reduce.Sender<T> {
   public ReduceFunction<T> getReduceFunction() {
     return reduceFunction;
   }
-
 }

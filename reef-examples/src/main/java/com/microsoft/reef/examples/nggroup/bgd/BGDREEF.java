@@ -45,19 +45,19 @@ import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
 
 /**
- * 
+ *
  */
 @ClientSide
 public class BGDREEF {
   private static final Logger LOG = Logger.getLogger(BGDREEF.class.getName());
-  
+
   private static final String NUM_LOCAL_THREADS = "20";
-  
+
   /**
    * Number of milliseconds to wait for the job to complete.
    */
   private static final int JOB_TIMEOUT = 10 * 60 * 1000;
-  
+
   /**
    * Command line parameter = true to run locally, or false to run on YARN.
    */
@@ -72,7 +72,7 @@ public class BGDREEF {
   private static boolean local;
   private static String input;
   private static int dimensions;
-  
+
   private static Configuration parseCommandLine(final String[] aArgs) {
     final JavaConfigurationBuilder cb = Tang.Factory.getTang().newConfigurationBuilder();
     try {
@@ -109,12 +109,12 @@ public class BGDREEF {
   private static Configuration getRunTimeConfiguration() throws BindException {
     final Configuration runtimeConfiguration;
     if (local) {
-      LOG.log(Level.INFO, "Running Data Loading demo on the local runtime");
+      LOG.log(Level.INFO, "Running BGD using nggroup API on the local runtime");
       runtimeConfiguration = LocalRuntimeConfiguration.CONF
           .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, NUM_LOCAL_THREADS)
           .build();
     } else {
-      LOG.log(Level.INFO, "Running Data Loading demo on YARN");
+      LOG.log(Level.INFO, "Running BGD using nggroup API on YARN");
       runtimeConfiguration = YarnClientConfiguration.CONF.build();
     }
     return runtimeConfiguration;
@@ -126,7 +126,7 @@ public class BGDREEF {
     final JobConf jobConf = new JobConf();
     jobConf.setInputFormat(TextInputFormat.class);
     TextInputFormat.addInputPath(jobConf, new Path(input));
-    EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
+    final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
         .setNumber(1)
         .setMemory(512)
         .build();
@@ -139,7 +139,8 @@ public class BGDREEF {
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
             .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
-//            .set(DriverConfiguration.ON_TASK_COMPLETED, LineCounter.TaskCompletedHandler.class)
+            .set(DriverConfiguration.ON_TASK_RUNNING, BGDDriver.RunningTaskHandler.class)
+            .set(DriverConfiguration.ON_TASK_FAILED, BGDDriver.FailedTaskHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))
         .build();
 
@@ -147,7 +148,7 @@ public class BGDREEF {
         .newConfigurationBuilder(dataLoadConfiguration)
         .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
         .build();
-    
+
     LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));
 
     return DriverLauncher.getLauncher(runtimeConfiguration).run(mergedDriverConfiguration, JOB_TIMEOUT);
@@ -159,7 +160,7 @@ public class BGDREEF {
    * @throws BindException
    * @throws InjectionException
    */
-  public static void main(String[] args) throws InjectionException, BindException {
+  public static void main(final String[] args) throws InjectionException, BindException {
     final Configuration commandLineConf = parseCommandLine(args);
     storeCommandLineArgs(commandLineConf);
     final Configuration runtimeConfiguration = getRunTimeConfiguration();

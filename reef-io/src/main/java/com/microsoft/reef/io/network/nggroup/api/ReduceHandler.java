@@ -21,7 +21,7 @@ import com.microsoft.wake.EventHandler;
 /**
  *
  */
-public interface ReduceHandler extends EventHandler<GroupCommMessage> {
+public interface ReduceHandler extends EventHandler<GroupCommMessage>, OperatorHandler {
   /**
    * @param parent
    * @return

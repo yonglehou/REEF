@@ -15,9 +15,11 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.logging.Logger;
+
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.Connection;
-import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
+import com.microsoft.reef.io.network.group.operators.AbstractGroupCommOperator;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.util.StringIdentifierFactory;
@@ -25,18 +27,21 @@ import com.microsoft.wake.Identifier;
 import com.microsoft.wake.IdentifierFactory;
 
 /**
- * 
+ *
  */
-public class Sender implements GroupCommOperator{
+public class Sender extends AbstractGroupCommOperator{
+
+  private static final Logger LOG = Logger.getLogger(Sender.class.getName());
+
   private final NetworkService<GroupCommMessage> netService;
   private final IdentifierFactory idFac = new StringIdentifierFactory();
-  
-  public Sender(NetworkService<GroupCommMessage> netService){
+
+  public Sender(final NetworkService<GroupCommMessage> netService){
     this.netService = netService;
   }
-  
+
   public void send(final GroupCommMessage msg, final String child) throws NetworkException{
-    Identifier childId = idFac.getNewInstance(child);
+    final Identifier childId = idFac.getNewInstance(child);
     final Connection<GroupCommMessage> link = netService.newConnection(childId);
     link.open();
     link.write(msg);
