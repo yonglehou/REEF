@@ -13,20 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.impl;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.wake.EventHandler;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 
 /**
  *
  */
-public interface BroadcastHandler extends EventHandler<GroupCommMessage>, OperatorHandler {
+public class ChildNodeStruct extends NodeStructImpl {
 
-  /**
-   * @param parent
-   * @return
-   * @throws InterruptedException
-   */
-  byte[] get(String parent) throws InterruptedException;
+  private static final Logger LOG = Logger.getLogger(ChildNodeStruct.class.getName());
+
+
+  public ChildNodeStruct(final String id) {
+    super(id);
+  }
+
+  @Override
+  public boolean checkDead(final GroupCommMessage gcm)  {
+    if (gcm.getType() == Type.ChildDead) {
+      LOG.log(Level.WARNING, "\t\tGot child dead msg from driver. Terminating wait and returning null");
+      return true;
+    }
+    return false;
+  }
+
 }

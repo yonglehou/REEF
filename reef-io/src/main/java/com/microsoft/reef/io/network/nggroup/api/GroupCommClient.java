@@ -35,10 +35,4 @@ public interface GroupCommClient {
   CommunicationGroupClient getCommunicationGroup(Class<? extends Name<String>> groupName);
 
   void waitForDriver(long timeout, TimeUnit unit) throws TimeoutException;
-
-  /**
-   *
-   */
-  void waitForSetup();
-
 }

@@ -34,7 +34,6 @@ import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
@@ -61,7 +60,6 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public CommunicationGroupClientImpl(
         @Parameter(CommunicationGroupName.class) final String groupName,
         @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
-        @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
         final GroupCommNetworkHandler groupCommNetworkHandler,
         @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
         final ConfigurationSerializer configSerializer,
@@ -82,7 +80,6 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
         final Injector injector = Tang.Factory.getTang().newInjector(operatorConfig);
 
         injector.bindVolatileParameter(CommunicationGroupName.class, groupName);
-        injector.bindVolatileParameter(NumberOfReceivers.class, numberOfReceivers);
         injector.bindVolatileInstance(CommGroupNetworkHandler.class, commGroupNetworkHandler);
         injector.bindVolatileInstance(NetworkService.class, netService);
 
@@ -159,15 +156,4 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public Class<? extends Name<String>> getName() {
     return groupName;
   }
-
-  @Override
-  public void waitForSetup() {
-    for(final Map.Entry<Class<? extends Name<String>>, GroupCommOperator> operEntry : operators.entrySet()) {
-      final Class<? extends Name<String>> operName = operEntry.getKey();
-      LOG.info("Waiting for set up of operator: " + operName.getName());
-      final GroupCommOperator operator = operEntry.getValue();
-      operator.waitForSetup();
-    }
-  }
-
 }

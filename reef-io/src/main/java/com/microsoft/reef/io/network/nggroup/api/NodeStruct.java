@@ -16,16 +16,26 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-public interface ReduceHandler extends EventHandler<GroupCommMessage>, OperatorHandler {
+public interface NodeStruct {
+
   /**
-   * @param parent
    * @return
-   * @throws InterruptedException
    */
-  byte[] get(String parent) throws InterruptedException;
+  String getId();
+
+  /**
+   * @param msg
+   */
+  void addData(GroupCommMessage msg);
+
+  /**
+   * @return
+   *
+   */
+  byte[] getData();
+
 }

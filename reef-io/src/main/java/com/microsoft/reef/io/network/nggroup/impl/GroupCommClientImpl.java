@@ -29,7 +29,6 @@ import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedGroupConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.Configuration;
@@ -53,7 +52,6 @@ public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggrou
   public GroupCommClientImpl(
       @Parameter(SerializedGroupConfigs.class) final Set<String> groupConfigs,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
-      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       final GroupCommNetworkHandler groupCommNetworkHandler,
       final NetworkService<GroupCommMessage> netService,
       final ConfigurationSerializer configSerializer
@@ -66,7 +64,6 @@ public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggrou
 
         final Injector injector = Tang.Factory.getTang().newInjector(groupConfig);
         injector.bindVolatileParameter(TaskConfigurationOptions.Identifier.class, taskId);
-        injector.bindVolatileParameter(NumberOfReceivers.class, numberOfReceivers);
         injector.bindVolatileInstance(GroupCommNetworkHandler.class, groupCommNetworkHandler);
         injector.bindVolatileInstance(NetworkService.class, netService);
 
@@ -95,15 +92,4 @@ public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggrou
     // TODO Auto-generated method stub
 
   }
-
-  @Override
-  public void waitForSetup() {
-    for (final Map.Entry<Class<? extends Name<String>>, CommunicationGroupClient> commGroupEntry : communicationGroups.entrySet()) {
-      final Class<? extends Name<String>> groupName = commGroupEntry.getKey();
-      LOG.info("Waiting for set-up of comm group: " + groupName.getName() );
-      final CommunicationGroupClient commGroupClient = commGroupEntry.getValue();
-      commGroupClient.waitForSetup();
-    }
-  }
-
 }

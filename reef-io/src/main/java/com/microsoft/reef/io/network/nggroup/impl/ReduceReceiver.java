@@ -16,50 +16,46 @@
 package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
-import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
-import com.microsoft.reef.io.network.nggroup.api.ReduceHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
+import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.Identifier;
 
 /**
  *
  */
-public class ReduceReceiver<T> implements Reduce.Receiver<T> {
+public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<GroupCommMessage> {
+
   private static final Logger LOG = Logger.getLogger(ReduceReceiver.class.getName());
 
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
-  private final String selfId;
   private final CommGroupNetworkHandler commGroupNetworkHandler;
   private final Codec<T> dataCodec;
-  private final ReduceFunction<T> reduceFunction;
-  private final String parent;
-  private final Set<String> childIds = new HashSet<>();
   private final NetworkService<GroupCommMessage> netService;
-  private final ReduceHandler handler;
   private final Sender sender;
+  private final ReduceFunction<T> reduceFunction;
 
+  private final OperatorTopology topology;
 
   @Inject
   public ReduceReceiver(
@@ -67,48 +63,21 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
-      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
       @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam.class) final ReduceFunction<T> reduceFunction,
+      @Parameter(DriverIdentifier.class) final String driverId,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
     super();
-    LOG.info(operName + " has CommGroupHandler-"
-        + commGroupNetworkHandler.toString());
+    LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
     this.operName = Utils.getClass(operName);
-    this.selfId = selfId;
     this.dataCodec = dataCodec;
     this.reduceFunction = reduceFunction;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new ReduceHandlerImpl(0,numberOfReceivers);
-    this.commGroupNetworkHandler.register(this.operName,handler);
-    this.parent = null;
     this.sender = new Sender(this.netService);
-  }
-
-  @Override
-  public void updateTopology() {
-    TopologyUpdateHelper.updateTopology(this, childIds);
-  }
-
-  @Override
-  public void waitForSetup() {
-    handler.waitForSetup();
-    updateTopology();
-  }
-
-  /**
-   * @param parent the parent to set
-   */
-  @Override
-  public void setParent(final String parent) {
-    //Don't do anything
-  }
-
-  @Override
-  public Class<? extends Name<String>> getGroupName() {
-    return groupName;
+    this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
+    this.commGroupNetworkHandler.register(this.operName,this);
   }
 
   @Override
@@ -117,29 +86,28 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
   }
 
   @Override
-  public OperatorHandler getHandler() {
-    return handler;
+  public Class<? extends Name<String>> getGroupName() {
+    return groupName;
   }
 
   @Override
-  public ReduceFunction<T> getReduceFunction() {
-    return reduceFunction;
+  public void onNext(final GroupCommMessage msg) {
+    topology.handle(msg);
   }
 
   @Override
   public T reduce() throws InterruptedException, NetworkException {
+    // TODO Auto-generated method stub
     //I am root.
-    LOG.log(Level.INFO, "I am root " + selfId);
+    LOG.log(Level.INFO, "I am Reduce receiver root " + topology.getSelfId() + " for oper: " + operName + " in group "+ groupName);
+    LOG.info("Waiting for children");
     //Wait for children to send
-    final List<T> vals = new ArrayList<>(this.childIds.size());
+    final List<byte[]> valBytes = topology.recvFromChildren();
 
-    for (final String childIdentifier : this.childIds) {
-      LOG.log(Level.INFO, "Waiting for child: " + childIdentifier);
-      final T cVal = dataCodec.decode(handler.get(childIdentifier));
-      LOG.log(Level.INFO, "Received: " + cVal);
-      if (cVal != null) {
-        vals.add(cVal);
-      }
+
+    final List<T> vals = new ArrayList<T>(valBytes.size());
+    for (final byte[] data : valBytes) {
+      vals.add(dataCodec.decode(data));
     }
 
     //Reduce the received values
@@ -152,6 +120,11 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T> {
   public T reduce(final List<? extends Identifier> order)
       throws InterruptedException, NetworkException {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public ReduceFunction<T> getReduceFunction() {
+    return reduceFunction;
   }
 
 }

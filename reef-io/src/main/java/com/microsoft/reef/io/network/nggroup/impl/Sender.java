@@ -40,9 +40,10 @@ public class Sender extends AbstractGroupCommOperator{
     this.netService = netService;
   }
 
-  public void send(final GroupCommMessage msg, final String child) throws NetworkException{
-    final Identifier childId = idFac.getNewInstance(child);
-    final Connection<GroupCommMessage> link = netService.newConnection(childId);
+  public void send(final GroupCommMessage msg) throws NetworkException{
+    final String dest = msg.getDestid();
+    final Identifier destId = idFac.getNewInstance(dest);
+    final Connection<GroupCommMessage> link = netService.newConnection(destId);
     link.open();
     link.write(msg);
   }

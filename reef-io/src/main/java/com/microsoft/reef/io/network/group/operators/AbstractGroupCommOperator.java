@@ -15,33 +15,12 @@
  */
 package com.microsoft.reef.io.network.group.operators;
 
-import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.tang.annotations.Name;
 
 /**
  *
  */
 public abstract class AbstractGroupCommOperator implements GroupCommOperator{
-
-  @Override
-  public void updateTopology() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void setParent(final String parent) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public OperatorHandler getHandler() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void waitForSetup() {
-    throw new UnsupportedOperationException();
-  }
 
   @Override
   public Class<? extends Name<String>> getOperName() {

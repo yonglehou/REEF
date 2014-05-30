@@ -36,13 +36,13 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsR
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;

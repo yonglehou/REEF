@@ -57,31 +57,30 @@ public class SlaveTask implements Task {
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    groupCommClient.waitForSetup();
-    /*boolean stop = false;
+    boolean stop = false;
     while(!stop){
-      ControlMessages controlMessage = controlMessageBroadcaster.receive();
+      final ControlMessages controlMessage = controlMessageBroadcaster.receive();
       switch(controlMessage){
       case Stop:
         stop = true;
         break;
 
       case ComputeGradient:
-        Vector model = modelBroadcaster.receive();
-        Pair<Double, Vector> lossAndGradient = computeLossAndGradient(model);
+        final Vector model = modelBroadcaster.receive();
+        final Pair<Double, Vector> lossAndGradient = computeLossAndGradient(model);
         lossAndGradientReducer.send(lossAndGradient);
         break;
 
       case DoLineSearch:
-        Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
-        Vector lineSearchEvals = lineSearchEvals(modelAndDescentDir);
+        final Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
+        final Vector lineSearchEvals = lineSearchEvals(modelAndDescentDir);
         lineSearchEvaluationsReducer.send(lineSearchEvals);
         break;
 
         default:
           break;
       }
-    }*/
+    }
     return null;
   }
 

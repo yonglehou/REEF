@@ -18,6 +18,12 @@ message GroupCommMessage {
   	ChildAdd=11;
   	ParentDead=12; 
   	ChildDead=13;
+  	ParentAdded=14; 
+  	ChildAdded=15;
+  	ParentRemoved=16; 
+  	ChildRemoved=17;
+  	TopologySetup=18;
+  	UpdateTopology=19;
   }
 
   // identifies which field is filled in

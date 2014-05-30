@@ -15,44 +15,44 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.impl.NetworkService;
-import com.microsoft.reef.io.network.nggroup.api.BroadcastHandler;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
-import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
+import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
+import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-public class BroadcastSender<T> implements Broadcast.Sender<T> {
-  private static final Logger LOG = Logger.getLogger(BroadcastSender.class.getName());
+public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<GroupCommMessage> {
+
+  private static final Logger LOG = Logger.getLogger(BroadcastSender.class
+      .getName());
+
 
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
-  private final String selfId;
   private final CommGroupNetworkHandler commGroupNetworkHandler;
   private final Codec<T> dataCodec;
-  private final Set<String> childIds = new HashSet<>();
   private final NetworkService<GroupCommMessage> netService;
-  private final BroadcastHandler handler;
   private final Sender sender;
+
+  private final OperatorTopology topology;
 
   @Inject
   public BroadcastSender(
@@ -60,70 +60,41 @@ public class BroadcastSender<T> implements Broadcast.Sender<T> {
       @Parameter(OperatorName.class) final String operName,
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
-      @Parameter(NumberOfReceivers.class) final int numberOfReceivers,
+      @Parameter(DriverIdentifier.class) final String driverId,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService) {
     super();
     LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
     this.operName = Utils.getClass(operName);
-    this.selfId = selfId;
     this.dataCodec = dataCodec;
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
-    this.handler = new BroadcastHandlerImpl(0,numberOfReceivers);
-    this.commGroupNetworkHandler.register(this.operName,handler);
     this.sender = new Sender(this.netService);
-  }
-
-  @Override
-  public void waitForSetup() {
-    handler.waitForSetup();
-    updateTopology();
-  }
-
-  @Override
-  public void updateTopology() {
-    TopologyUpdateHelper.updateTopology(this, childIds);
-  }
-
-  /**
-   * @return the handler
-   */
-  @Override
-  public OperatorHandler getHandler() {
-    return handler;
-  }
-
-  @Override
-  public void setParent(final String parent) {
-    //Don't do anything
+    this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
+    this.commGroupNetworkHandler.register(this.operName,this);
   }
 
 
   @Override
-  public void send(final T element) throws NetworkException,
-      InterruptedException {
-    for(final String child : childIds){
-      final GroupCommMessage msg = Utils.bldGCM(groupName, operName, Type.Broadcast, selfId, child, dataCodec.encode(element));
-      LOG.info("Group-" + groupName + " oper-" + operName + " sending " + msg.getType() + " msg from " + msg.getSrcid() + " to " + child);
-      sender.send(msg, child);
-    }
+  public Class<? extends Name<String>> getOperName() {
+    return operName;
   }
 
-  /**
-   * @return the groupName
-   */
   @Override
   public Class<? extends Name<String>> getGroupName() {
     return groupName;
   }
 
-  /**
-   * @return the operName
-   */
   @Override
-  public Class<? extends Name<String>> getOperName() {
-    return operName;
+  public void onNext(final GroupCommMessage msg) {
+    topology.handle(msg);
   }
+
+  @Override
+  public void send(final T element) throws NetworkException, InterruptedException {
+    LOG.info("I am Broadcast sender root " + topology.getSelfId() + " for oper: " + operName + " in group " + groupName);
+    topology.sendToChildren(dataCodec.encode(element),Type.Broadcast);
+  }
+
 }

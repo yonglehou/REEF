@@ -15,8 +15,13 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 import javax.inject.Inject;
 
+import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
@@ -25,12 +30,15 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsR
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
+import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.impl.config.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.util.Utils.Pair;
+import com.microsoft.reef.io.serialization.Codec;
+import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.annotations.Parameter;
 
@@ -68,18 +76,16 @@ public class MasterTask implements Task {
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    groupCommClient.waitForSetup();
-    return null;
-    /*try{
-      communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
+    try{
+//      communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
 
-      ArrayList<Double> losses = new ArrayList<>();
-      Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
-      Vector model = new DenseVector(dimensions);
+      final ArrayList<Double> losses = new ArrayList<>();
+      final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
+      final Vector model = new DenseVector(dimensions);
       while(true){
         controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
         modelBroadcaster.send(model);
-        Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
+        final Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
         GroupChanges changes = communicationGroupClient.synchronize();
         if(changes.exist() && !ignoreAndContinue){
           communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
@@ -87,16 +93,16 @@ public class MasterTask implements Task {
         }
 
         losses.add(lossAndGradient.first);
-        Vector descentDirection = getDescentDirection(lossAndGradient.second);
+        final Vector descentDirection = getDescentDirection(lossAndGradient.second);
         controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
         modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
-        Vector lineSearchEvals = lineSearchEvaluationsReducer.reduce();
+        final Vector lineSearchEvals = lineSearchEvaluationsReducer.reduce();
         changes = communicationGroupClient.synchronize();
         if(changes.exist() && !ignoreAndContinue){
           communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
           continue;
         }
-        double minEta = findMinEta(lineSearchEvals);
+        final double minEta = findMinEta(lineSearchEvals);
         descentDirection.scale(minEta);
         model.add(descentDirection);
         if(converged(model)){
@@ -105,10 +111,10 @@ public class MasterTask implements Task {
         }
       }
       return lossCodec.encode(losses);
-    }catch(TimeoutException e){
+    }catch(final TimeoutException e){
       controlMessageBroadcaster.send(ControlMessages.Stop);
       throw e;
-    }*/
+    }
   }
 
   /**

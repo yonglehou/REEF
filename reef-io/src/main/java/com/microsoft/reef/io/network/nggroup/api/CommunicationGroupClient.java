@@ -90,9 +90,4 @@ public interface CommunicationGroupClient {
    * @return
    */
   Class<? extends Name<String>> getName();
-
-  /**
-   *
-   */
-  void waitForSetup();
 }

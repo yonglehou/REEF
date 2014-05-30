@@ -15,53 +15,51 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
+import java.util.List;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 
 /**
  *
  */
-public interface OperatorHandler {
-  /**
-   * @return
-   */
-  NeighborStatus updateTopology();
+public interface OperatorTopology {
 
   /**
-   *
+   * @param msg
    */
-  void waitForSetup();
+  void handle(GroupCommMessage msg);
+
 
   /**
-   * @return
+   * @param data
+   * @param msgType
    */
-  CountDownLatch getParentLatch();
+  void sendToChildren(byte[] data, Type msgType);
 
-  /**
-   * @return
-   */
-  CountDownLatch getChildLatch();
 
   /**
    * @return
    */
-  BlockingQueue<GroupCommMessage> getCtrlQue();
+  byte[] recvFromParent();
+
 
   /**
    * @return
    */
-  ConcurrentMap<String, BlockingQueue<GroupCommMessage>> getDataQue();
+  List<byte[]> recvFromChildren();
+
 
   /**
-   * @param srcId
+   * @return
    */
-  void addNeighbor(String srcId);
+  String getSelfId();
+
 
   /**
-   * @param srcId
+   * @param encode
+   * @param reduce
    */
-  void removeNeighbor(String srcId);
+  void sendToParent(byte[] encode, Type reduce);
+
 }

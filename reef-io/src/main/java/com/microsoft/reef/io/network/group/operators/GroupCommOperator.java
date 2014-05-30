@@ -15,33 +15,12 @@
  */
 package com.microsoft.reef.io.network.group.operators;
 
-import com.microsoft.reef.io.network.nggroup.api.OperatorHandler;
 import com.microsoft.tang.annotations.Name;
 
 /**
  *
  */
 public interface GroupCommOperator {
-
-  /**
-   *
-   */
-  void updateTopology();
-
-  /**
-   * @param parent
-   */
-  void setParent(String parent);
-
-  /**
-   * @return
-   */
-  OperatorHandler getHandler();
-
-  /**
-   *
-   */
-  void waitForSetup();
 
   /**
    * @return
