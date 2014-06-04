@@ -17,12 +17,12 @@ package com.microsoft.reef.io.network.nggroup.impl;
 
 import com.google.protobuf.ByteString;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupMessageBody;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupMessageBody;
 import com.microsoft.tang.annotations.Name;
 
 /**
- * 
+ *
  */
 public class Utils {
 
@@ -32,13 +32,13 @@ public class Utils {
    * @param broadcast
    * @param from
    * @param to
-   * @param data 
+   * @param data
    * @return
    */
   public static GroupCommMessage bldGCM(
-      Class<? extends Name<String>> groupName,
-      Class<? extends Name<String>> operName, Type msgType, String from,
-      String to, byte[]... data) {
+      final Class<? extends Name<String>> groupName,
+      final Class<? extends Name<String>> operName, final Type msgType, final String from,
+      final String to, final byte[]... data) {
     final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
     GCMBuilder.setGroupname(groupName.getName());
     GCMBuilder.setOperatorname(operName.getName());
@@ -55,11 +55,23 @@ public class Utils {
     return GCMBuilder.build();
   }
 
-  public static Class<? extends Name<String>> getClass(String className){
+  public static Class<? extends Name<String>> getClass(final String className){
     try {
       return (Class<? extends Name<String>>) Class.forName(className);
-    } catch (ClassNotFoundException e) {
+    } catch (final ClassNotFoundException e) {
       throw new RuntimeException("Unable to find class " + className, e);
     }
+  }
+
+  public static String simpleName(final Class<?> className) {
+    if(className!=null) {
+      return className.getSimpleName();
+    } else {
+      return "NULL";
+    }
+  }
+
+  public static void main(final String[] args) {
+    System.out.println(Utils.class.getSimpleName());
   }
 }

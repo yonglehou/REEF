@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -74,9 +73,11 @@ public class OperatorTopologyImpl implements OperatorTopology {
 
       @Override
       public void onNext(final GroupCommMessage msg) {
-        // TODO Auto-generated method stub
         assert(msg.getType()==Type.UpdateTopology);
+        LOG.info(getQualifiedName() + "BaseTopologyUpdateStage received " + msg.getType() + " msg");
         synchronized (topologyLock) {
+          LOG.info(getQualifiedName() + "Acquired topoLock");
+          LOG.info(getQualifiedName() + "Releasing topoLoackAcquired CDL");
           topologyLockAquired.countDown();
           updateBaseTopology();
         }
@@ -87,32 +88,37 @@ public class OperatorTopologyImpl implements OperatorTopology {
   @Override
   public void handle(final GroupCommMessage msg) {
     final String srcId = msg.getSrcid();
-    LOG.log(
-        Level.FINE,
-        "Message for " + msg.getDestid() + " operator "
-            + msg.getOperatorname() + " in group-" + msg.getGroupname()
-            + " from " + srcId);
+    LOG.info(getQualifiedName() + "Handling " + msg.getType() + " msg from " + srcId);
     try {
       switch(msg.getType()) {
       case UpdateTopology:
         baseTopologyUpdateStage.onNext(msg);
         topologyLockAquired.await();
+        LOG.info(getQualifiedName() + "topoLockAquired CDL released. Resetting it to new CDL");
         //reset the Count Down Latch for the next update
         topologyLockAquired = new CountDownLatch(1);
         sendAckToDriver(msg);
         break;
 
+      case TopologySetup:
+        LOG.info(getQualifiedName() + "Adding to deltas queue");
+        deltas.put(msg);
+        break;
+
       case ParentAdd:
       case ChildAdd:
+        LOG.info(getQualifiedName() + "Adding to deltas queue");
         deltas.put(msg);
         break;
 
       case ParentDead:
       case ChildDead:
+        LOG.info(getQualifiedName() + "Adding to deltas queue");
         deltas.put(msg);
         if(effectiveTopology!=null) {
+          LOG.info(getQualifiedName() + "Adding as data msg to non-null effective topology struct with msg");
           effectiveTopology.addAsData(msg);
-          effectiveTopology.update(msg);
+//          effectiveTopology.update(msg);
         }else {
           LOG.warning("Received a death message before effective topology was setup");
         }
@@ -121,6 +127,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
         default:
           //Data msg
           if(effectiveTopology!=null) {
+            LOG.info(getQualifiedName() + "Non-null effectiveTopo.addAsData(msg)");
             effectiveTopology.addAsData(msg);
           }else {
             LOG.warning("Received a data message before effective topology was setup");
@@ -129,6 +136,11 @@ public class OperatorTopologyImpl implements OperatorTopology {
     } catch (final InterruptedException e) {
       throw new RuntimeException("InterruptedException while trying to put ctrl msg into delta queue", e);
     }
+  }
+
+  @Override
+  public void initialize() {
+    refreshEffectiveTopology();
   }
 
   @Override
@@ -160,8 +172,11 @@ public class OperatorTopologyImpl implements OperatorTopology {
   }
 
   private void refreshEffectiveTopology() {
+    LOG.info(getQualifiedName() + "Refreshing effTopo");
     synchronized (topologyLock) {
+      LOG.info(getQualifiedName() + "Acquired topoLock");
       if(baseTopology==null) {
+        LOG.info(getQualifiedName() + "Base topo null. Creating");
         createBaseTopology();
       }
       assert(baseTopology!=null);
@@ -169,8 +184,10 @@ public class OperatorTopologyImpl implements OperatorTopology {
       assert(effectiveTopology!=null);
       final Set<GroupCommMessage> deletionDeltas = new HashSet<>();
       copyDeletionDeltas(deletionDeltas);
+      LOG.info(getQualifiedName() + "Updating effective topology struct with deletion msgs");
       effectiveTopology.update(deletionDeltas);
     }
+    LOG.info(getQualifiedName() + "Relinquished topoLock");
   }
 
   /**
@@ -183,15 +200,19 @@ public class OperatorTopologyImpl implements OperatorTopology {
 
   private void updateBaseTopology() {
     try {
+      LOG.info(getQualifiedName() + "Updating base topology and setting dirty bit");
       baseTopology.setChanges(true);
       while(true) {
+        LOG.info(getQualifiedName() + "Waiting for ctrl msgs");
         final GroupCommMessage msg = deltas.take();
+        LOG.info(getQualifiedName() + "Got " + msg.getType() + " msg from " + msg.getSrcid());
         if(msg.getType()==Type.TopologySetup) {
           if(!deltas.isEmpty()) {
             LOG.warning("The delta msg queue is not empty when I got " + msg.getType() + ". Something is fishy!!!!");
           }
           break;
         }
+        LOG.info(getQualifiedName() + "Updating basetopology struct");
         baseTopology.update(msg);
         sendAckToDriver(msg);
       }
@@ -205,21 +226,28 @@ public class OperatorTopologyImpl implements OperatorTopology {
    */
   private void sendAckToDriver(final GroupCommMessage msg) {
     try {
+      LOG.info(getQualifiedName() + "Sending ACK to driver " + driverId);
+      final String srcId = msg.getSrcid();
       switch(msg.getType()) {
       case UpdateTopology:
+        LOG.info(getQualifiedName() + "Sending TopologySetup msg to driver");
         sender.send(Utils.bldGCM(groupName, operName, Type.TopologySetup, selfId, driverId, emptyByte));
         break;
       case ParentAdd:
-        sender.send(Utils.bldGCM(groupName, operName, Type.ParentAdded, selfId, driverId, emptyByte));
+        LOG.info(getQualifiedName() + "Seding ParentAdded msg for " + srcId);
+        sender.send(Utils.bldGCM(groupName, operName, Type.ParentAdded, selfId, srcId, emptyByte), driverId);
         break;
       case ParentDead:
-        sender.send(Utils.bldGCM(groupName, operName, Type.ParentRemoved, selfId, driverId, emptyByte));
+        LOG.info(getQualifiedName() + "Sending ParentRemoved msg for " + srcId);
+        sender.send(Utils.bldGCM(groupName, operName, Type.ParentRemoved, selfId, srcId, emptyByte), driverId);
         break;
       case ChildAdd:
-        sender.send(Utils.bldGCM(groupName, operName, Type.ChildAdded, selfId, driverId, emptyByte));
+        LOG.info(getQualifiedName() + "Sending ChildAdded msg for " + srcId);
+        sender.send(Utils.bldGCM(groupName, operName, Type.ChildAdded, selfId, srcId, emptyByte), driverId);
         break;
       case ChildDead:
-        sender.send(Utils.bldGCM(groupName, operName, Type.ChildRemoved, selfId, driverId, emptyByte));
+        LOG.info(getQualifiedName() + "Sending ChildRemoved msg for " + srcId);
+        sender.send(Utils.bldGCM(groupName, operName, Type.ChildRemoved, selfId, srcId, emptyByte), driverId);
         break;
       default:
         LOG.warning("Received a non control message for acknowledgement");
@@ -234,9 +262,15 @@ public class OperatorTopologyImpl implements OperatorTopology {
    *
    */
   private void updateEffTopologyFromBaseTopology() {
+    LOG.info(getQualifiedName() + "Updaing effective topology");
     if(baseTopology.hasChanges()) {
+      LOG.info(getQualifiedName() + "Basetopo has changes");
       effectiveTopology = createFrom(baseTopology);
+      LOG.info(getQualifiedName() + "Making basetopology tidy");
       baseTopology.setChanges(false);
+    }
+    else {
+      LOG.info(getQualifiedName() + "Base topology has no changes");
     }
   }
 
@@ -245,6 +279,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
    * @return
    */
   private OperatorTopologyStruct createFrom(final OperatorTopologyStruct topology) {
+    LOG.info(getQualifiedName() + "Creating effective topology from base");
     return new OperatorTopologyStructImpl(topology);
   }
 
@@ -255,6 +290,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
     for(final GroupCommMessage msg : deltas) {
       final Type msgType = msg.getType();
       if(msgType==Type.ChildDead || msgType==Type.ParentDead) {
+        LOG.info(getQualifiedName() + "Adding src dead msg from " + msg.getSrcid());
         deletionDeltas.add(msg);
       }
     }
@@ -263,6 +299,13 @@ public class OperatorTopologyImpl implements OperatorTopology {
   @Override
   public String getSelfId() {
     return selfId;
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + selfId + " - ";
   }
 
 }

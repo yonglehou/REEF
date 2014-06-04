@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
@@ -42,6 +43,8 @@ import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.IdentifierFactory;
+import com.microsoft.wake.impl.SingleThreadStage;
+import com.microsoft.wake.impl.SyncStage;
 
 /**
  *
@@ -56,11 +59,35 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private final ConfigurationSerializer confSerializer;
   private final IdentifierFactory idFac = new StringIdentifierFactory();
   private final EStage<GroupCommMessage> senderStage;
+  private final String driverId;
+  private final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler;
+  private final EStage<RunningTask> commGroupRunningTaskStage;
+  private final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler;
+  private final EStage<FailedTask> commGroupFailedTaskStage;
+  private final BroadcastingEventHandler<Configuration> commGroupAddTaskHandler;
+  private final EStage<Configuration> commGroupAddTaskStage;
+  private final CommGroupMessageHandler commGroupMessageHandler;
+  private final EStage<GroupCommMessage> commGroupMessageStage;
+
 
   public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
-      final ConfigurationSerializer confSerializer, final EStage<GroupCommMessage> senderStage) {
+      final ConfigurationSerializer confSerializer,
+      final EStage<GroupCommMessage> senderStage,
+      final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler,
+      final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler,
+      final CommGroupMessageHandler commGroupMessageHandler,
+      final String driverId) {
     super();
     this.groupName = groupName;
+    this.commGroupAddTaskHandler = new BroadcastingEventHandler<>();
+    this.commGroupAddTaskStage = new SingleThreadStage<>("CommGroupAddTaskStage", commGroupAddTaskHandler, 10);
+    this.commGroupRunningTaskHandler = commGroupRunningTaskHandler;
+    this.commGroupRunningTaskStage = new SingleThreadStage<>("CommGroupRunningTaskStage", commGroupRunningTaskHandler, 10);
+    this.commGroupFailedTaskHandler = commGroupFailedTaskHandler;
+    this.commGroupFailedTaskStage = new SingleThreadStage<>("CommGroupFailedTaskStage", commGroupFailedTaskHandler, 10);
+    this.commGroupMessageHandler = commGroupMessageHandler;
+    this.commGroupMessageStage = new SyncStage<>("CommGroupMessageStage", commGroupMessageHandler);
+    this.driverId = driverId;
     this.operatorSpecs = new HashMap<>();
     this.topologies = new HashMap<>();
     this.confSerializer = confSerializer;
@@ -74,10 +101,22 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName);
+    /*final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
+    topology.setRoot(spec.getSenderId());
+    topology.setOperSpec(spec);
+    topologies.put(operatorName, topology);*/
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
+    final TopologyAddTaskHandler topologyAddTaskHandler = new TopologyAddTaskHandler(topology);
+    commGroupAddTaskHandler.addHandler(topologyAddTaskHandler);
+    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(topology);
+    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
+    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
+    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
+    commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
     return this;
   }
 
@@ -88,10 +127,22 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName);
+    /*final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
+    topology.setRoot(spec.getReceiverId());
+    topology.setOperSpec(spec);
+    topologies.put(operatorName, topology);*/
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
+    final TopologyAddTaskHandler topologyAddTaskHandler = new TopologyAddTaskHandler(topology);
+    commGroupAddTaskHandler.addHandler(topologyAddTaskHandler);
+    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(topology);
+    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
+    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
+    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
+    commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
     return this;
   }
 
@@ -100,11 +151,13 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     final String taskId = taskId(taskConf);
     if(taskIds.contains(taskId)){
+      jcb.bindNamedParameter(DriverIdentifier.class, driverId);
       jcb.bindNamedParameter(CommunicationGroupName.class, groupName.getName());
       for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
         final Class<? extends Name<String>> operName = operSpecEntry.getKey();
         final Topology topology = topologies.get(operName);
         final JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
+        jcbInner.bindNamedParameter(DriverIdentifier.class, driverId);
         jcbInner.bindNamedParameter(OperatorName.class, operName.getName());
         jcb.bindSetEntry(SerializedOperConfigs.class, confSerializer.toString(jcbInner.build()));
       }
@@ -120,10 +173,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   @Override
   public void addTask(final Configuration partialTaskConf) {
     final String taskId = taskId(partialTaskConf);
-    for(final Class<? extends Name<String>> operName : operatorSpecs.keySet()){
+    commGroupAddTaskStage.onNext(partialTaskConf);
+    /*for(final Class<? extends Name<String>> operName : operatorSpecs.keySet()){
       final Topology topology = topologies.get(operName);
       topology.addTask(taskId);
-    }
+    }*/
     taskIds.add(taskId);
   }
 
@@ -134,6 +188,12 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     } catch(final InjectionException e){
       throw new RuntimeException("Unable to find task identifier", e);
     }
+  }
+
+  @Override
+  public void handle(final GroupCommMessage gcm) {
+    final Class<? extends Name<String>> operName = Utils.getClass(gcm.getOperatorname());
+    topologies.get(operName).handle(gcm);
   }
 
   @Override

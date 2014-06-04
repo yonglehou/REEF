@@ -20,13 +20,8 @@ import javax.inject.Inject;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
-import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.util.Utils.Pair;
@@ -38,10 +33,10 @@ import com.microsoft.reef.task.Task;
 public class SlaveTask implements Task {
   private final CommunicationGroupClient communicationGroup;
   private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
-  private final Broadcast.Receiver<Vector> modelBroadcaster;
-  private final Reduce.Sender<Pair<Double, Vector>> lossAndGradientReducer;
-  private final Broadcast.Receiver<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
-  private final Reduce.Sender<Vector> lineSearchEvaluationsReducer;
+//  private final Broadcast.Receiver<Vector> modelBroadcaster;
+//  private final Reduce.Sender<Pair<Double, Vector>> lossAndGradientReducer;
+//  private final Broadcast.Receiver<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
+//  private final Reduce.Sender<Vector> lineSearchEvaluationsReducer;
   private final GroupCommClient groupCommClient;
 
   @Inject
@@ -49,10 +44,10 @@ public class SlaveTask implements Task {
     this.groupCommClient = groupCommClient;
     communicationGroup = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     controlMessageBroadcaster = communicationGroup.getBroadcastReceiver(ControlMessageBroadcaster.class);
-    modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
-    lossAndGradientReducer = communicationGroup.getReduceSender(LossAndGradientReducer.class);
-    modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(ModelAndDescentDirectionBroadcaster.class);
-    lineSearchEvaluationsReducer = communicationGroup.getReduceSender(LineSearchEvaluationsReducer.class);
+//    modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
+//    lossAndGradientReducer = communicationGroup.getReduceSender(LossAndGradientReducer.class);
+//    modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(ModelAndDescentDirectionBroadcaster.class);
+//    lineSearchEvaluationsReducer = communicationGroup.getReduceSender(LineSearchEvaluationsReducer.class);
   }
 
   @Override
@@ -65,7 +60,7 @@ public class SlaveTask implements Task {
         stop = true;
         break;
 
-      case ComputeGradient:
+      /*case ComputeGradient:
         final Vector model = modelBroadcaster.receive();
         final Pair<Double, Vector> lossAndGradient = computeLossAndGradient(model);
         lossAndGradientReducer.send(lossAndGradient);
@@ -75,7 +70,7 @@ public class SlaveTask implements Task {
         final Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
         final Vector lineSearchEvals = lineSearchEvals(modelAndDescentDir);
         lineSearchEvaluationsReducer.send(lineSearchEvals);
-        break;
+        break;*/
 
         default:
           break;
@@ -98,8 +93,7 @@ public class SlaveTask implements Task {
    * @return
    */
   private Pair<Double, Vector> computeLossAndGradient(final Vector model) {
-    // TODO Auto-generated method stub
-    return null;
+    return new Pair<Double, Vector>(0.0,model);
   }
 
 }

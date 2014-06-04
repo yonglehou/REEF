@@ -62,7 +62,7 @@ public abstract class NodeStructImpl implements NodeStruct {
     }
 
     if(gcm.getMsgsCount()==1) {
-      return gcm.getMsgs(0).toByteArray();
+      return gcm.getMsgs(0).getData().toByteArray();
     } else {
       return null;
     }

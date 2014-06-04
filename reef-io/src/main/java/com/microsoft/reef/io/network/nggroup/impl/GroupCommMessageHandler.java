@@ -13,35 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.reef.io.network.nggroup.impl.CommGroupNetworkHandlerImpl;
+import java.util.HashMap;
+import java.util.Map;
+
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-@DefaultImplementation(value=CommGroupNetworkHandlerImpl.class)
-public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> {
+public class GroupCommMessageHandler implements EventHandler<GroupCommMessage> {
 
-  /**
-   * @param operName
-   * @param handler
-   */
-  void register(Class<? extends Name<String>> operName, EventHandler<GroupCommMessage> handler);
+  Map<Class<? extends Name<String>>, CommGroupMessageHandler> commGroupMessageHandlers = new HashMap<>();
 
-  /**
-   * @param operName
-   */
-  void addTopologyUpdateElement(Class<? extends Name<String>> operName);
+  public void addCommGroupMessageHandler(final Class<? extends Name<String>> groupName, final CommGroupMessageHandler handler) {
+    commGroupMessageHandlers.put(groupName, handler);
+  }
 
-  /**
-   * @param operName
-   *
-   */
-  void waitForTopologyUpdate(Class<? extends Name<String>> operName);
-
+  @Override
+  public void onNext(final GroupCommMessage msg) {
+    final Class<? extends Name<String>> groupName = Utils.getClass(msg.getGroupname());
+    commGroupMessageHandlers.get(groupName).onNext(msg);
+  }
 }

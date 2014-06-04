@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,6 +27,7 @@ import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
@@ -53,6 +55,10 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
 
   private final OperatorTopology topology;
 
+  private final AtomicBoolean init = new AtomicBoolean(false);
+
+  private final CommunicationGroupClient commGroupClient;
+
   @Inject
   public BroadcastReceiver(
       @Parameter(CommunicationGroupName.class) final String groupName,
@@ -61,7 +67,8 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
       @Parameter(DriverIdentifier.class) final String driverId,
       final CommGroupNetworkHandler commGroupNetworkHandler,
-      final NetworkService<GroupCommMessage> netService
+      final NetworkService<GroupCommMessage> netService,
+      final CommunicationGroupClient commGroupClient
       ) {
     super();
     LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
@@ -73,6 +80,12 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
     this.sender = new Sender(this.netService);
     this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
     this.commGroupNetworkHandler.register(this.operName,this);
+    this.commGroupClient = commGroupClient;
+  }
+
+  @Override
+  public void initialize() {
+    topology.initialize();
   }
 
   @Override
@@ -92,6 +105,9 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
 
   @Override
   public T receive() throws NetworkException, InterruptedException {
+    if(init.compareAndSet(false, true)) {
+      commGroupClient.initialize();
+    }
     //I am an intermediate node or leaf.
     LOG.info("I am Broadcast recevier " + topology.getSelfId() + " for oper: " + operName + " in group " + groupName);
     final T retVal;
@@ -103,7 +119,9 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
       LOG.warning("Received null. Perhaps one of my ancestors is dead.");
       retVal = null;
     } else {
+      LOG.info("Using " + dataCodec.getClass().getSimpleName() + " as codec");
       retVal = dataCodec.decode(data);
+      LOG.info("Decoded msg successfully");
     }
 
     LOG.log(Level.INFO, "Received: " + (retVal==null ? "NULL" : retVal));

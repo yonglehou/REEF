@@ -15,8 +15,9 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -57,6 +58,8 @@ import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.Identifier;
 import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.impl.LoggingEventHandler;
+import com.microsoft.wake.impl.SingleThreadStage;
+import com.microsoft.wake.impl.SyncStage;
 import com.microsoft.wake.impl.ThreadPoolStage;
 import com.microsoft.wake.remote.NetUtils;
 
@@ -79,7 +82,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
   private final String nameServiceAddr;
   private final int nameServicePort;
 
-  private final Set<CommunicationGroupDriver> commGroupDrivers = new HashSet<>();
+  private final Map<Class<? extends Name<String>>, CommunicationGroupDriver> commGroupDrivers = new HashMap<>();
 
   private final ConfigurationSerializer confSerializer;
 
@@ -87,16 +90,50 @@ public class GroupCommDriverImpl implements GroupCommDriver {
 
   private final EStage<GroupCommMessage> senderStage;
 
+
+  private final String driverId;
+  private final BroadcastingEventHandler<RunningTask> groupCommRunningTaskHandler;
+  private final EStage<RunningTask> groupCommRunningTaskStage;
+  private final BroadcastingEventHandler<FailedTask> groupCommFailedTaskHandler;
+  private final EStage<FailedTask> groupCommFailedTaskStage;
+  private final GroupCommMessageHandler groupCommMessageHandler;
+  private final EStage<GroupCommMessage> groupCommMessageStage;
+
   @Inject
   public GroupCommDriverImpl(final ConfigurationSerializer confSerializer,
       @Parameter(DriverIdentifier.class) final String driverId){
+    this.driverId = driverId;
     this.nameServiceAddr = NetUtils.getLocalAddress();
     this.nameServicePort = nameService.getPort();
     this.confSerializer = confSerializer;
+    this.groupCommRunningTaskHandler = new BroadcastingEventHandler<>();
+    this.groupCommRunningTaskStage = new SingleThreadStage<>("GroupCommRunningTaskStage", groupCommRunningTaskHandler, 10);
+    this.groupCommFailedTaskHandler = new BroadcastingEventHandler<>();
+    this.groupCommFailedTaskStage = new SingleThreadStage<>("GroupCommFailedTaskStage", groupCommFailedTaskHandler, 10);
+    this.groupCommMessageHandler = new GroupCommMessageHandler();
+    this.groupCommMessageStage = new SyncStage<>("GroupCommMessageStage", groupCommMessageHandler);
     this.netService = new NetworkService<>(idFac, 0, nameServiceAddr,
         nameServicePort, new GCMCodec(),
         new MessagingTransportFactory(),
-        new LoggingEventHandler<Message<GroupCommMessage>>(),
+        new EventHandler<Message<GroupCommMessage>>() {
+
+          @Override
+          public void onNext(final Message<GroupCommMessage> msg) {
+            final Iterator<GroupCommMessage> gcmIterator = msg.getData().iterator();
+            if(gcmIterator.hasNext()) {
+              final GroupCommMessage gcm = gcmIterator.next();
+              if(gcmIterator.hasNext()) {
+                throw new RuntimeException("Expecting exactly one GCM object inside Message but found more");
+              }
+              /*final Class<? extends Name<String>> groupName = Utils.getClass(gcm.getGroupname());
+              commGroupDrivers.get(groupName).handle(gcm);*/
+              groupCommMessageStage.onNext(gcm);
+            }
+            else {
+              throw new RuntimeException("Expecting exactly one GCM object inside Message but found none");
+            }
+          }
+        },
         new LoggingEventHandler<Exception>());
     this.netService.registerId(idFac.getNewInstance(driverId));
     this.senderStage = new ThreadPoolStage<>(
@@ -118,13 +155,28 @@ public class GroupCommDriverImpl implements GroupCommDriver {
         }
       }
     }, 5);
+
   }
 
   @Override
   public CommunicationGroupDriver newCommunicationGroup(
       final Class<? extends Name<String>> groupName) {
-    final CommunicationGroupDriver commGroupDriver = new CommunicationGroupDriverImpl(groupName, confSerializer, senderStage);
-    commGroupDrivers.add(commGroupDriver);
+    final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler = new BroadcastingEventHandler<>();
+    final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler = new BroadcastingEventHandler<>();
+    final CommGroupMessageHandler commGroupMessageHandler = new CommGroupMessageHandler();
+    final CommunicationGroupDriver commGroupDriver = new
+        CommunicationGroupDriverImpl(
+            groupName,
+            confSerializer,
+            senderStage,
+            commGroupRunningTaskHandler,
+            commGroupFailedTaskHandler,
+            commGroupMessageHandler,
+            driverId);
+    commGroupDrivers.put(groupName, commGroupDriver);
+    groupCommRunningTaskHandler.addHandler(commGroupRunningTaskHandler);
+    groupCommFailedTaskHandler.addHandler(commGroupFailedTaskHandler);
+    groupCommMessageHandler.addCommGroupMessageHandler(groupName, commGroupMessageHandler);
     return commGroupDriver;
   }
 
@@ -162,7 +214,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
   @Override
   public Configuration getTaskConfiguration(final Configuration partialTaskConf) {
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder(partialTaskConf);
-    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
+    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers.values()) {
       final Configuration commGroupConf = commGroupDriver.getConfiguration(partialTaskConf);
       jcb.bindSetEntry(SerializedGroupConfigs.class, confSerializer.toString(commGroupConf));
     }
@@ -171,18 +223,32 @@ public class GroupCommDriverImpl implements GroupCommDriver {
 
   @Override
   public void handle(final RunningTask runningTask) {
-    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
+    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers.values()) {
       commGroupDriver.handle(runningTask);
     }
   }
 
   @Override
   public void handle(final FailedTask failedTask) {
-    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers) {
+    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers.values()) {
       commGroupDriver.handle(failedTask);
     }
   }
 
+  /**
+   * @return the groupCommRunningTaskStage
+   */
+  @Override
+  public EStage<RunningTask> getGroupCommRunningTaskStage() {
+    return groupCommRunningTaskStage;
+  }
 
+  /**
+   * @return the groupCommFailedTaskStage
+   */
+  @Override
+  public EStage<FailedTask> getGroupCommFailedTaskStage() {
+    return groupCommFailedTaskStage;
+  }
 
 }

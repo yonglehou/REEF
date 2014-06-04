@@ -90,4 +90,19 @@ public interface CommunicationGroupClient {
    * @return
    */
   Class<? extends Name<String>> getName();
+
+  /**
+   * @return
+   */
+  GroupChanges getTopologyChanges();
+
+  /**
+   *
+   */
+  void updateTopology();
+
+  /**
+   *
+   */
+  void initialize();
 }

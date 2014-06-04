@@ -22,9 +22,10 @@ import com.microsoft.reef.io.network.nggroup.impl.GroupCommDriverImpl;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.DefaultImplementation;
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.wake.EStage;
 
 /**
- * 
+ *
  */
 @DefaultImplementation(value=GroupCommDriverImpl.class)
 public interface GroupCommDriver {
@@ -40,7 +41,7 @@ public interface GroupCommDriver {
    * @return
    */
   boolean configured(ActiveContext activeContext);
-  
+
 
   /**
    * @param activeContext
@@ -59,9 +60,19 @@ public interface GroupCommDriver {
    * @return
    */
   Configuration getTaskConfiguration(Configuration partialTaskConf);
-  
+
   void handle(RunningTask runningTask);
-  
+
   void handle(FailedTask failedTask);
+
+  /**
+   * @return
+   */
+  EStage<RunningTask> getGroupCommRunningTaskStage();
+
+  /**
+   * @return
+   */
+  EStage<FailedTask> getGroupCommFailedTaskStage();
 
 }

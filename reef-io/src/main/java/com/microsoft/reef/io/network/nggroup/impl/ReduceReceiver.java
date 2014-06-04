@@ -17,6 +17,7 @@ package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,6 +30,7 @@ import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
@@ -57,6 +59,10 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
 
   private final OperatorTopology topology;
 
+  private final CommunicationGroupClient commGroupClient;
+
+  private final AtomicBoolean init = new AtomicBoolean(false);
+
   @Inject
   public ReduceReceiver(
       @Parameter(CommunicationGroupName.class) final String groupName,
@@ -66,7 +72,8 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
       @Parameter(com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam.class) final ReduceFunction<T> reduceFunction,
       @Parameter(DriverIdentifier.class) final String driverId,
       final CommGroupNetworkHandler commGroupNetworkHandler,
-      final NetworkService<GroupCommMessage> netService) {
+      final NetworkService<GroupCommMessage> netService,
+      final CommunicationGroupClient commGroupClient) {
     super();
     LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
@@ -78,6 +85,12 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
     this.sender = new Sender(this.netService);
     this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
     this.commGroupNetworkHandler.register(this.operName,this);
+    this.commGroupClient = commGroupClient;
+  }
+
+  @Override
+  public void initialize() {
+    topology.initialize();
   }
 
   @Override
@@ -97,6 +110,9 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
 
   @Override
   public T reduce() throws InterruptedException, NetworkException {
+    if(init.compareAndSet(false, true)) {
+      commGroupClient.initialize();
+    }
     // TODO Auto-generated method stub
     //I am root.
     LOG.log(Level.INFO, "I am Reduce receiver root " + topology.getSelfId() + " for oper: " + operName + " in group "+ groupName);

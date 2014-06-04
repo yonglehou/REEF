@@ -62,4 +62,10 @@ public interface OperatorTopology {
    */
   void sendToParent(byte[] encode, Type reduce);
 
+
+  /**
+   *
+   */
+  void initialize();
+
 }

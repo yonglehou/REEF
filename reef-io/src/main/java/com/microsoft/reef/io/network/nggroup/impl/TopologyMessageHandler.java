@@ -13,27 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.group.operators;
+package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.tang.annotations.Name;
+import com.microsoft.reef.io.network.nggroup.api.Topology;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-public abstract class AbstractGroupCommOperator implements GroupCommOperator{
+public class TopologyMessageHandler implements EventHandler<GroupCommMessage> {
 
-  @Override
-  public Class<? extends Name<String>> getOperName() {
-    throw new UnsupportedOperationException();
+  private final Topology topology;
+
+  public TopologyMessageHandler(final Topology topology) {
+    this.topology = topology;
   }
 
   @Override
-  public Class<? extends Name<String>> getGroupName() {
-    throw new UnsupportedOperationException();
+  public void onNext(final GroupCommMessage msg) {
+    topology.processMsg(msg);
   }
 
-  @Override
-  public void initialize() {
-    throw new UnsupportedOperationException();
-  }
 }

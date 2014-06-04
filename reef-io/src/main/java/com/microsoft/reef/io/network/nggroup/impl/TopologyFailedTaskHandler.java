@@ -13,27 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.group.operators;
+package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.tang.annotations.Name;
+import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.io.network.nggroup.api.Topology;
+import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-public abstract class AbstractGroupCommOperator implements GroupCommOperator{
+public class TopologyFailedTaskHandler implements EventHandler<FailedTask> {
 
-  @Override
-  public Class<? extends Name<String>> getOperName() {
-    throw new UnsupportedOperationException();
+  private final Topology topology;
+
+  public TopologyFailedTaskHandler(final Topology topology) {
+    this.topology = topology;
   }
 
   @Override
-  public Class<? extends Name<String>> getGroupName() {
-    throw new UnsupportedOperationException();
+  public void onNext(final FailedTask failedTask) {
+    topology.setFailed(failedTask.getId());
   }
 
-  @Override
-  public void initialize() {
-    throw new UnsupportedOperationException();
-  }
 }

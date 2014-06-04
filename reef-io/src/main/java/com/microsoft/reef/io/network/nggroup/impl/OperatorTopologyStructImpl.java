@@ -16,9 +16,9 @@
 package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.exception.evaluator.NetworkException;
@@ -63,9 +63,20 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     this.selfId = topology.getSelfId();
     this.driverId = topology.getDriverId();
     this.sender = topology.getSender();
+    this.changes = topology.hasChanges();
+    this.parent = topology.getParent();
+    this.children.addAll(topology.getChildren());
   }
 
+  @Override
+  public NodeStruct getParent() {
+    return parent;
+  }
 
+  @Override
+  public Collection<? extends NodeStruct> getChildren() {
+    return children;
+  }
 
   @Override
   public Class<? extends Name<String>> getGroupName() {
@@ -100,12 +111,13 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   @Override
   public void addAsData(final GroupCommMessage msg) {
     final String srcId = msg.getSrcid();
-    LOG.info("Adding " + msg.getType() + " into the data queue of " + srcId);
+    LOG.info(getQualifiedName() + "Adding " + msg.getType() + " into the data queue");
     final NodeStruct node = findNode(srcId);
     if(node==null) {
       LOG.warning("Unable to find node " + srcId + " to send " + msg.getType() + " to");
     } else {
       node.addData(msg);
+      LOG.info(getQualifiedName() + "Added data msg to node " + srcId);
     }
   }
 
@@ -114,7 +126,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    * @return
    */
   private NodeStruct findNode(final String srcId) {
-    if(parent.getId()==srcId) {
+    if(parent!=null && parent.getId().equals(srcId)) {
       return parent;
     }
     return findChild(srcId);
@@ -123,11 +135,12 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   @Override
   public void sendToParent(final byte[] data, final Type msgType) {
     if(parent==null) {
-      LOG.warning("Perhaps parent has died or has not been configured");
+      LOG.warning(getQualifiedName() + "Perhaps parent has died or has not been configured");
       return;
     }
     final String parentId = parent.getId();
     try {
+      LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + parentId);
       sender.send(Utils.bldGCM(groupName, operName, msgType, selfId, parentId, data));
     } catch (final NetworkException e) {
       throw new RuntimeException("NetworkException while sending " + msgType + " data from " + selfId + " to " + parentId, e);
@@ -139,6 +152,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     for (final NodeStruct childNode : children) {
       final String child = childNode.getId();
       try {
+        LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + child);
         sender.send(
             Utils.bldGCM(groupName, operName, msgType, selfId, child, data));
       } catch (final NetworkException e) {
@@ -154,6 +168,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       LOG.warning("Perhaps parent has died or has not been configured");
       return null;
     }
+    LOG.info(getQualifiedName() + "Waiting to receive from " + parent.getId());
     return parent.getData();
   }
 
@@ -162,7 +177,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     final List<byte[]> retLst = new ArrayList<byte[]>(children.size());
 
     for (final NodeStruct child : children) {
-      LOG.log(Level.INFO, "Waiting for child: " + child.getId());
+      LOG.info(getQualifiedName() + "Waiting to receive from child: " + child.getId());
       final byte[] retVal = child.getData();
       if(retVal!=null) {
         retLst.add(retVal);
@@ -180,18 +195,22 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   @Override
   public void update(final GroupCommMessage msg) {
     final String srcId = msg.getSrcid();
-    LOG.info("Updating " + msg.getType() + " msg from " + srcId);
+    LOG.info(getQualifiedName() + "Updating " + msg.getType() + " msg from " + srcId);
     switch(msg.getType()) {
     case ParentAdd:
+      LOG.info(getQualifiedName() + "Creating new parent node for " + srcId);
       parent = new ParentNodeStruct(srcId);
       break;
     case ParentDead:
+      LOG.info(getQualifiedName() + "Setting parent node to null");
       parent = null;
       break;
     case ChildAdd:
+      LOG.info(getQualifiedName() + "creating new child node for " + srcId);
       children.add(new ChildNodeStruct(srcId));
       break;
     case ChildDead:
+      LOG.info(getQualifiedName() + "Removing child node " + srcId);
       final NodeStruct child = findChild(srcId);
       if(child!=null) {
         children.remove(child);
@@ -211,7 +230,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    */
   private NodeStruct findChild(final String srcId) {
     for(final NodeStruct node : children) {
-      if(node.getId()==srcId) {
+      if(node.getId().equals(srcId)) {
         return node;
       }
     }
@@ -220,6 +239,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
 
   @Override
   public void update(final Set<GroupCommMessage> deletionDeltas) {
+    LOG.info(getQualifiedName() + "Updating topology with deleting msgs");
     for (final GroupCommMessage delDelta : deletionDeltas) {
       update(delDelta);
     }
@@ -228,5 +248,12 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   @Override
   public void setChanges(final boolean changes) {
     this.changes = changes;
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + selfId + " - ";
   }
 }

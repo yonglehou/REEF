@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -25,6 +26,7 @@ import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
@@ -54,6 +56,11 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
 
   private final OperatorTopology topology;
 
+  private final AtomicBoolean init = new AtomicBoolean(false);
+
+
+  private final CommunicationGroupClient commGroupClient;
+
   @Inject
   public BroadcastSender(
       @Parameter(CommunicationGroupName.class) final String groupName,
@@ -62,7 +69,8 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
       @Parameter(DriverIdentifier.class) final String driverId,
       final CommGroupNetworkHandler commGroupNetworkHandler,
-      final NetworkService<GroupCommMessage> netService) {
+      final NetworkService<GroupCommMessage> netService,
+      final CommunicationGroupClient commGroupClient) {
     super();
     LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
@@ -73,8 +81,13 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
     this.sender = new Sender(this.netService);
     this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
     this.commGroupNetworkHandler.register(this.operName,this);
+    this.commGroupClient = commGroupClient;
   }
 
+  @Override
+  public void initialize() {
+    topology.initialize();
+  }
 
   @Override
   public Class<? extends Name<String>> getOperName() {
@@ -93,6 +106,9 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
 
   @Override
   public void send(final T element) throws NetworkException, InterruptedException {
+    if(init.compareAndSet(false, true)) {
+      commGroupClient.initialize();
+    }
     LOG.info("I am Broadcast sender root " + topology.getSelfId() + " for oper: " + operName + " in group " + groupName);
     topology.sendToChildren(dataCodec.encode(element),Type.Broadcast);
   }

@@ -21,22 +21,27 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
+import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
+import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommNetworkHandler;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -55,23 +60,36 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   private final GroupCommNetworkHandler groupCommNetworkHandler;
   private final Class<? extends Name<String>> groupName;
   private final Map<Class<? extends Name<String>>, GroupCommOperator> operators;
+  private final Sender sender;
+
+  private final String taskId;
+
+  private final String driverId;
+
+  private final CommGroupNetworkHandler commGroupNetworkHandler;
+
+  private final AtomicBoolean init = new AtomicBoolean(false);
 
   @Inject
   public CommunicationGroupClientImpl(
         @Parameter(CommunicationGroupName.class) final String groupName,
         @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
+        @Parameter(DriverIdentifier.class) final String driverId,
         final GroupCommNetworkHandler groupCommNetworkHandler,
         @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
         final ConfigurationSerializer configSerializer,
         final NetworkService<GroupCommMessage> netService
       ){
+    this.taskId = taskId;
+    this.driverId = driverId;
     LOG.info(groupName + " has GroupCommHandler-"
         + groupCommNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
     this.groupCommNetworkHandler = groupCommNetworkHandler;
+    this.sender = new Sender(netService);
     this.operators = new HashMap<>();
     try {
-      final CommGroupNetworkHandler commGroupNetworkHandler = Tang.Factory.getTang().newInjector().getInstance(CommGroupNetworkHandler.class);
+      this.commGroupNetworkHandler = Tang.Factory.getTang().newInjector().getInstance(CommGroupNetworkHandler.class);
       this.groupCommNetworkHandler.register(this.groupName, commGroupNetworkHandler);
 
       for (final String operatorConfigStr : operatorConfigs) {
@@ -79,9 +97,11 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
         final Configuration operatorConfig = configSerializer.fromString(operatorConfigStr);
         final Injector injector = Tang.Factory.getTang().newInjector(operatorConfig);
 
+        injector.bindVolatileParameter(TaskConfigurationOptions.Identifier.class, taskId);
         injector.bindVolatileParameter(CommunicationGroupName.class, groupName);
         injector.bindVolatileInstance(CommGroupNetworkHandler.class, commGroupNetworkHandler);
         injector.bindVolatileInstance(NetworkService.class, netService);
+        injector.bindVolatileInstance(CommunicationGroupClient.class, this);
 
         final GroupCommOperator operator = injector.getInstance(GroupCommOperator.class);
         final String operName = injector.getNamedInstance(OperatorName.class);
@@ -133,6 +153,43 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     return (Reduce.Sender)op;
   }
 
+
+  @Override
+  public GroupChanges getTopologyChanges() {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public void updateTopology() {
+    for(final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      commGroupNetworkHandler.addTopologyUpdateElement(operName);
+      LOG.info("Sending UpdateTopology msg to driver" + driverId);
+      try {
+        sender.send(Utils.bldGCM(groupName, operName, Type.UpdateTopology, taskId, driverId, new byte[0]));
+      } catch (final NetworkException e) {
+        throw new RuntimeException("NetworkException while sending UpdateTopology", e);
+      }
+    }
+    for(final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      commGroupNetworkHandler.waitForTopologyUpdate(operName);
+    }
+  }
+
+  @Override
+  public void initialize() {
+    if(!init.compareAndSet(false, true)) {
+      LOG.info("CommGroup-" + groupName + " has been initialized");
+      return;
+    }
+    LOG.info("CommGroup-" + groupName + " is initializing");
+    for(final GroupCommOperator op : operators.values()) {
+      op.initialize();
+    }
+  }
+
   @Override
   public GroupChanges synchronize() {
     // TODO Auto-generated method stub
@@ -156,4 +213,5 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public Class<? extends Name<String>> getName() {
     return groupName;
   }
+
 }

@@ -13,27 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.group.operators;
+package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.tang.annotations.Name;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.microsoft.wake.EventHandler;
 
 /**
  *
  */
-public abstract class AbstractGroupCommOperator implements GroupCommOperator{
+public class BroadcastingEventHandler<T> implements EventHandler<T> {
 
-  @Override
-  public Class<? extends Name<String>> getOperName() {
-    throw new UnsupportedOperationException();
+  List<EventHandler<T>> handlers = new ArrayList<>();
+
+  public void addHandler(final EventHandler<T> handler) {
+    handlers.add(handler);
   }
 
   @Override
-  public Class<? extends Name<String>> getGroupName() {
-    throw new UnsupportedOperationException();
+  public void onNext(final T msg) {
+    for(final EventHandler<T> handler : handlers) {
+      handler.onNext(msg);
+    }
   }
 
-  @Override
-  public void initialize() {
-    throw new UnsupportedOperationException();
-  }
 }

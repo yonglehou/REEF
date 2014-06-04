@@ -32,17 +32,12 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
-import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
@@ -107,7 +102,7 @@ public class BGDDriver {
             .setSenderId("MasterTask")
             .setDataCodecClass(controlMsgCodec.getClass())
             .build())
-      .addBroadcast(ModelBroadcaster.class,
+      /*.addBroadcast(ModelBroadcaster.class,
           BroadcastOperatorSpec
             .newBuilder()
             .setSenderId("MasterTask")
@@ -132,7 +127,7 @@ public class BGDDriver {
           .setReceiverId("MasterTask")
           .setDataCodecClass(lineSearchCodec.getClass())
           .setReduceFunctionClass(lineSearchReduceFunction.getClass())
-          .build())
+          .build())*/
       .finalise();
 
     LOG.info("Added operators to allCommGroup");
@@ -253,7 +248,7 @@ public class BGDDriver {
 
     @Override
     public void onNext(final RunningTask runningTask) {
-      groupCommDriver.handle(runningTask);
+      groupCommDriver.getGroupCommRunningTaskStage().onNext(runningTask);
     }
 
   }
@@ -262,7 +257,7 @@ public class BGDDriver {
 
     @Override
     public void onNext(final FailedTask failedTask) {
-      groupCommDriver.handle(failedTask);
+      groupCommDriver.getGroupCommFailedTaskStage().onNext(failedTask);
     }
 
   }

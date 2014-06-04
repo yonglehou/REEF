@@ -15,66 +15,36 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.tang.Configuration;
 
 /**
  *
  */
-public interface Topology {
+public interface TaskNodeStatus {
 
   /**
-   * @param senderId
+   * @param bldGCM
    */
-  void setRoot(String senderId);
+  void sendMsg(GroupCommMessage gcm);
 
   /**
-   * @param spec
+   *
    */
-  void setOperSpec(OperatorSpec spec);
-
-  /**
-   * @param taskId
-   * @return
-   */
-  Configuration getConfig(String taskId);
-
-  /**
-   * @param taskId
-   */
-  void addTask(String taskId);
-
-  /**
-   * @param runningTask
-   */
-  void handle(RunningTask runningTask);
-
-  /**
-   * @param failedTask
-   */
-  void handle(FailedTask failedTask);
-
-  /**
-   * @param gcm
-   */
-  void handle(GroupCommMessage gcm);
-
-  /**
-   * @param id
-   */
-  void setFailed(String id);
-
-  /**
-   * @param id
-   */
-  void setRunning(String id);
+  void setFailed();
 
   /**
    * @param msg
-   *
    */
   void processMsg(GroupCommMessage msg);
+
+  /**
+   * @param neighborId
+   */
+  boolean isActive(String neighborId);
+
+  /**
+   * @return
+   */
+  boolean amIActive();
 
 }

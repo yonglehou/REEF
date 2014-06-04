@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -99,6 +100,16 @@ public interface OperatorTopologyStruct {
    * @param b
    */
   void setChanges(boolean b);
+
+  /**
+   * @return
+   */
+  NodeStruct getParent();
+
+  /**
+   * @return
+   */
+  Collection<? extends NodeStruct> getChildren();
 
 
 

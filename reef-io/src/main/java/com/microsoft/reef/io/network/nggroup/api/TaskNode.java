@@ -15,8 +15,10 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+
 /**
- * 
+ *
  */
 public interface TaskNode {
 
@@ -36,8 +38,8 @@ public interface TaskNode {
   public String taskId();
 
   /**
-   * @param b 
-   * 
+   * @param b
+   *
    */
   public void setRunning(boolean b);
 
@@ -50,5 +52,71 @@ public interface TaskNode {
    * @return
    */
   TaskNode getParent();
+
+  /**
+   * @param neighborId
+   * @return
+   */
+  boolean isNeighborActive(String neighborId);
+
+  /**
+   * @param neighborId
+   */
+  void addActiveNeighbor(String neighborId);
+
+  /**
+   * @param gcm
+   */
+  public void handle(GroupCommMessage gcm);
+
+  /**
+   *
+   */
+  public void chkAndSendTopSetup();
+
+  /**
+   * @param neighborId
+   */
+  void removeActiveNeighbor(String neighborId);
+
+  /**
+   *
+   */
+  public void setFailed();
+
+  /**
+   *
+   */
+  public void setRunning();
+
+  /**
+   * @param msg
+   */
+  public void processMsg(GroupCommMessage msg);
+
+  /**
+   *
+   */
+  public void processParentRunning();
+
+  /**
+   *
+   */
+  public void processChildRunning(String childId);
+
+  /**
+   *
+   */
+  public void processChildDead(String childId);
+
+  /**
+   *
+   */
+  public void processParentDead();
+
+  /**
+   * @param source
+   */
+  public void chkAndSendTopSetup(String source);
 
 }

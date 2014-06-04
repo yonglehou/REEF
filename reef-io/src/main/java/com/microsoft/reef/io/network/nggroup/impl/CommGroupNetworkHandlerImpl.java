@@ -16,11 +16,15 @@
 package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
 
@@ -28,7 +32,11 @@ import com.microsoft.wake.EventHandler;
  *
  */
 public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler{
+
+  private static final Logger LOG = Logger.getLogger(CommGroupNetworkHandlerImpl.class.getName());
+
   private final Map<Class<? extends Name<String>>, EventHandler<GroupCommMessage>> operHandlers = new ConcurrentHashMap<>();
+  private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyUpdates = new ConcurrentHashMap<>();
 
   @Inject
   public CommGroupNetworkHandlerImpl() {  }
@@ -37,7 +45,30 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
   public void onNext(final GroupCommMessage msg) {
     final Class<? extends Name<String>> operName = Utils.getClass(msg
         .getOperatorname());
-    operHandlers.get(operName).onNext(msg);
+    if(msg.getType()==Type.TopologyUpdated) {
+      LOG.info("Got TopologyUpdate msg for " + operName + ". Adding to respective queue");
+      topologyUpdates.get(operName).add(msg);
+    } else {
+      operHandlers.get(operName).onNext(msg);
+    }
+  }
+
+  @Override
+  public void addTopologyUpdateElement(final Class<? extends Name<String>> operName) {
+    LOG.info("Creating LBQ for " + operName);
+    topologyUpdates.put(operName, new LinkedBlockingQueue<GroupCommMessage>());
+  }
+
+  @Override
+  public void waitForTopologyUpdate(final Class<? extends Name<String>> operName) {
+    try {
+      LOG.info("Waiting for topology update msg for " + operName);
+      topologyUpdates.get(operName).take();
+      LOG.info("Removing LBQ for " + operName);
+      topologyUpdates.remove(operName);
+    } catch (final InterruptedException e) {
+      throw new RuntimeException("InterruptedException while waiting for topology update of " + operName.getSimpleName(), e);
+    }
   }
 
   @Override

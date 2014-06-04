@@ -32,4 +32,9 @@ public interface GroupCommOperator {
    */
   Class<? extends Name<String>> getGroupName();
 
+  /**
+   *
+   */
+  void initialize();
+
 }
