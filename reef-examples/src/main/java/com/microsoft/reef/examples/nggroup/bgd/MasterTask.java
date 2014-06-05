@@ -74,6 +74,7 @@ public class MasterTask implements Task {
       final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
       final Vector model = new DenseVector(dimensions);
       controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
+      communicationGroupClient.updateTopology();
 //      modelBroadcaster.send(model);
 //      final Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
 //      GroupChanges changes = communicationGroupClient.getTopologyChanges();

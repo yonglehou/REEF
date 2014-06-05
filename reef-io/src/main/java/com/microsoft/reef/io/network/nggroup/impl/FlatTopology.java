@@ -15,12 +15,14 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
-import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
@@ -30,11 +32,14 @@ import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EStage;
+import com.microsoft.wake.EventHandler;
+import com.microsoft.wake.impl.SingleThreadStage;
 
 /**
  *
@@ -46,23 +51,29 @@ public class FlatTopology implements Topology {
 
   private final EStage<GroupCommMessage> senderStage;
   private final Class<? extends Name<String>> groupName;
-  private final Class<? extends Name<String>> operatorName;
+  private final Class<? extends Name<String>> operName;
   private final String driverId;
   private String rootId;
   private OperatorSpec operatorSpec;
 
   private TaskNode root;
-  private final Map<String, TaskNode> nodes = new HashMap<>();
+  private final ConcurrentMap<String, TaskNode> nodes = new ConcurrentHashMap<>();
+
+  private final CountingSemaphore allTasksAdded;
+
+  private final AtomicBoolean firstTime = new AtomicBoolean(false);
 
   public FlatTopology(
       final EStage<GroupCommMessage> senderStage,
       final Class<? extends Name<String>> groupName,
       final Class<? extends Name<String>> operatorName,
-      final String driverId) {
+      final String driverId,
+      final int numberOfTasks) {
     this.senderStage = senderStage;
     this.groupName = groupName;
-    this.operatorName = operatorName;
+    this.operName = operatorName;
     this.driverId = driverId;
+    this.allTasksAdded = new CountingSemaphore(numberOfTasks);
   }
 
   @Override
@@ -116,7 +127,7 @@ public class FlatTopology implements Topology {
    */
   private synchronized void addChild(final String taskId) {
     LOG.info(getQualifiedName() + "Adding leaf " + taskId);
-    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operatorName, taskId, driverId);
+    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, taskId, driverId);
     final TaskNode leaf = node;
     if(root!=null) {
       LOG.info(getQualifiedName() + "Setting " + rootId + " as parent of " + taskId);
@@ -129,17 +140,21 @@ public class FlatTopology implements Topology {
 
   private synchronized void setRootNode(final String rootId){
     LOG.info(getQualifiedName() + "Setting " + rootId + " as root");
-    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operatorName, rootId, driverId);
+    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, rootId, driverId);
     this.root = node;
-    for(final Map.Entry<String, TaskNode> nodeEntry : nodes.entrySet()) {
-      final String id = nodeEntry.getKey();
 
-      final TaskNode leaf = nodeEntry.getValue();
+    synchronized (nodes) {
+      for (final Map.Entry<String, TaskNode> nodeEntry : nodes.entrySet()) {
+        final String id = nodeEntry.getKey();
 
-      LOG.info(getQualifiedName() + "Adding " + id + " as leaf of " + rootId);
-      root.addChild(leaf);
-      LOG.info(getQualifiedName() + "Setting " + rootId + " as parent of " + id);
-      leaf.setParent(root);
+        final TaskNode leaf = nodeEntry.getValue();
+
+        LOG.info(getQualifiedName() + "Adding " + id + " as leaf of " + rootId);
+        root.addChild(leaf);
+        LOG.info(getQualifiedName() + "Setting " + rootId + " as parent of "
+            + id);
+        leaf.setParent(root);
+      }
     }
     nodes.put(rootId, root);
   }
@@ -147,16 +162,88 @@ public class FlatTopology implements Topology {
 
   @Override
   public void setFailed(final String id) {
+    LOG.info(getQualifiedName() + "Task-" + id + " failed");
     nodes.get(id).setFailed();
+    allTasksAdded.increment();
   }
 
   @Override
   public void setRunning(final String id) {
+    LOG.info(getQualifiedName() + "Task-" + id + " is running");
     nodes.get(id).setRunning();
+    allTasksAdded.decrement();
   }
 
   @Override
   public void processMsg(final GroupCommMessage msg) {
+    if(firstTime.compareAndSet(false, true)) {
+      LOG.info(getQualifiedName() + "waiting for all nodes to run");
+      allTasksAdded.await();
+    }
+    LOG.info(getQualifiedName() + "processing " + msg.getType() + " from " + msg.getSrcid());
+    if(msg.getType().equals(Type.UpdateTopology)) {
+      allTasksAdded.await();
+      final String dstId = msg.getSrcid();
+      LOG.info(getQualifiedName() + "Creating NodeTopologyUpdateWaitStage to wait on nodes to be updated");
+      //This stage only waits for receiving TopologySetup
+      //Sending UpdateTopology to the tasks is left to NodeStatusImpl as part
+      //of processMsg
+      final EStage<List<TaskNode>> nodeTopologyUpdateWaitStage = new SingleThreadStage<>("NodeTopologyUpdateWaitStage", new EventHandler<List<TaskNode>>() {
+
+        @Override
+            public void onNext(final List<TaskNode> nodes) {
+              LOG.info(getQualifiedName()
+                  + "NodeTopologyUpdateWaitStage received " + nodes.size()
+                  + " to be updated nodes to waitfor");
+              for (final TaskNode node : nodes) {
+                LOG.info(getQualifiedName()
+                    + "NodeTopologyUpdateWaitStage waiting for "
+                    + node.taskId() + " to receive TopologySetup");
+                node.waitForTopologySetup();
+              }
+              LOG.info(getQualifiedName()
+                  + "NodeTopologyUpdateWaitStage All to be updated nodes " +
+                  "have received TopologySetup. Sending TopologyUpdated");
+              senderStage.onNext(Utils.bldGCM(groupName, operName,
+                  Type.TopologyUpdated, driverId, dstId, new byte[0]));
+            }
+      }, nodes.size());
+      final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());
+      synchronized (nodes) {
+        LOG.info(getQualifiedName() + "Checking which nodes need to be updated");
+        for (final TaskNode node : nodes.values()) {
+          if(node.isRunning()) {
+            LOG.info(getQualifiedName() + node.taskId() + " is running");
+            if(node.hasChanges()) {
+              LOG.info(getQualifiedName() + node.taskId() + " has changes. " +
+              		"Reset the TopologySetupSent flag & add to list");
+              node.resetTopologySetupSent();
+              toBeUpdatedNodes.add(node);
+            }
+            else {
+              LOG.info(getQualifiedName() + node.taskId() + " has no changes. Skipping");
+            }
+          }
+          else {
+            LOG.info(getQualifiedName() + node.taskId() + " is not running. Skipping");
+          }
+        }
+      }
+      nodeTopologyUpdateWaitStage.onNext(toBeUpdatedNodes);
+      for (final TaskNode node : toBeUpdatedNodes) {
+        LOG.info(getQualifiedName() + node.taskId() + " process UpdateTopology msg since you have changes");
+        node.processMsg(msg);
+        //The stage will wait for all nodes to acquire topoLock
+        //and send TopologySetup msg. Then it will send TopologyUpdated
+        //msg. However, any local topology changes are not in effect
+        //till driver sends TopologySetup once statusMap is emptied
+        //The operations in the tasks that have topology changes will
+        //wait for this. However other tasks that do not have any changes
+        //will continue their regular operation
+      }
+      //Handling of UpdateTopology msg done. Return
+      return;
+    }
     final String id = msg.getSrcid();
     nodes.get(id).processMsg(msg);
   }
@@ -165,21 +252,6 @@ public class FlatTopology implements Topology {
    * @return
    */
   private String getQualifiedName() {
-    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operatorName) + " - ";
-  }
-
-  @Override
-  public void handle(final RunningTask runningTask) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void handle(final FailedTask failedTask) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void handle(final GroupCommMessage gcm) {
-    throw new UnsupportedOperationException();
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + " - ";
   }
 }

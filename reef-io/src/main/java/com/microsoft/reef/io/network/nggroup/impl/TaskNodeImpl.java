@@ -228,13 +228,20 @@ public class TaskNodeImpl implements TaskNode {
   }
 
   @Override
-  public void chkAndSendTopSetup() {
+  public void resetTopologySetupSent() {
+    synchronized (ackLock) {
+      topoSetupSent.set(false);
+    }
+  }
+
+  @Override
+  public boolean chkAndSendTopSetup() {
     synchronized (ackLock ) {
       LOG.info(getQualifiedName()
           + "Checking if I am ready to send TopoSetup msg");
       if (topoSetupSent.get()) {
         LOG.info(getQualifiedName() + "topology setup msg sent already");
-        return;
+        return true;
       }
       final boolean parentActive = parentActive();
       final boolean allChildrenActive = allChildrenActive();
@@ -245,9 +252,10 @@ public class TaskNodeImpl implements TaskNode {
           LOG.info(getQualifiedName() + " Sending TopoSetup msg to " + taskId);
           senderStage.onNext(Utils.bldGCM(groupName, operName,
               Type.TopologySetup, driverId, taskId, new byte[0]));
-          if(topoSetupSent.compareAndSet(false, true)) {
-            LOG.warning("TopologySetup msg was sent more than once. Something fishy!!!");
+          if(!topoSetupSent.compareAndSet(false, true)) {
+            LOG.warning(getQualifiedName() + "TopologySetup msg was sent more than once. Something fishy!!!");
           }
+          return true;
         } else {
           if (!activeNeighborOfParent) {
             LOG.info(getQualifiedName()
@@ -268,6 +276,7 @@ public class TaskNodeImpl implements TaskNode {
           LOG.info(getQualifiedName() + "not all children active yet");
         }
       }
+      return false;
     }
   }
 
@@ -358,24 +367,12 @@ public class TaskNodeImpl implements TaskNode {
   }
 
   @Override
-  public void removeActiveNeighbor(final String neighborId) {
-    throw new UnsupportedOperationException();
+  public void waitForTopologySetup() {
+    nodeStatus.waitForTopologySetup();
   }
 
   @Override
-  public void addActiveNeighbor(final String neighborId) {
-    throw new UnsupportedOperationException();
+  public boolean hasChanges() {
+    return nodeStatus.hasChanges();
   }
-
-  @Override
-  public void setRunning(final boolean b) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void handle(final GroupCommMessage gcm) {
-    throw new UnsupportedOperationException();
-  }
-
-
 }

@@ -15,11 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.annotations.Name;
 
@@ -60,14 +57,5 @@ public interface CommunicationGroupDriver {
    * @param partialTaskConf
    */
   public void addTask(Configuration partialTaskConf);
-
-  void handle(RunningTask runningTask);
-
-  void handle(FailedTask failedTask);
-
-  /**
-   * @param gcm
-   */
-  public void handle(GroupCommMessage gcm);
 
 }

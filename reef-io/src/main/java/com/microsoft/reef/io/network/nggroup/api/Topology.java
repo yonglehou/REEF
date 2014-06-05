@@ -15,8 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.tang.Configuration;
 
@@ -45,21 +43,6 @@ public interface Topology {
    * @param taskId
    */
   void addTask(String taskId);
-
-  /**
-   * @param runningTask
-   */
-  void handle(RunningTask runningTask);
-
-  /**
-   * @param failedTask
-   */
-  void handle(FailedTask failedTask);
-
-  /**
-   * @param gcm
-   */
-  void handle(GroupCommMessage gcm);
 
   /**
    * @param id

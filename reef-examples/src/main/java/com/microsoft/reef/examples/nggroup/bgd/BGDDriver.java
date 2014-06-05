@@ -85,7 +85,7 @@ public class BGDDriver {
     this.confSerializer = confSerializer;
     this.dimensions = dimensions;
 
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class);
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, dataLoadingService.getNumberOfPartitions() + 1);
     LOG.info("Obtained all communication group");
 
     final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;

@@ -59,7 +59,6 @@ import com.microsoft.wake.Identifier;
 import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.impl.LoggingEventHandler;
 import com.microsoft.wake.impl.SingleThreadStage;
-import com.microsoft.wake.impl.SyncStage;
 import com.microsoft.wake.impl.ThreadPoolStage;
 import com.microsoft.wake.remote.NetUtils;
 
@@ -111,7 +110,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     this.groupCommFailedTaskHandler = new BroadcastingEventHandler<>();
     this.groupCommFailedTaskStage = new SingleThreadStage<>("GroupCommFailedTaskStage", groupCommFailedTaskHandler, 10);
     this.groupCommMessageHandler = new GroupCommMessageHandler();
-    this.groupCommMessageStage = new SyncStage<>("GroupCommMessageStage", groupCommMessageHandler);
+    this.groupCommMessageStage = new SingleThreadStage<>("GroupCommMessageStage", groupCommMessageHandler, 100 * 1000);
     this.netService = new NetworkService<>(idFac, 0, nameServiceAddr,
         nameServicePort, new GCMCodec(),
         new MessagingTransportFactory(),
@@ -160,7 +159,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
 
   @Override
   public CommunicationGroupDriver newCommunicationGroup(
-      final Class<? extends Name<String>> groupName) {
+      final Class<? extends Name<String>> groupName, final int numberOfTasks) {
     final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler = new BroadcastingEventHandler<>();
     final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler = new BroadcastingEventHandler<>();
     final CommGroupMessageHandler commGroupMessageHandler = new CommGroupMessageHandler();
@@ -172,7 +171,8 @@ public class GroupCommDriverImpl implements GroupCommDriver {
             commGroupRunningTaskHandler,
             commGroupFailedTaskHandler,
             commGroupMessageHandler,
-            driverId);
+            driverId,
+            numberOfTasks);
     commGroupDrivers.put(groupName, commGroupDriver);
     groupCommRunningTaskHandler.addHandler(commGroupRunningTaskHandler);
     groupCommFailedTaskHandler.addHandler(commGroupFailedTaskHandler);
@@ -219,20 +219,6 @@ public class GroupCommDriverImpl implements GroupCommDriver {
       jcb.bindSetEntry(SerializedGroupConfigs.class, confSerializer.toString(commGroupConf));
     }
     return jcb.build();
-  }
-
-  @Override
-  public void handle(final RunningTask runningTask) {
-    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers.values()) {
-      commGroupDriver.handle(runningTask);
-    }
-  }
-
-  @Override
-  public void handle(final FailedTask failedTask) {
-    for (final CommunicationGroupDriver commGroupDriver : commGroupDrivers.values()) {
-      commGroupDriver.handle(failedTask);
-    }
   }
 
   /**

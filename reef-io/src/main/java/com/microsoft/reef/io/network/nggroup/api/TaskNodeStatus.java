@@ -47,4 +47,14 @@ public interface TaskNodeStatus {
    */
   boolean amIActive();
 
+  /**
+   * @return
+   */
+  boolean hasChanges();
+
+  /**
+   *
+   */
+  void waitForTopologySetup();
+
 }

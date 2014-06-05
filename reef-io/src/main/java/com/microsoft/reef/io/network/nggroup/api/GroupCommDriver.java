@@ -31,10 +31,11 @@ import com.microsoft.wake.EStage;
 public interface GroupCommDriver {
 
   /**
+   * @param numberOfTasks
    * @param string
    * @return
    */
-  CommunicationGroupDriver newCommunicationGroup(Class<? extends Name<String>> groupName);
+  CommunicationGroupDriver newCommunicationGroup(Class<? extends Name<String>> groupName, int numberOfTasks);
 
   /**
    * @param activeContext
@@ -60,10 +61,6 @@ public interface GroupCommDriver {
    * @return
    */
   Configuration getTaskConfiguration(Configuration partialTaskConf);
-
-  void handle(RunningTask runningTask);
-
-  void handle(FailedTask failedTask);
 
   /**
    * @return

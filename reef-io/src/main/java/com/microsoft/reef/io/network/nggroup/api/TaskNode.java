@@ -38,12 +38,6 @@ public interface TaskNode {
   public String taskId();
 
   /**
-   * @param b
-   *
-   */
-  public void setRunning(boolean b);
-
-  /**
    * @return
    */
   public boolean isRunning();
@@ -60,24 +54,15 @@ public interface TaskNode {
   boolean isNeighborActive(String neighborId);
 
   /**
-   * @param neighborId
-   */
-  void addActiveNeighbor(String neighborId);
-
-  /**
-   * @param gcm
-   */
-  public void handle(GroupCommMessage gcm);
-
-  /**
+   * @return
    *
    */
-  public void chkAndSendTopSetup();
+  public boolean chkAndSendTopSetup();
 
   /**
-   * @param neighborId
+   * @param source
    */
-  void removeActiveNeighbor(String neighborId);
+  public void chkAndSendTopSetup(String source);
 
   /**
    *
@@ -115,8 +100,17 @@ public interface TaskNode {
   public void processParentDead();
 
   /**
-   * @param source
+   *
    */
-  public void chkAndSendTopSetup(String source);
+  public void waitForTopologySetup();
 
+  /**
+   * @return
+   */
+  public boolean hasChanges();
+
+  /**
+   *
+   */
+  void resetTopologySetupSent();
 }

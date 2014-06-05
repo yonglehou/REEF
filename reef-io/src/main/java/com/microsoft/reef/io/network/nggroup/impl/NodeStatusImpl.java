@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
@@ -46,6 +47,8 @@ public class NodeStatusImpl implements TaskNodeStatus {
   private final EStage<GroupCommMessage> msgSenderStage;
   private final EStage<GroupCommMessage> msgProcessorStage;
   private final Set<String> activeNeighbors = new HashSet<>();
+  private final ResettingCDL topoSetup = new ResettingCDL(1);
+  private final AtomicBoolean insideUpdateTopology = new AtomicBoolean(false);
 
   private final TaskNode node;
 
@@ -74,11 +77,19 @@ public class NodeStatusImpl implements TaskNodeStatus {
             LOG.info(getQualifiedName() + "NodeStatusMsgSenderStage handling " + msgType + " msg from " + srcId);
             synchronized (statusMap) {
               LOG.info(getQualifiedName() + "NodeStatusMsgSenderStage acquired statusMap lock");
-              Set<String> sources = new HashSet<>();
-              final Set<String> oldSources = statusMap.putIfAbsent(msgType, sources);
-              if(oldSources!=null) {
-                sources = oldSources;
+              while(insideUpdateTopology.get()) {
+                LOG.info(getQualifiedName() + "NodeStatusMsgSenderStage Still processing UpdateTopology msg. " +
+                		"Need to block updates to statusMap till TopologySetup msg is sent");
+                try {
+                  statusMap.wait();
+                } catch (final InterruptedException e) {
+                  throw new RuntimeException("InterruptedException while waiting on statusMap", e);
+                }
               }
+
+              statusMap.putIfAbsent(msgType, new HashSet<String>());
+              final Set<String> sources = statusMap.get(msgType);
+
               LOG.info(getQualifiedName() + "NodeStatusMsgSenderStage Adding " + srcId + " to sources");
               sources.add(srcId);
               LOG.info(getQualifiedName() + "NodeStatusMsgSenderStage sources for " + msgType + " are: " + sources);
@@ -93,112 +104,109 @@ public class NodeStatusImpl implements TaskNodeStatus {
           @Override
           public void onNext(final GroupCommMessage gcm) {
             final String self = gcm.getSrcid();
-            LOG.info(getQualifiedName() + "handling " + gcm.getType() + " msg from " + self + " for " + gcm.getDestid());
+            LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage handling " + gcm.getType() + " msg from " + self + " for " + gcm.getDestid());
+            final Type msgType = gcm.getType();
+            final Type msgAcked = getAckedMsg(msgType);
+            final String sourceId = gcm.getDestid();
             synchronized (statusMap) {
-              switch(gcm.getType()) {
+              switch(msgType) {
+              case UpdateTopology:
+                if(!insideUpdateTopology.compareAndSet(false, true)) {
+                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got an UpdateTopology when I was still updating topology");
+                }
+                //Send to taskId because srcId is usually always MasterTask
+                LOG.info(getQualifiedName() + "Sending UpdateTopology msg to " + taskId);
+                senderStage.onNext(Utils.bldGCM(groupName, operatorName, Type.UpdateTopology, driverId, taskId, new byte[0]));
+                break;
+              case TopologySetup:
+                LOG.info(getQualifiedName() + "Releasing stage to send TopologyUpdated msg");
+                topoSetup.countDown();
+                break;
               case ParentAdded:
-                final String sourceParentAdded = gcm.getDestid();
-                if(statusMap.containsKey(Type.ParentAdd)) {
-                  final Set<String> sourceSet = statusMap.get(Type.ParentAdd);
-                  if(sourceSet.contains(sourceParentAdded)) {
-                    LOG.info(getQualifiedName() + "Removing " + sourceParentAdded + " from sources expecting ACK");
-                    sourceSet.remove(sourceParentAdded);
-                    activeNeighbors.add(sourceParentAdded);
-                    node.chkAndSendTopSetup(sourceParentAdded);
-                    if(sourceSet.isEmpty()) {
-                      LOG.info(getQualifiedName() + "Empty source set. Removing");
-                      statusMap.remove(Type.ParentAdd);
-                      if(statusMap.isEmpty()) {
-                        LOG.info(getQualifiedName() + "Empty status map.");
-                        node.chkAndSendTopSetup();
-                      }
-                      else {
-                        LOG.info(getQualifiedName() + "Status map non-empty" + statusMap);
-                      }
-                    }
-                  } else {
-                    LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got ParentAdded from a source(" + sourceParentAdded + ") to whom ParentAdd was not sent");
-                  }
-                }
-                else {
-                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no ParentAdd msgs sent in the previous update cycle");
-                }
-                break;
-
               case ChildAdded:
-                final String sourceChildAdded = gcm.getDestid();
-                if(statusMap.containsKey(Type.ChildAdd)) {
-                  final Set<String> sourceSet = statusMap.get(Type.ChildAdd);
-                  if(sourceSet.contains(sourceChildAdded)) {
-                    LOG.info(getQualifiedName() + "Removing " + sourceChildAdded + " from sources expecting ACK");
-                    sourceSet.remove(sourceChildAdded);
-                    activeNeighbors.add(sourceChildAdded);
-                    node.chkAndSendTopSetup(sourceChildAdded);
-                    if(sourceSet.isEmpty()) {
-                      LOG.info(getQualifiedName() + "Empty source set. Removing");
-                      statusMap.remove(Type.ChildAdd);
-                      if(statusMap.isEmpty()) {
-                        LOG.info(getQualifiedName() + "Empty status map.");
-                        node.chkAndSendTopSetup();
+              case ParentRemoved:
+              case ChildRemoved:
+                if(statusMap.containsKey(msgAcked)) {
+                  final Set<String> sourceSet = statusMap.get(msgAcked);
+                  if(sourceSet.contains(sourceId)) {
+                    LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Removing " + sourceId +
+                        " from sources expecting ACK");
+                    sourceSet.remove(sourceId);
+                    if(isAddMsg(msgAcked)) {
+                      activeNeighbors.add(sourceId);
+                      node.chkAndSendTopSetup(sourceId);
+                    }
+                    else if(isDeadMsg(msgAcked)) {
+                      activeNeighbors.remove(sourceId);
+                    }
+                    final boolean topoSetupSent = chkAndSendTopoSetup(sourceSet, msgAcked);
+                    if(topoSetupSent) {
+                      if(!insideUpdateTopology.compareAndSet(true, false)) {
+                        LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Trying to set " +
+                        		"UpdateTopology ended when it has already ended");
                       }
-                      else {
-                        LOG.info(getQualifiedName() + "Status map non-empty" + statusMap);
-                      }
+                      statusMap.notifyAll();
                     }
                   } else {
-                    LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got ChildAdded from a source(" + sourceChildAdded + ") to whom ChildAdd was not sent");
+                    LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got " + msgType +
+                        " from a source(" + sourceId + ") to whom ChildAdd was not sent");
                   }
                 }
                 else {
-                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no ChildAdd msgs sent in the previous update cycle");
-                }
-                break;
-
-              case ParentRemoved:
-                final String sourceParentRemoved = gcm.getDestid();
-                if(statusMap.containsKey(Type.ParentDead)) {
-                  final Set<String> sourceSet = statusMap.get(Type.ParentDead);
-                  if(sourceSet.contains(sourceParentRemoved)) {
-                    LOG.info(getQualifiedName() + "Removing " + sourceParentRemoved + " from sources expecting ACK");
-                    sourceSet.remove(sourceParentRemoved);
-                    activeNeighbors.remove(sourceParentRemoved);
-                    if(sourceSet.isEmpty()) {
-                      node.chkAndSendTopSetup();
-                    }
-                  }else {
-                    LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got ParentRemoved from a source(" + sourceParentRemoved + ") to whom ParentDead was not sent");
-                  }
-                }
-                else {
-                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no ParentDead msgs sent in the previous update cycle");
-                }
-                break;
-
-              case ChildRemoved:
-                final String sourceChildRemoved = gcm.getDestid();
-                if(statusMap.containsKey(Type.ChildDead)) {
-                  final Set<String> sourceSet = statusMap.get(Type.ChildDead);
-                  if(sourceSet.contains(sourceChildRemoved)) {
-                    LOG.info(getQualifiedName() + "Removing " + sourceChildRemoved + " from sources expecting ACK");
-                    sourceSet.remove(sourceChildRemoved);
-                    activeNeighbors.remove(sourceChildRemoved);
-                    if(sourceSet.isEmpty()) {
-                      node.chkAndSendTopSetup();
-                    }
-                  }else {
-                    LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got ChildRemoved from a source(" + sourceChildRemoved + ") to whom ChildDead was not sent");
-                  }
-                }
-                else {
-                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no ChildDead msgs sent in the previous update cycle");
+                  LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no " + msgAcked +
+                      " msgs sent in the previous update cycle");
                 }
                 break;
 
                 default:
-                  LOG.warning(getQualifiedName() + "Non-ctrl msg " + gcm.getType() + " for " + gcm.getDestid() + " unexpected");
+                  LOG.warning(getQualifiedName() + "Non-ctrl msg " + gcm.getType() + " for " + gcm.getDestid() +
+                      " unexpected");
                   break;
               }
             }
+          }
+
+          private boolean isDeadMsg(final Type msgAcked) {
+            return msgAcked==Type.ParentDead || msgAcked==Type.ChildDead;
+          }
+
+          private boolean isAddMsg(final Type msgAcked) {
+            return msgAcked==Type.ParentAdd || msgAcked==Type.ChildAdd;
+          }
+
+          private Type getAckedMsg(final Type msgType) {
+            switch(msgType) {
+            case ParentAdded:
+              return Type.ParentAdd;
+            case ChildAdded:
+              return Type.ChildAdd;
+            case ParentRemoved:
+              return Type.ParentDead;
+            case ChildRemoved:
+              return Type.ChildDead;
+              default:
+                return msgType;
+            }
+          }
+
+          private boolean chkAndSendTopoSetup(
+              final Set<String> sourceSet,
+              final Type msgDealt) {
+            LOG.info(getQualifiedName() + "Checking if I am ready to send TopoSetup msg");
+            if(sourceSet.isEmpty()) {
+              LOG.info(getQualifiedName() + "Empty source set. Removing");
+              statusMap.remove(msgDealt);
+              if(statusMap.isEmpty()) {
+                LOG.info(getQualifiedName() + "Empty status map.");
+                return node.chkAndSendTopSetup();
+              }
+              else {
+                LOG.info(getQualifiedName() + "Status map non-empty" + statusMap);
+              }
+            } else {
+              LOG.info(getQualifiedName() + "Source set not empty" + statusMap);
+            }
+            return false;
           }
         }, 10);
   }
@@ -236,6 +244,16 @@ public class NodeStatusImpl implements TaskNodeStatus {
    */
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + taskId + " - ";
+  }
+
+  @Override
+  public boolean hasChanges() {
+    return !statusMap.isEmpty();
+  }
+
+  @Override
+  public void waitForTopologySetup() {
+    topoSetup.awaitAndReset(1);
   }
 
 }

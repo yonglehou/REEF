@@ -68,6 +68,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private final EStage<Configuration> commGroupAddTaskStage;
   private final CommGroupMessageHandler commGroupMessageHandler;
   private final EStage<GroupCommMessage> commGroupMessageStage;
+  private final int numberOfTasks;
 
 
   public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
@@ -76,9 +77,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler,
       final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler,
       final CommGroupMessageHandler commGroupMessageHandler,
-      final String driverId) {
+      final String driverId,
+      final int numberOfTasks) {
     super();
     this.groupName = groupName;
+    this.numberOfTasks = numberOfTasks;
     this.commGroupAddTaskHandler = new BroadcastingEventHandler<>();
     this.commGroupAddTaskStage = new SingleThreadStage<>("CommGroupAddTaskStage", commGroupAddTaskHandler, 10);
     this.commGroupRunningTaskHandler = commGroupRunningTaskHandler;
@@ -105,7 +108,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);*/
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -131,7 +134,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);*/
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -189,27 +192,4 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new RuntimeException("Unable to find task identifier", e);
     }
   }
-
-  @Override
-  public void handle(final GroupCommMessage gcm) {
-    final Class<? extends Name<String>> operName = Utils.getClass(gcm.getOperatorname());
-    topologies.get(operName).handle(gcm);
-  }
-
-  @Override
-  public void handle(final RunningTask runningTask) {
-    for(final Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
-      final Topology topology = topEntry.getValue();
-      topology.handle(runningTask);
-    }
-  }
-
-  @Override
-  public void handle(final FailedTask failedTask) {
-    for(final Map.Entry<Class<? extends Name<String>>, Topology> topEntry : topologies.entrySet()){
-      final Topology topology = topEntry.getValue();
-      topology.handle(failedTask);
-    }
-  }
-
 }

@@ -72,7 +72,7 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
       final NetworkService<GroupCommMessage> netService,
       final CommunicationGroupClient commGroupClient) {
     super();
-    LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
+    LOG.info(getQualifiedName() + "has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
     this.operName = Utils.getClass(operName);
     this.dataCodec = dataCodec;
@@ -109,8 +109,15 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
     if(init.compareAndSet(false, true)) {
       commGroupClient.initialize();
     }
-    LOG.info("I am Broadcast sender root " + topology.getSelfId() + " for oper: " + operName + " in group " + groupName);
+    LOG.info(getQualifiedName() + "I am Broadcast sender root");
     topology.sendToChildren(dataCodec.encode(element),Type.Broadcast);
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + " - ";
   }
 
 }
