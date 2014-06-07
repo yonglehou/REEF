@@ -327,6 +327,34 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+        	<id>BroadcastDemo</id>
+        	<build>
+        		<defaultGoal>exec:exec</defaultGoal>
+        		<plugins>
+        			<plugin>
+        				<groupId>org.codehaus.mojo</groupId>
+        				<artifactId>exec-maven-plugin</artifactId>
+        				<configuration>
+        					<executable>java</executable>
+                            <arguments>
+                                <argument>-classpath</argument>
+                                <classpath />
+                                <argument>-Dcom.microsoft.reef.runtime.local.folder=${project.build.directory}
+                                </argument>
+                                <argument>-Djava.util.logging.config.class=com.microsoft.reef.util.logging.Config
+                                </argument>
+                                <argument>com.microsoft.reef.examples.nggroup.broadcast.BroadcastREEF</argument>
+                                <argument>-dim</argument>
+                                <argument>1000000</argument>
+                                <argument>-receivers</argument>
+                                <argument>5</argument>
+                            </arguments>
+        				</configuration>
+        			</plugin>
+        		</plugins>
+        	</build>
+        </profile>
     </profiles>
 
 </project>

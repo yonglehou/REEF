@@ -13,21 +13,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.io.network.nggroup.impl;
+
+import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 
 /**
  *
  */
-public interface GroupChanges {
+public class GroupChangesImpl implements GroupChanges {
+
+  private boolean changes;
+
+  public GroupChangesImpl(final boolean changes) {
+    this.changes = changes;
+  }
+
+  @Override
+  public boolean exist() {
+    return changes;
+  }
 
   /**
-   * @return
+   * @param changes the changes to set
    */
-  boolean exist();
-
-  /**
-   * @param changes
-   */
-  void setChanges(boolean changes);
-
+  @Override
+  public void setChanges(final boolean changes) {
+    this.changes = changes;
+  }
 }

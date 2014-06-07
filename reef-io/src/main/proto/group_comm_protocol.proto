@@ -25,6 +25,7 @@ message GroupCommMessage {
   	TopologySetup=18;
   	UpdateTopology=19;
   	TopologyUpdated=20;
+  	TopologyChanges=21;
   }
 
   // identifies which field is filled in

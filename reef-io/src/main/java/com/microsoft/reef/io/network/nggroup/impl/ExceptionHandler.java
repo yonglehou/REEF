@@ -36,12 +36,12 @@ public class ExceptionHandler implements EventHandler<Exception> {
   @Override
   public synchronized void onNext(Exception arg0) {
     exceptions.add(arg0);
-    LOG.fine("Got an exception. Added it to list(" + exceptions.size() + ")");
+    LOG.info("Got an exception. Added it to list(" + exceptions.size() + ")");
   }
   
   public synchronized boolean hasExceptions(){
     boolean ret = !exceptions.isEmpty();
-    LOG.fine("There are " + exceptions.size() + " exceptions. Clearing now");
+    LOG.info("There are " + exceptions.size() + " exceptions. Clearing now");
     exceptions.clear();
     return ret;
   }

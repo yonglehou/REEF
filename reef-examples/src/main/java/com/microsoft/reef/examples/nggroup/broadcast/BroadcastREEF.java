@@ -13,23 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.broadcast;
 
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.TextInputFormat;
-
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
 import com.microsoft.reef.runtime.yarn.client.YarnClientConfiguration;
@@ -49,8 +44,8 @@ import com.microsoft.tang.formats.CommandLine;
  *
  */
 @ClientSide
-public class BGDREEF {
-  private static final Logger LOG = Logger.getLogger(BGDREEF.class.getName());
+public class BroadcastREEF {
+  private static final Logger LOG = Logger.getLogger(BroadcastREEF.class.getName());
 
   private static final String NUM_LOCAL_THREADS = "20";
 
@@ -71,16 +66,16 @@ public class BGDREEF {
   }
 
   private static boolean local;
-  private static String input;
   private static int dimensions;
+  private static int numberOfReceivers;
 
   private static Configuration parseCommandLine(final String[] aArgs) {
     final JavaConfigurationBuilder cb = Tang.Factory.getTang().newConfigurationBuilder();
     try {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
-      cl.registerShortNameOfClass(BGDREEF.InputDir.class);
       cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(NumberOfReceivers.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
       final String msg = "Unable to parse command line";
@@ -97,8 +92,8 @@ public class BGDREEF {
       throws InjectionException, BindException {
     final Injector injector = Tang.Factory.getTang().newInjector(commandLineConf);
     local = injector.getNamedInstance(Local.class);
-    input = injector.getNamedInstance(BGDREEF.InputDir.class);
     dimensions = injector.getNamedInstance(Dimensions.class);
+    numberOfReceivers = injector.getNamedInstance(NumberOfReceivers.class);
   }
 
   /**
@@ -110,12 +105,12 @@ public class BGDREEF {
   private static Configuration getRunTimeConfiguration() throws BindException {
     final Configuration runtimeConfiguration;
     if (local) {
-      LOG.log(Level.INFO, "Running BGD using nggroup API on the local runtime");
+      LOG.log(Level.INFO, "Running Broadcast example using nggroup API on the local runtime");
       runtimeConfiguration = LocalRuntimeConfiguration.CONF
           .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, NUM_LOCAL_THREADS)
           .build();
     } else {
-      LOG.log(Level.INFO, "Running BGD using nggroup API on YARN");
+      LOG.log(Level.INFO, "Running Broadcast example using nggroup API on YARN");
       runtimeConfiguration = YarnClientConfiguration.CONF.build();
     }
     return runtimeConfiguration;
@@ -124,7 +119,7 @@ public class BGDREEF {
   public static LauncherStatus runBGDReef(
       final Configuration runtimeConfiguration
   ) throws BindException, InjectionException {
-    final JobConf jobConf = new JobConf();
+    /*final JobConf jobConf = new JobConf();
     jobConf.setInputFormat(TextInputFormat.class);
     TextInputFormat.addInputPath(jobConf, new Path(input));
     final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
@@ -141,13 +136,23 @@ public class BGDREEF {
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
             .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))
+        .build();*/
+
+    final Configuration driverConfiguration = EnvironmentUtils
+        .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
+        .set(DriverConfiguration.ON_DRIVER_STARTED, BroadcastDriver.StartHandler.class)
+        .set(DriverConfiguration.ON_EVALUATOR_ALLOCATED, BroadcastDriver.EvaluatorAllocatedHandler.class)
+        .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BroadcastDriver.ContextActiveHandler.class)
+        .set(DriverConfiguration.ON_CONTEXT_CLOSED, BroadcastDriver.ContextCloseHandler.class)
+        .set(DriverConfiguration.DRIVER_IDENTIFIER, "BroadcastDriver")
         .build();
 
     final Configuration groupCommServConfiguration = GroupCommService.getConfiguration();
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
-        .newConfigurationBuilder(dataLoadConfiguration, groupCommServConfiguration)
+        .newConfigurationBuilder(driverConfiguration, groupCommServConfiguration)
         .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(NumberOfReceivers.class, Integer.toString(numberOfReceivers))
         .build();
 
     LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));

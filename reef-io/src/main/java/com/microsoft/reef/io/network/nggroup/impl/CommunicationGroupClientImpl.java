@@ -16,11 +16,11 @@
 package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
@@ -42,6 +42,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -87,7 +88,16 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     this.groupName = Utils.getClass(groupName);
     this.groupCommNetworkHandler = groupCommNetworkHandler;
     this.sender = new Sender(netService);
-    this.operators = new HashMap<>();
+    this.operators = new TreeMap<>(new Comparator<Class<? extends Name<String>>>() {
+
+      @Override
+      public int compare(final Class<? extends Name<String>> o1,
+          final Class<? extends Name<String>> o2) {
+        final String s1 = o1.getSimpleName();
+        final String s2 = o2.getSimpleName();
+        return s1.compareTo(s2);
+      }
+    });
     try {
       this.commGroupNetworkHandler = Tang.Factory.getTang().newInjector().getInstance(CommGroupNetworkHandler.class);
       this.groupCommNetworkHandler.register(this.groupName, commGroupNetworkHandler);
@@ -121,6 +131,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     if(!(op instanceof Broadcast.Sender)) {
       throw new RuntimeException("Configured operator is not a broadcast sender");
     }
+    commGroupNetworkHandler.addTopologyElement(operatorName);
     return (Broadcast.Sender)op;
   }
 
@@ -130,6 +141,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     if(!(op instanceof Reduce.Receiver)) {
       throw new RuntimeException("Configured operator is not a reduce receiver");
     }
+    commGroupNetworkHandler.addTopologyElement(operatorName);
     return (Reduce.Receiver)op;
   }
 
@@ -140,6 +152,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     if(!(op instanceof Broadcast.Receiver)) {
       throw new RuntimeException("Configured operator is not a broadcast receiver");
     }
+    commGroupNetworkHandler.addTopologyElement(operatorName);
     return (Broadcast.Receiver)op;
   }
 
@@ -150,33 +163,10 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     if(!(op instanceof Reduce.Sender)) {
       throw new RuntimeException("Configured operator is not a reduce sender");
     }
+    commGroupNetworkHandler.addTopologyElement(operatorName);
     return (Reduce.Sender)op;
   }
 
-
-  @Override
-  public GroupChanges getTopologyChanges() {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  @Override
-  public void updateTopology() {
-    for(final GroupCommOperator op : operators.values()) {
-      final Class<? extends Name<String>> operName = op.getOperName();
-      commGroupNetworkHandler.addTopologyUpdateElement(operName);
-      LOG.info("Sending UpdateTopology msg to driver" + driverId);
-      try {
-        sender.send(Utils.bldGCM(groupName, operName, Type.UpdateTopology, taskId, driverId, new byte[0]));
-      } catch (final NetworkException e) {
-        throw new RuntimeException("NetworkException while sending UpdateTopology", e);
-      }
-    }
-    for(final GroupCommOperator op : operators.values()) {
-      final Class<? extends Name<String>> operName = op.getOperName();
-      commGroupNetworkHandler.waitForTopologyUpdate(operName);
-    }
-  }
 
   @Override
   public void initialize() {
@@ -191,22 +181,58 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   }
 
   @Override
-  public GroupChanges synchronize() {
-    // TODO Auto-generated method stub
-    return null;
+  public GroupChanges getTopologyChanges() {
+    LOG.info("Getting Topology Changes");
+    for (final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      LOG.info("Sending TopologyChanges msg to driver");
+      try {
+        sender.send(Utils.bldGCM(groupName, operName, Type.TopologyChanges, taskId, driverId, new byte[0]));
+      } catch (final NetworkException e) {
+        throw new RuntimeException("NetworkException while sending GetTopologyChanges", e);
+      }
+    }
+    final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
+    final Map<Class<? extends Name<String>>, GroupChanges> retVal = new HashMap<>();
+    for(final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      final byte[] changes = commGroupNetworkHandler.waitForTopologyChanges(operName);
+      retVal.put(operName, changesCodec.decode(changes));
+    }
+    return mergeGroupChanges(retVal);
+  }
+
+  /**
+   * @param perOpChanges
+   * @return
+   */
+  private GroupChanges mergeGroupChanges(
+      final Map<Class<? extends Name<String>>, GroupChanges> perOpChanges) {
+    final GroupChanges changes = new GroupChangesImpl(false);
+    for(final GroupChanges change : perOpChanges.values()) {
+      if(change.exist()) {
+        changes.setChanges(true);
+        break;
+      }
+    }
+    return changes;
   }
 
   @Override
-  public void waitFor(final int numberOfReceivers, final int timeout, final TimeUnit unit)
-      throws TimeoutException {
-    // TODO Auto-generated method stub
-
-  }
-
-  @Override
-  public void waitFor(final int timeout, final TimeUnit unit) throws TimeoutException {
-    // TODO Auto-generated method stub
-
+  public void updateTopology() {
+    for(final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      LOG.info("Sending UpdateTopology msg to driver" + driverId);
+      try {
+        sender.send(Utils.bldGCM(groupName, operName, Type.UpdateTopology, taskId, driverId, new byte[0]));
+      } catch (final NetworkException e) {
+        throw new RuntimeException("NetworkException while sending UpdateTopology", e);
+      }
+    }
+    for(final GroupCommOperator op : operators.values()) {
+      final Class<? extends Name<String>> operName = op.getOperName();
+      commGroupNetworkHandler.waitForTopologyUpdate(operName);
+    }
   }
 
   @Override

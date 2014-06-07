@@ -36,10 +36,23 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
   private static final Logger LOG = Logger.getLogger(CommGroupNetworkHandlerImpl.class.getName());
 
   private final Map<Class<? extends Name<String>>, EventHandler<GroupCommMessage>> operHandlers = new ConcurrentHashMap<>();
-  private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyUpdates = new ConcurrentHashMap<>();
+  private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyNotifications = new ConcurrentHashMap<>();
 
   @Inject
   public CommGroupNetworkHandlerImpl() {  }
+
+
+  @Override
+  public void register(final Class<? extends Name<String>> operName,
+      final EventHandler<GroupCommMessage> operHandler) {
+    operHandlers.put(operName, operHandler);
+  }
+
+  @Override
+  public void addTopologyElement(final Class<? extends Name<String>> operName) {
+    LOG.info("Creating LBQ for " + operName);
+    topologyNotifications.put(operName, new LinkedBlockingQueue<GroupCommMessage>());
+  }
 
   @Override
   public void onNext(final GroupCommMessage msg) {
@@ -47,34 +60,35 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
         .getOperatorname());
     if(msg.getType()==Type.TopologyUpdated) {
       LOG.info("Got TopologyUpdate msg for " + operName + ". Adding to respective queue");
-      topologyUpdates.get(operName).add(msg);
-    } else {
+      topologyNotifications.get(operName).add(msg);
+    }
+    else if(msg.getType()==Type.TopologyChanges) {
+      LOG.info("Got TopologyChanges msg for " + operName + ". Adding to respective queue");
+      topologyNotifications.get(operName).add(msg);
+    }
+    else {
       operHandlers.get(operName).onNext(msg);
     }
   }
 
   @Override
-  public void addTopologyUpdateElement(final Class<? extends Name<String>> operName) {
-    LOG.info("Creating LBQ for " + operName);
-    topologyUpdates.put(operName, new LinkedBlockingQueue<GroupCommMessage>());
-  }
-
-  @Override
-  public void waitForTopologyUpdate(final Class<? extends Name<String>> operName) {
+  public byte[] waitForTopologyChanges(final Class<? extends Name<String>> operName) {
     try {
-      LOG.info("Waiting for topology update msg for " + operName);
-      topologyUpdates.get(operName).take();
-      LOG.info("Removing LBQ for " + operName);
-      topologyUpdates.remove(operName);
+      LOG.info("Waiting for topology change msg for " + operName);
+      return Utils.getData(topologyNotifications.get(operName).take());
     } catch (final InterruptedException e) {
       throw new RuntimeException("InterruptedException while waiting for topology update of " + operName.getSimpleName(), e);
     }
   }
 
   @Override
-  public void register(final Class<? extends Name<String>> operName,
-      final EventHandler<GroupCommMessage> operHandler) {
-    operHandlers.put(operName, operHandler);
+  public void waitForTopologyUpdate(final Class<? extends Name<String>> operName) {
+    try {
+      LOG.info("Waiting for topology update msg for " + operName);
+      topologyNotifications.get(operName).take();
+    } catch (final InterruptedException e) {
+      throw new RuntimeException("InterruptedException while waiting for topology update of " + operName.getSimpleName(), e);
+    }
   }
 
 }

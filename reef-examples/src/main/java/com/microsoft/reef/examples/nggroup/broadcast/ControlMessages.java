@@ -13,21 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.examples.nggroup.broadcast;
 
-/**
- *
- */
-public interface GroupChanges {
+import java.io.Serializable;
 
-  /**
-   * @return
-   */
-  boolean exist();
-
-  /**
-   * @param changes
-   */
-  void setChanges(boolean changes);
-
+public enum ControlMessages implements Serializable{
+  ReceiveModel,
+  Stop
 }

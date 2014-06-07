@@ -74,4 +74,8 @@ public class Utils {
   public static void main(final String[] args) {
     System.out.println(Utils.class.getSimpleName());
   }
+
+  public static byte[] getData(final GroupCommMessage gcm) {
+    return (gcm.getMsgsCount()==1) ? gcm.getMsgs(0).getData().toByteArray() : null;
+  }
 }

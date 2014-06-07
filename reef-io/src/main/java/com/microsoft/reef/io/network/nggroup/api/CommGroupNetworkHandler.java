@@ -36,12 +36,17 @@ public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> 
   /**
    * @param operName
    */
-  void addTopologyUpdateElement(Class<? extends Name<String>> operName);
+  void addTopologyElement(Class<? extends Name<String>> operName);
 
   /**
    * @param operName
    *
    */
   void waitForTopologyUpdate(Class<? extends Name<String>> operName);
+
+  /**
+   * @param operName
+   */
+  byte[] waitForTopologyChanges(Class<? extends Name<String>> operName);
 
 }

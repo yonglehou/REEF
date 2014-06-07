@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.broadcast;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -24,19 +25,23 @@ import javax.inject.Inject;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ClosedContext;
+import com.microsoft.reef.driver.context.ContextConfiguration;
+import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
+import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
+import com.microsoft.reef.driver.evaluator.EvaluatorRequestor;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
-import com.microsoft.reef.io.data.loading.api.DataLoadingService;
-import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelReceiveAckReducer;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
-import com.microsoft.reef.io.network.util.Utils.Pair;
+import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.tang.Configuration;
@@ -44,19 +49,19 @@ import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.annotations.Unit;
+import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EventHandler;
+import com.microsoft.wake.time.event.StartTime;
 
 /**
  *
  */
 @DriverSide
 @Unit
-public class BGDDriver {
-  private static final Logger LOG = Logger.getLogger(BGDDriver.class.getName());
-
-  private final DataLoadingService dataLoadingService;
+public class BroadcastDriver {
+  private static final Logger LOG = Logger.getLogger(BroadcastDriver.class.getName());
 
   private final GroupCommDriver groupCommDriver;
 
@@ -72,27 +77,33 @@ public class BGDDriver {
 
   private final int dimensions;
 
+  private final EvaluatorRequestor requestor;
+
+  private final int numberOfReceivers;
+
+  private final AtomicInteger numberOfAllocatedEvaluators;
+
   @Inject
-  public BGDDriver(
-      final DataLoadingService dataLoadingService,
+  public BroadcastDriver(
+      final EvaluatorRequestor requestor,
       final GroupCommDriver groupCommDriver,
       final ConfigurationSerializer confSerializer,
-      @Parameter(Dimensions.class) final int dimensions){
-    this.dataLoadingService = dataLoadingService;
+      @Parameter(Dimensions.class) final int dimensions,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers){
+    this.requestor = requestor;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
     this.dimensions = dimensions;
+    this.numberOfReceivers = numberOfReceivers;
+    this.numberOfAllocatedEvaluators = new AtomicInteger(numberOfReceivers + 1);
 
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, dataLoadingService.getNumberOfPartitions() + 1);
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, numberOfReceivers + 1);
     LOG.info("Obtained all communication group");
 
     final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
     final Codec<Vector> modelCodec = new SerializableCodec<>();
-    final Codec<Pair<Double,Vector>> lossAndGradientCodec = new SerializableCodec<>();
-    final Codec<Pair<Vector,Vector>> modelAndDesDirCodec = new SerializableCodec<>();
-    final Codec<Vector> lineSearchCodec = new SerializableCodec<>();
-    final ReduceFunction<Pair<Double,Vector>> lossAndGradientReduceFunction = new LossAndGradientReduceFunction();
-    final ReduceFunction<Vector> lineSearchReduceFunction = new LineSearchReduceFunction();
+    final Codec<Boolean> modelReceiveAckCodec = new SerializableCodec<>();
+
     allCommGroup
       .addBroadcast(ControlMessageBroadcaster.class,
           BroadcastOperatorSpec
@@ -100,52 +111,62 @@ public class BGDDriver {
             .setSenderId("MasterTask")
             .setDataCodecClass(controlMsgCodec.getClass())
             .build())
-      /*.addBroadcast(ModelBroadcaster.class,
+      .addBroadcast(ModelBroadcaster.class,
           BroadcastOperatorSpec
             .newBuilder()
             .setSenderId("MasterTask")
             .setDataCodecClass(modelCodec.getClass())
             .build())
-      .addReduce(LossAndGradientReducer.class,
+      .addReduce(ModelReceiveAckReducer.class,
           ReduceOperatorSpec
             .newBuilder()
             .setReceiverId("MasterTask")
-            .setDataCodecClass(lossAndGradientCodec.getClass())
-            .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
-            .build())
-      .addBroadcast(ModelAndDescentDirectionBroadcaster.class,
-          BroadcastOperatorSpec
-          .newBuilder()
-          .setSenderId("MasterTask")
-          .setDataCodecClass(modelAndDesDirCodec.getClass())
-          .build())
-      .addReduce(LineSearchEvaluationsReducer.class,
-          ReduceOperatorSpec
-          .newBuilder()
-          .setReceiverId("MasterTask")
-          .setDataCodecClass(lineSearchCodec.getClass())
-          .setReduceFunctionClass(lineSearchReduceFunction.getClass())
-          .build())*/
+            .setDataCodecClass(modelReceiveAckCodec.getClass())
+            .setReduceFunctionClass(ModelReceiveAckReduceFunction.class)
+            .build()
+            )
       .finalise();
 
     LOG.info("Added operators to allCommGroup");
   }
 
-  public class ContextCloseHandler implements EventHandler<ClosedContext> {
-
+  /**
+   * Handles the StartTime event: Request numOfReceivers Evaluators.
+   */
+  final class StartHandler implements EventHandler<StartTime> {
     @Override
-    public void onNext(final ClosedContext closedContext) {
-      LOG.info("Got closed context-" + closedContext.getId());
-      final ActiveContext parentContext = closedContext.getParentContext();
-      if(parentContext!=null){
-        LOG.info("Closing parent context-" + parentContext.getId());
-        parentContext.close();
+    public void onNext(final StartTime startTime) {
+      final int numEvals = BroadcastDriver.this.numberOfReceivers + 1;
+      LOG.info("Requesting " + numEvals + " evaluators");
+      BroadcastDriver.this.requestor.submit(EvaluatorRequest.newBuilder()
+          .setNumber(numEvals)
+          .setMemory(2048)
+          .build());
+      LOG.log(Level.INFO, "Requested Evaluators.");
+    }
+  }
+
+  /**
+   * Handles AllocatedEvaluator: Submits a context with an id
+   */
+  final class EvaluatorAllocatedHandler implements EventHandler<AllocatedEvaluator> {
+    @Override
+    public void onNext(final AllocatedEvaluator allocatedEvaluator) {
+      LOG.log(Level.INFO, "Submitting an id context to AllocatedEvaluator: {0}", allocatedEvaluator);
+      try {
+        final Configuration contextConfiguration = ContextConfiguration.CONF
+            .set(ContextConfiguration.IDENTIFIER, "BroadcastContext-" + BroadcastDriver.this.numberOfAllocatedEvaluators.getAndDecrement())
+            .build();
+        allocatedEvaluator.submitContext(contextConfiguration);
+      } catch (final BindException ex) {
+        throw new RuntimeException("Unable to setup Task or Context configuration.", ex);
       }
     }
-
   }
 
   public class ContextActiveHandler implements EventHandler<ActiveContext> {
+
+    private final AtomicBoolean storeMasterId = new AtomicBoolean(false);
 
     @Override
     public void onNext(final ActiveContext activeContext) {
@@ -166,9 +187,6 @@ public class BGDDriver {
                   .set(TaskConfiguration.IDENTIFIER, "MasterTask")
                   .set(TaskConfiguration.TASK, MasterTask.class)
                   .build())
-               .bindNamedParameter(
-                   NumberOfReceivers.class,
-                   Integer.toString(dataLoadingService.getNumberOfPartitions()))
                .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
                .build();
 
@@ -185,9 +203,6 @@ public class BGDDriver {
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class)
                   .build())
-              .bindNamedParameter(
-                   NumberOfReceivers.class,
-                   Integer.toString(dataLoadingService.getNumberOfPartitions()))
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
               .build();
           allCommGroup.addTask(partialTaskConf);
@@ -200,7 +215,7 @@ public class BGDDriver {
       else{
         final Configuration contextConf = groupCommDriver.getContextConf();
         final String contextId = contextId(contextConf);
-        if(!dataLoadingService.isDataLoadedContext(activeContext)){
+        if(storeMasterId.compareAndSet(false, true)){
           groupCommConfiguredMasterId = contextId;
         }
         LOG.info("Submitting GCContext conf");
@@ -239,6 +254,20 @@ public class BGDDriver {
      */
     private boolean masterTaskSubmitted() {
       return !masterSubmitted.compareAndSet(false, true);
+    }
+  }
+
+
+  public class ContextCloseHandler implements EventHandler<ClosedContext> {
+
+    @Override
+    public void onNext(final ClosedContext closedContext) {
+      LOG.info("Got closed context-" + closedContext.getId());
+      final ActiveContext parentContext = closedContext.getParentContext();
+      if(parentContext!=null){
+        LOG.info("Closing parent context-" + parentContext.getId());
+        parentContext.close();
+      }
     }
   }
 

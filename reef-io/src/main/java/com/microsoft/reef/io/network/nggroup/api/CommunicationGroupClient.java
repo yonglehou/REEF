@@ -15,9 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.tang.annotations.DefaultImplementation;
@@ -57,39 +54,9 @@ public interface CommunicationGroupClient {
   Reduce.Sender getReduceSender(Class<? extends Name<String>> operatorName);
 
   /**
-   * Non-blocking call to find if there are
-   * any changes to the composition of this
-   * group. This should also invoke a synchronize
-   * on all the operators running in the participants
-   * of this group. Once this call returns
-   * the operators are configured to deal with
-   * the current network topology and the
-   * control queue of the operators are empty
-   * @return
-   */
-  GroupChanges synchronize();
-
-  /**
-   * blocking call that waits for the numberOfReceivers participants
-   * of this group to be available and times out after timeout timeunits
-   * @param numberOfReceivers
-   * @param timeout
-   * @param unit
-   */
-  void waitFor(int numberOfReceivers, int timeout, TimeUnit unit) throws TimeoutException;
-
-  /**
-   * blocking call that waits for timeout timeunits
-   * @param numberOfReceivers
-   * @param timeout
-   * @param unit
-   */
-  void waitFor(int timeout, TimeUnit unit) throws TimeoutException;
-
-  /**
-   * @return
-   */
-  Class<? extends Name<String>> getName();
+  *
+  */
+  void initialize();
 
   /**
    * @return
@@ -102,7 +69,7 @@ public interface CommunicationGroupClient {
   void updateTopology();
 
   /**
-   *
+   * @return
    */
-  void initialize();
+  Class<? extends Name<String>> getName();
 }

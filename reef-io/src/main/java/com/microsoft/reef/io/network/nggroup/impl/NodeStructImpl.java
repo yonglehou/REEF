@@ -61,11 +61,7 @@ public abstract class NodeStructImpl implements NodeStruct {
       return null;
     }
 
-    if(gcm.getMsgsCount()==1) {
-      return gcm.getMsgs(0).getData().toByteArray();
-    } else {
-      return null;
-    }
+    return Utils.getData(gcm);
   }
 
   public abstract boolean checkDead(final GroupCommMessage gcm);

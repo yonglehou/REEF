@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
+import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
 import com.microsoft.reef.io.network.nggroup.api.Topology;
@@ -33,6 +34,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
@@ -181,6 +183,33 @@ public class FlatTopology implements Topology {
       allTasksAdded.await();
     }
     LOG.info(getQualifiedName() + "processing " + msg.getType() + " from " + msg.getSrcid());
+    if(msg.getType().equals(Type.TopologyChanges)) {
+      final String dstId = msg.getSrcid();
+      final GroupChanges changes = new GroupChangesImpl(false);
+      synchronized (nodes) {
+        LOG.info(getQualifiedName() + "Checking which nodes need to be updated");
+        for (final TaskNode node : nodes.values()) {
+          if(node.isRunning()) {
+            LOG.info(getQualifiedName() + node.taskId() + " is running");
+            if(node.hasChanges()) {
+              LOG.info(getQualifiedName() + node.taskId() + " has changes.");
+              changes.setChanges(true);
+              break;
+            }
+            else {
+              LOG.info(getQualifiedName() + node.taskId() + " has no changes. Skipping");
+            }
+          }
+          else {
+            LOG.info(getQualifiedName() + node.taskId() + " is not running. Skipping");
+          }
+        }
+      }
+      final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
+      LOG.info("Sending GroupChanges to " + dstId);
+      senderStage.onNext(Utils.bldGCM(groupName, operName, Type.TopologyChanges, driverId, dstId, changesCodec.encode(changes)));
+      return;
+    }
     if(msg.getType().equals(Type.UpdateTopology)) {
       allTasksAdded.await();
       final String dstId = msg.getSrcid();

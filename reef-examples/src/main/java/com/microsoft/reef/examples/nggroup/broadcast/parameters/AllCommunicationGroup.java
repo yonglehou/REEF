@@ -13,21 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.examples.nggroup.broadcast.parameters;
+
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
- *
+ * 
  */
-public interface GroupChanges {
-
-  /**
-   * @return
-   */
-  boolean exist();
-
-  /**
-   * @param changes
-   */
-  void setChanges(boolean changes);
+@NamedParameter()
+public final class AllCommunicationGroup implements Name<String> {
 
 }

@@ -19,6 +19,8 @@ import java.util.ArrayList;
 
 import javax.inject.Inject;
 
+import org.mortbay.log.Log;
+
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
@@ -27,6 +29,7 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
+import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
@@ -68,18 +71,24 @@ public class MasterTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     try{
-//      communicationGroupClient.waitFor(numberOfReceivers,30,TimeUnit.SECONDS);
-
       final ArrayList<Double> losses = new ArrayList<>();
       final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
       final Vector model = new DenseVector(dimensions);
       controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
-      communicationGroupClient.updateTopology();
+      final GroupChanges changes = communicationGroupClient.getTopologyChanges();
+      if(changes.exist()) {
+        Log.info("There exist topology changes. Asking to update Topology");
+        communicationGroupClient.updateTopology();
+      } else {
+        Log.info("No changes in topology exist. So not updating topology");
+      }
+      controlMessageBroadcaster.send(ControlMessages.Stop);
+      return lossCodec.encode(losses);
 //      modelBroadcaster.send(model);
 //      final Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
 //      GroupChanges changes = communicationGroupClient.getTopologyChanges();
 //      communicationGroupClient.updateTopology();
-      controlMessageBroadcaster.send(ControlMessages.Stop);
+
 
       /*while(true){
         controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
@@ -109,7 +118,7 @@ public class MasterTask implements Task {
           break;
         }
       }*/
-      return lossCodec.encode(losses);
+//      return lossCodec.encode(losses);
     }catch(final /*TimeoutException*/ Exception e){
 //      controlMessageBroadcaster.send(ControlMessages.Stop);
       throw e;

@@ -13,21 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.api;
+package com.microsoft.reef.examples.nggroup.broadcast;
+
+import javax.inject.Inject;
+
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 
 /**
  *
  */
-public interface GroupChanges {
+public class ModelReceiveAckReduceFunction implements ReduceFunction<Boolean> {
 
-  /**
-   * @return
-   */
-  boolean exist();
+  @Inject
+  public ModelReceiveAckReduceFunction() {
+  }
 
-  /**
-   * @param changes
-   */
-  void setChanges(boolean changes);
+  @Override
+  public Boolean apply(final Iterable<Boolean> elements) {
+    return true;
+  }
 
 }

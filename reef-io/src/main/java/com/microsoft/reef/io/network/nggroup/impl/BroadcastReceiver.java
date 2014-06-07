@@ -124,9 +124,9 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
       LOG.info("Decoded msg successfully");
     }
 
-    LOG.log(Level.INFO, "Received: " + (retVal==null ? "NULL" : retVal));
+//    LOG.log(Level.INFO, "Received: " + (retVal==null ? "NULL" : retVal));
 
-    LOG.log(Level.INFO, "Sending " + (retVal==null ? "NULL" : retVal) + " to children");
+//    LOG.log(Level.INFO, "Sending " + (retVal==null ? "NULL" : retVal) + " to children");
     topology.sendToChildren(data, Type.Broadcast);
     return retVal;
   }
