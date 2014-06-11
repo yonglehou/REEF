@@ -15,8 +15,9 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import javax.inject.Inject;
 import java.util.Arrays;
+
+import javax.inject.Inject;
 
 /**
  *
@@ -28,7 +29,7 @@ public class StepSizes {
   @Inject
   public StepSizes() {
     this.t = new double[gridSize];
-    int mid = (gridSize / 2) + 1;
+    final int mid = (gridSize / 2);
     t[mid] = 1;
     for (int i = mid - 1; i >= 0; i--) {
       t[i] = t[i + 1] / 2.0;
@@ -51,9 +52,9 @@ public class StepSizes {
   /**
    * @param args
    */
-  public static void main(String[] args) {
+  public static void main(final String[] args) {
     // TODO Auto-generated method stub
-    StepSizes t = new StepSizes();
+    final StepSizes t = new StepSizes();
     System.out.println(Arrays.toString(t.getT()));
   }
 

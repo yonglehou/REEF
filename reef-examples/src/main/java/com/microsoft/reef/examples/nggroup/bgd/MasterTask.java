@@ -26,6 +26,7 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
@@ -56,19 +57,19 @@ public class MasterTask implements Task {
   private final Reduce.Receiver<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
   private final int dimensions;
   private final boolean ignoreAndContinue = false;
-  private final ConvergenceMonitor convergenceMonitor;
   private final com.microsoft.reef.examples.nggroup.bgd.StepSizes ts;
   private final double lambda;
+  private final int maxIters;
 
   @Inject
   public MasterTask(
       final GroupCommClient groupCommClient,
       @Parameter(Dimensions.class) final int dimensions,
       @Parameter(Lambda.class) final double lambda,
-      final ConvergenceMonitor cm,
+      @Parameter(Iterations.class) final int maxIters,
       final StepSizes ts){
     this.lambda = lambda;
-    this.convergenceMonitor = cm;
+    this.maxIters = maxIters;
     this.ts = ts;
     this.communicationGroupClient = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     this.controlMessageBroadcaster = communicationGroupClient.getBroadcastSender(ControlMessageBroadcaster.class);
@@ -84,22 +85,8 @@ public class MasterTask implements Task {
     final ArrayList<Double> losses = new ArrayList<>();
     final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
     final Vector model = new DenseVector(dimensions);
-    /*controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
-    final GroupChanges changes = communicationGroupClient.getTopologyChanges();
-    if(changes.exist()) {
-      Log.info("There exist topology changes. Asking to update Topology");
-      communicationGroupClient.updateTopology();
-    } else {
-      Log.info("No changes in topology exist. So not updating topology");
-    }
-    controlMessageBroadcaster.send(ControlMessages.Stop);
-    return lossCodec.encode(losses);*/
-//      modelBroadcaster.send(model);
-//      final Pair<Double,Vector> lossAndGradient = lossAndGradientReducer.reduce();
-//      GroupChanges changes = communicationGroupClient.getTopologyChanges();
-//      communicationGroupClient.updateTopology();
 
-
+    int iters = 1;
     while(true){
       controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
       modelBroadcaster.send(model);
@@ -110,19 +97,22 @@ public class MasterTask implements Task {
       }
 
       final double loss = regularizeLoss(lossAndGradient.first.first, lossAndGradient.first.second, model);
+      System.out.println("Loss: " + loss);
       final Vector gradient = regularizeGrad(lossAndGradient.second, lossAndGradient.first.second, model);
-
+      System.out.println("Gradient: " + gradient);
       losses.add(loss);
-      if(converged(loss)){
+      if(converged(iters, gradient.norm2())){
         controlMessageBroadcaster.send(ControlMessages.Stop);
         break;
       }
 
       final Vector descentDirection = getDescentDirection(gradient);
+      System.out.println("DescentDirection: " + descentDirection);
+
       controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
       modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
       final Pair<Vector,Integer> lineSearchEvals = lineSearchEvaluationsReducer.reduce();
-
+      System.out.println("LineSearchEvals: " + lineSearchEvals.first);
       if(chkAndUpdate()) {
         continue;
       }
@@ -131,6 +121,8 @@ public class MasterTask implements Task {
       descentDirection.scale(minEta);
       model.add(descentDirection);
 
+      System.out.println("New Model: " + model);
+      ++iters;
     }
     for (final Double loss : losses) {
       System.out.println(loss);
@@ -172,16 +164,15 @@ public class MasterTask implements Task {
    * @return
    */
   private double regularizeLoss(final double loss, final int numEx, final Vector model) {
-    return loss/numEx + Math.pow(model.norm2(), 2.0);
+    return loss/numEx + ((lambda/2) * Math.pow(model.norm2(), 2.0));
   }
 
   /**
    * @param loss
    * @return
    */
-  private boolean converged(final double loss) {
-    convergenceMonitor.updateLoss(loss);
-    return !convergenceMonitor.isNotConverged();
+  private boolean converged(final int iters, final double gradNorm) {
+    return iters>=maxIters || Math.abs(gradNorm) <= 1e-3 ;
   }
 
   /**
@@ -198,8 +189,11 @@ public class MasterTask implements Task {
       lineSearchEvals.first.set(i, loss);
       ++i;
     }
+    System.out.println("Regularized LineSearchEvals: " + lineSearchEvals.first);
     final Tuple<Integer, Double> minTup = lineSearchEvals.first.min();
+    System.out.println("MinTup: " + minTup);
     final double minT = t[minTup.getKey()];
+    System.out.println("MinT: " + minT);
     return minT;
   }
 

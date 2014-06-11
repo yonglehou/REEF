@@ -117,28 +117,25 @@ public class SlaveTask implements Task {
     final Vector desDir = modelAndDescentDir.second;
     final Vector zed = new DenseVector(examples.size());
     final Vector ee = new DenseVector(examples.size());
-    int i = 0;
-    for (final Example example : examples) {
+    for (int i=0;i<examples.size();i++) {
+      final Example example = examples.get(i);
       double f = example.predict(w);
       zed.set(i, f);
       f = example.predict(desDir);
       ee.set(i, f);
-      ++i;
     }
 
     final double[] t = ts.getT();
     final Vector evaluations = new DenseVector(t.length);
-    i = 0;
+    int i = 0;
     for (final double d : t) {
-      final Vector te = DenseVector.copy(zed);
-      te.multAdd(d, ee);
-      int j = 0;
-      for (final Example example : examples) {
-        final double val = te.get(j);
-        te.set(j, this.lossFunction.computeLoss(example.getLabel(), val));
-        ++j;
+      double loss = 0;
+      for (int j=0;j<examples.size();j++) {
+        final Example example = examples.get(j);
+        final double val = zed.get(j) + d * ee.get(j);
+        loss += this.lossFunction.computeLoss(example.getLabel(), val);
       }
-      evaluations.set(i++, te.sum());
+      evaluations.set(i++, loss);
     }
     return new Pair<>(evaluations,examples.size());
   }

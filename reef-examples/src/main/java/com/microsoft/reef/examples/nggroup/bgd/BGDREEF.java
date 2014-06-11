@@ -147,7 +147,7 @@ public class BGDREEF {
     final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
         .setMemoryMB(1024)
         .setJobConf(jobConf)
-        .setNumberOfDesiredSplits(2)
+        .setNumberOfDesiredSplits(3)
         .setComputeRequest(computeRequest)
         .setDriverConfigurationModule(EnvironmentUtils
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
