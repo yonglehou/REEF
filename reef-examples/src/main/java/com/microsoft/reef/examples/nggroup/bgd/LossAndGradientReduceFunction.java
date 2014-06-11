@@ -27,7 +27,7 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
 /**
  *
  */
-public class LossAndGradientReduceFunction implements ReduceFunction<Pair<Double,Vector>>{
+public class LossAndGradientReduceFunction implements ReduceFunction<Pair<Pair<Double,Integer>,Vector>>{
 
   private static final Logger LOG = Logger
       .getLogger(LossAndGradientReduceFunction.class.getName());
@@ -37,17 +37,19 @@ public class LossAndGradientReduceFunction implements ReduceFunction<Pair<Double
   }
 
   @Override
-  public Pair<Double, Vector> apply(final Iterable<Pair<Double, Vector>> lags) {
+  public Pair<Pair<Double,Integer>, Vector> apply(final Iterable<Pair<Pair<Double,Integer>, Vector>> lags) {
     double lossSum = 0.0;
+    int numEx = 0;
     Vector combinedGradient = null;
-    for (final Pair<Double, Vector> lag : lags) {
+    for (final Pair<Pair<Double,Integer>, Vector> lag : lags) {
       if(combinedGradient==null){
         combinedGradient = new DenseVector(lag.second.size());
       }
-      lossSum += lag.first;
+      lossSum += lag.first.first;
+      numEx += lag.first.second;
       combinedGradient.add(lag.second);
     }
-    return new Pair<>(lossSum,combinedGradient);
+    return new Pair<>(new Pair<>(lossSum,numEx),combinedGradient);
   }
 
 }

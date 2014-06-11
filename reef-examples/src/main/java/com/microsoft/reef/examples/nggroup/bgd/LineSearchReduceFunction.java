@@ -20,24 +20,28 @@ import javax.inject.Inject;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
+import com.microsoft.reef.io.network.util.Utils.Pair;
 
 /**
- * 
+ *
  */
-public class LineSearchReduceFunction implements ReduceFunction<Vector> {
-  
+public class LineSearchReduceFunction implements ReduceFunction<Pair<Vector,Integer>> {
+
   @Inject
   public LineSearchReduceFunction() {  }
 
   @Override
-  public Vector apply(Iterable<Vector> evals) {
+  public Pair<Vector,Integer> apply(final Iterable<Pair<Vector,Integer>> evals) {
     Vector combinedEvaluations = null;
-    for (Vector eval : evals) {
-      if(combinedEvaluations==null)
-        combinedEvaluations = new DenseVector(eval.size());
-      combinedEvaluations.add(eval);
+    int numEx = 0;
+    for (final Pair<Vector,Integer> eval : evals) {
+      if(combinedEvaluations==null) {
+        combinedEvaluations = new DenseVector(eval.first.size());
+      }
+      combinedEvaluations.add(eval.first);
+      numEx += eval.second;
     }
-    return combinedEvaluations;
+    return new Pair<>(combinedEvaluations,numEx);
   }
 
 }

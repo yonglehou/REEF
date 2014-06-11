@@ -29,6 +29,9 @@ import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -73,6 +76,10 @@ public class BGDREEF {
   private static boolean local;
   private static String input;
   private static int dimensions;
+  private static double lambda;
+  private static double eps;
+  private static int iters;
+
 
   private static Configuration parseCommandLine(final String[] aArgs) {
     final JavaConfigurationBuilder cb = Tang.Factory.getTang().newConfigurationBuilder();
@@ -81,6 +88,9 @@ public class BGDREEF {
       cl.registerShortNameOfClass(Local.class);
       cl.registerShortNameOfClass(BGDREEF.InputDir.class);
       cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(Lambda.class);
+      cl.registerShortNameOfClass(Eps.class);
+      cl.registerShortNameOfClass(Iterations.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
       final String msg = "Unable to parse command line";
@@ -99,6 +109,9 @@ public class BGDREEF {
     local = injector.getNamedInstance(Local.class);
     input = injector.getNamedInstance(BGDREEF.InputDir.class);
     dimensions = injector.getNamedInstance(Dimensions.class);
+    lambda = injector.getNamedInstance(Lambda.class);
+    eps = injector.getNamedInstance(Eps.class);
+    iters = injector.getNamedInstance(Iterations.class);
   }
 
   /**
@@ -148,6 +161,9 @@ public class BGDREEF {
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
         .newConfigurationBuilder(dataLoadConfiguration, groupCommServConfiguration)
         .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(Lambda.class, Double.toString(lambda))
+        .bindNamedParameter(Eps.class, Double.toString(eps))
+        .bindNamedParameter(Iterations.class, Integer.toString(iters))
         .build();
 
     LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));
