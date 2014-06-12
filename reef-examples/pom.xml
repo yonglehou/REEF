@@ -360,9 +360,9 @@
                                 </argument>
                                 <argument>com.microsoft.reef.examples.nggroup.broadcast.BroadcastREEF</argument>
                                 <argument>-dim</argument>
-                                <argument>1000000</argument>
+                                <argument>1000</argument>
                                 <argument>-receivers</argument>
-                                <argument>5</argument>
+                                <argument>2</argument>
                             </arguments>
         				</configuration>
         			</plugin>
