@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
@@ -64,6 +65,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private final EStage<RunningTask> commGroupRunningTaskStage;
   private final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler;
   private final EStage<FailedTask> commGroupFailedTaskStage;
+  private final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler;
+  private final EStage<FailedEvaluator> commGroupFailedEvaluatorStage;
   private final BroadcastingEventHandler<Configuration> commGroupAddTaskHandler;
   private final EStage<Configuration> commGroupAddTaskStage;
   private final CommGroupMessageHandler commGroupMessageHandler;
@@ -76,6 +79,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       final EStage<GroupCommMessage> senderStage,
       final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler,
       final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler,
+      final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler,
       final CommGroupMessageHandler commGroupMessageHandler,
       final String driverId,
       final int numberOfTasks) {
@@ -88,6 +92,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     this.commGroupRunningTaskStage = new SingleThreadStage<>("CommGroupRunningTaskStage", commGroupRunningTaskHandler, 10);
     this.commGroupFailedTaskHandler = commGroupFailedTaskHandler;
     this.commGroupFailedTaskStage = new SingleThreadStage<>("CommGroupFailedTaskStage", commGroupFailedTaskHandler, 10);
+    this.commGroupFailedEvaluatorHandler = commGroupFailedEvaluatorHandler;
+    this.commGroupFailedEvaluatorStage = new SingleThreadStage<>("CommGroupFailedEvaluatorStage", commGroupFailedEvaluatorHandler, 10);
     this.commGroupMessageHandler = commGroupMessageHandler;
     this.commGroupMessageStage = new SyncStage<>("CommGroupMessageStage", commGroupMessageHandler);
     this.driverId = driverId;
@@ -104,10 +110,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    /*final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
-    topology.setRoot(spec.getSenderId());
-    topology.setOperSpec(spec);
-    topologies.put(operatorName, topology);*/
     final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
@@ -118,6 +120,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
     final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
     commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new TopologyFailedEvaluatorHandler(topology);
+    commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
     final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
     commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
     return this;
@@ -130,10 +134,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    /*final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId);
-    topology.setRoot(spec.getReceiverId());
-    topology.setOperSpec(spec);
-    topologies.put(operatorName, topology);*/
     final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
@@ -144,6 +144,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
     final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
     commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new TopologyFailedEvaluatorHandler(topology);
+    commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
     final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
     commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
     return this;

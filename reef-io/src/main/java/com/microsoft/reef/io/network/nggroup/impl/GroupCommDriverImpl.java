@@ -27,6 +27,7 @@ import javax.inject.Inject;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
 import com.microsoft.reef.driver.context.ServiceConfiguration;
+import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
@@ -95,6 +96,8 @@ public class GroupCommDriverImpl implements GroupCommDriver {
   private final EStage<RunningTask> groupCommRunningTaskStage;
   private final BroadcastingEventHandler<FailedTask> groupCommFailedTaskHandler;
   private final EStage<FailedTask> groupCommFailedTaskStage;
+  private final BroadcastingEventHandler<FailedEvaluator> groupCommFailedEvaluatorHandler;
+  private final EStage<FailedEvaluator> groupCommFailedEvaluatorStage;
   private final GroupCommMessageHandler groupCommMessageHandler;
   private final EStage<GroupCommMessage> groupCommMessageStage;
 
@@ -109,6 +112,8 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     this.groupCommRunningTaskStage = new SingleThreadStage<>("GroupCommRunningTaskStage", groupCommRunningTaskHandler, 10);
     this.groupCommFailedTaskHandler = new BroadcastingEventHandler<>();
     this.groupCommFailedTaskStage = new SingleThreadStage<>("GroupCommFailedTaskStage", groupCommFailedTaskHandler, 10);
+    this.groupCommFailedEvaluatorHandler = new BroadcastingEventHandler<>();
+    this.groupCommFailedEvaluatorStage = new SingleThreadStage<>("GroupCommFailedEvaluatorStage", groupCommFailedEvaluatorHandler, 10);
     this.groupCommMessageHandler = new GroupCommMessageHandler();
     this.groupCommMessageStage = new SingleThreadStage<>("GroupCommMessageStage", groupCommMessageHandler, 100 * 1000);
     this.netService = new NetworkService<>(idFac, 0, nameServiceAddr,
@@ -163,6 +168,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
       final Class<? extends Name<String>> groupName, final int numberOfTasks) {
     final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler = new BroadcastingEventHandler<>();
     final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler = new BroadcastingEventHandler<>();
+    final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler = new BroadcastingEventHandler<>();
     final CommGroupMessageHandler commGroupMessageHandler = new CommGroupMessageHandler();
     final CommunicationGroupDriver commGroupDriver = new
         CommunicationGroupDriverImpl(
@@ -171,6 +177,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
             senderStage,
             commGroupRunningTaskHandler,
             commGroupFailedTaskHandler,
+            commGroupFailedEvaluatorHandler,
             commGroupMessageHandler,
             driverId,
             numberOfTasks);
@@ -236,6 +243,14 @@ public class GroupCommDriverImpl implements GroupCommDriver {
   @Override
   public EStage<FailedTask> getGroupCommFailedTaskStage() {
     return groupCommFailedTaskStage;
+  }
+
+  /**
+   * @return the groupCommFailedEvaluatorStage
+   */
+  @Override
+  public EStage<FailedEvaluator> getGroupCommFailedEvaluatorStage() {
+    return groupCommFailedEvaluatorStage;
   }
 
 }

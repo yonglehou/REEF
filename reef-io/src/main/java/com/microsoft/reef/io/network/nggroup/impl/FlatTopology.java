@@ -115,6 +115,16 @@ public class FlatTopology implements Topology {
   }
 
   @Override
+  public void removeTask(final String taskId) {
+    if(taskId.equals(rootId)) {
+      unsetRootNode(taskId);
+    }
+    else {
+      removeChild(taskId);
+    }
+  }
+
+  @Override
   public void addTask(final String taskId) {
     if(taskId.equals(rootId)) {
       setRootNode(taskId);
@@ -140,6 +150,18 @@ public class FlatTopology implements Topology {
     nodes.put(taskId,leaf);
   }
 
+  /**
+   * @param taskId
+   */
+  private void removeChild(final String taskId) {
+    LOG.info(getQualifiedName() + "Removing leaf " + taskId);
+    if(root!=null) {
+      LOG.info(getQualifiedName() + "Removing " + taskId + " as leaf of " + rootId);
+      root.removeChild(nodes.get(taskId));
+    }
+    nodes.remove(taskId);
+  }
+
   private synchronized void setRootNode(final String rootId){
     LOG.info(getQualifiedName() + "Setting " + rootId + " as root");
     final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, rootId, driverId);
@@ -161,6 +183,23 @@ public class FlatTopology implements Topology {
     nodes.put(rootId, root);
   }
 
+  /**
+   * @param taskId
+   */
+  private void unsetRootNode(final String taskId) {
+    LOG.info(getQualifiedName() + "Unsetting " + rootId + " as root");
+    nodes.remove(rootId);
+    synchronized (nodes) {
+      for (final Map.Entry<String, TaskNode> nodeEntry : nodes.entrySet()) {
+        final String id = nodeEntry.getKey();
+
+        final TaskNode leaf = nodeEntry.getValue();
+
+        LOG.info(getQualifiedName() + "Setting parent to null for " + id);
+        leaf.setParent(null);
+      }
+    }
+  }
 
   @Override
   public void setFailed(final String id) {

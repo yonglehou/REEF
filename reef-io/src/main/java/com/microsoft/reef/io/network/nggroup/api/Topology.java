@@ -60,4 +60,9 @@ public interface Topology {
    */
   void processMsg(GroupCommMessage msg);
 
+  /**
+   * @param taskId
+   */
+  void removeTask(String taskId);
+
 }

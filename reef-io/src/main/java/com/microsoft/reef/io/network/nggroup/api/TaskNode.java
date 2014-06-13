@@ -113,4 +113,9 @@ public interface TaskNode {
    *
    */
   void resetTopologySetupSent();
+
+  /**
+   * @param taskNode
+   */
+  public void removeChild(TaskNode taskNode);
 }

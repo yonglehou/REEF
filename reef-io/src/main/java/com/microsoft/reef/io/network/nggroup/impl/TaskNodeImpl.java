@@ -195,6 +195,13 @@ public class TaskNodeImpl implements TaskNode {
   }
 
   @Override
+  public void removeChild(final TaskNode child) {
+    synchronized (children) {
+      children.remove(child);
+    }
+  }
+
+  @Override
   public void setParent(final TaskNode parent) {
     synchronized (parent) {
       this.parent = parent;

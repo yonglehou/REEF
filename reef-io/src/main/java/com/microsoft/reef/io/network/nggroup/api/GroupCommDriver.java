@@ -16,6 +16,7 @@
 package com.microsoft.reef.io.network.nggroup.api;
 
 import com.microsoft.reef.driver.context.ActiveContext;
+import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommDriverImpl;
@@ -71,5 +72,10 @@ public interface GroupCommDriver {
    * @return
    */
   EStage<FailedTask> getGroupCommFailedTaskStage();
+
+  /**
+   * @return
+   */
+  EStage<FailedEvaluator> getGroupCommFailedEvaluatorStage();
 
 }
