@@ -139,14 +139,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
                     else if(isDeadMsg(msgAcked)) {
                       activeNeighbors.remove(sourceId);
                     }
-                    final boolean topoSetupSent = chkAndSendTopoSetup(sourceSet, msgAcked);
-                    if(topoSetupSent) {
-                      if(!insideUpdateTopology.compareAndSet(true, false)) {
-                        LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Trying to set " +
-                        		"UpdateTopology ended when it has already ended");
-                      }
-                      statusMap.notifyAll();
-                    }
+                    chkAndSendTopoSetup(sourceSet, msgAcked);
                   } else {
                     LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got " + msgType +
                         " from a source(" + sourceId + ") to whom ChildAdd was not sent");
@@ -189,7 +182,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
             }
           }
 
-          private boolean chkAndSendTopoSetup(
+          private void chkAndSendTopoSetup(
               final Set<String> sourceSet,
               final Type msgDealt) {
             LOG.info(getQualifiedName() + "Checking if I am ready to send TopoSetup msg");
@@ -198,7 +191,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
               statusMap.remove(msgDealt);
               if(statusMap.isEmpty()) {
                 LOG.info(getQualifiedName() + "Empty status map.");
-                return node.chkAndSendTopSetup();
+                node.chkAndSendTopSetup();
               }
               else {
                 LOG.info(getQualifiedName() + "Status map non-empty" + statusMap);
@@ -206,9 +199,20 @@ public class NodeStatusImpl implements TaskNodeStatus {
             } else {
               LOG.info(getQualifiedName() + "Source set not empty" + statusMap);
             }
-            return false;
           }
         }, 10);
+  }
+
+  @Override
+  public void topoSetupSent() {
+    if(insideUpdateTopology.compareAndSet(true, false)) {
+      synchronized (statusMap) {
+        statusMap.notifyAll();
+      }
+    } else {
+      LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Trying to set " +
+          "UpdateTopology ended when it has already ended");
+    }
   }
 
   @Override
@@ -231,6 +235,13 @@ public class NodeStatusImpl implements TaskNodeStatus {
     synchronized (statusMap) {
       statusMap.clear();
       activeNeighbors.clear();
+    }
+  }
+
+  @Override
+  public void setFailed(final String taskId) {
+    synchronized (statusMap) {
+     activeNeighbors.remove(taskId);
     }
   }
 

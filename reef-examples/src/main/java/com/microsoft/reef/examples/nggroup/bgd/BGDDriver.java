@@ -36,12 +36,14 @@ import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.DescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
@@ -121,7 +123,9 @@ public class BGDDriver {
     final Codec<Vector> modelCodec = new SerializableCodec<>();
     final Codec<Pair<Double,Vector>> lossAndGradientCodec = new SerializableCodec<>();
     final Codec<Pair<Vector,Vector>> modelAndDesDirCodec = new SerializableCodec<>();
+    final Codec<Vector> desDirCodec = new SerializableCodec<>();
     final Codec<Vector> lineSearchCodec = new SerializableCodec<>();
+    final Codec<Double> minEtaCodec = new SerializableCodec<>();
     final ReduceFunction<Pair<Pair<Double,Integer>,Vector>> lossAndGradientReduceFunction = new LossAndGradientReduceFunction();
     final ReduceFunction<Pair<Vector,Integer>> lineSearchReduceFunction = new LineSearchReduceFunction();
     allCommGroup
@@ -150,12 +154,24 @@ public class BGDDriver {
           .setSenderId("MasterTask")
           .setDataCodecClass(modelAndDesDirCodec.getClass())
           .build())
+      .addBroadcast(DescentDirectionBroadcaster.class,
+          BroadcastOperatorSpec
+          .newBuilder()
+          .setSenderId("MasterTask")
+          .setDataCodecClass(desDirCodec.getClass())
+          .build())
       .addReduce(LineSearchEvaluationsReducer.class,
           ReduceOperatorSpec
           .newBuilder()
           .setReceiverId("MasterTask")
           .setDataCodecClass(lineSearchCodec.getClass())
           .setReduceFunctionClass(lineSearchReduceFunction.getClass())
+          .build())
+      .addBroadcast(MinEtaBroadcaster.class,
+          BroadcastOperatorSpec
+          .newBuilder()
+          .setSenderId("MasterTask")
+          .setDataCodecClass(minEtaCodec.getClass())
           .build())
       .finalise();
 

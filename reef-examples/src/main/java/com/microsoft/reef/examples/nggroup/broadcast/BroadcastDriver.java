@@ -29,12 +29,14 @@ import com.microsoft.reef.driver.context.ContextConfiguration;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequestor;
+import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.FailureProbability;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelReceiveAckReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
@@ -82,6 +84,8 @@ public class BroadcastDriver {
   private final int numberOfReceivers;
 
   private final AtomicInteger numberOfAllocatedEvaluators;
+
+  private final AtomicInteger failureSet = new AtomicInteger(0);
 
   @Inject
   public BroadcastDriver(
@@ -164,6 +168,30 @@ public class BroadcastDriver {
     }
   }
 
+  public class FailedTaskHandler implements EventHandler<FailedTask> {
+
+    @Override
+    public void onNext(final FailedTask failedTask) {
+      LOG.info("Got failed Task " + failedTask.getId());
+      final ActiveContext activeContext = failedTask.getActiveContext().get();
+      final Configuration partialTaskConf = Tang.Factory.getTang()
+          .newConfigurationBuilder(
+              TaskConfiguration.CONF
+              .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
+              .set(TaskConfiguration.TASK, SlaveTask.class)
+              .build())
+          .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+          .bindNamedParameter(FailureProbability.class, failureSet.compareAndSet(1, 2) ? "1.0" : "0.0")
+          .build();
+      //Do not add the task back
+      //allCommGroup.addTask(partialTaskConf);
+      final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+      LOG.info("Submitting SlaveTask conf");
+      LOG.info(confSerializer.toString(taskConf));
+      activeContext.submitTask(taskConf);
+    }
+  }
+
   public class ContextActiveHandler implements EventHandler<ActiveContext> {
 
     private final AtomicBoolean storeMasterId = new AtomicBoolean(false);
@@ -204,6 +232,7 @@ public class BroadcastDriver {
                   .set(TaskConfiguration.TASK, SlaveTask.class)
                   .build())
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+              .bindNamedParameter(FailureProbability.class, failureSet.compareAndSet(0, 1) ? "1.0" : "0.0")
               .build();
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);

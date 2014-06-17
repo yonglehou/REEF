@@ -35,6 +35,7 @@ public class TopologyFailedEvaluatorHandler implements EventHandler<FailedEvalua
   public void onNext(final FailedEvaluator failedEvaluator) {
     if(failedEvaluator.getFailedTask().isPresent()) {
       final FailedTask failedTask = failedEvaluator.getFailedTask().get();
+      topology.setFailed(failedTask.getId());
       topology.removeTask(failedTask.getId());
     }
   }

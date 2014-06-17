@@ -57,7 +57,7 @@ public interface TaskNode {
    * @return
    *
    */
-  public boolean chkAndSendTopSetup();
+  public void chkAndSendTopSetup();
 
   /**
    * @param source
@@ -110,9 +110,10 @@ public interface TaskNode {
   public boolean hasChanges();
 
   /**
+   * @return
    *
    */
-  void resetTopologySetupSent();
+  boolean resetTopologySetupSent();
 
   /**
    * @param taskNode

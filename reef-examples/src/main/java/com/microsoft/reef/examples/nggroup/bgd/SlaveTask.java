@@ -30,8 +30,10 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.DescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataSet;
@@ -51,13 +53,18 @@ public class SlaveTask implements Task {
   private final Broadcast.Receiver<Vector> modelBroadcaster;
   private final Reduce.Sender<Pair<Pair<Double,Integer>, Vector>> lossAndGradientReducer;
   private final Broadcast.Receiver<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
+  private final Broadcast.Receiver<Vector> descentDirectionBroadcaster;
   private final Reduce.Sender<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
+  private final Broadcast.Receiver<Double> minEtaBroadcaster;
   private final GroupCommClient groupCommClient;
   private final List<Example> examples = new ArrayList<>();
   private final DataSet<LongWritable, Text> dataSet;
   private final Parser<String> parser;
   private final LossFunction lossFunction;
   private final StepSizes ts;
+
+  private Vector model = null;
+  private Vector descentDirection = null;
 
   @Inject
   public SlaveTask(
@@ -76,7 +83,9 @@ public class SlaveTask implements Task {
     modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
     lossAndGradientReducer = communicationGroup.getReduceSender(LossAndGradientReducer.class);
     modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(ModelAndDescentDirectionBroadcaster.class);
+    this.descentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(DescentDirectionBroadcaster.class);
     lineSearchEvaluationsReducer = communicationGroup.getReduceSender(LineSearchEvaluationsReducer.class);
+    this.minEtaBroadcaster = communicationGroup.getBroadcastReceiver(MinEtaBroadcaster.class);
   }
 
   @Override
@@ -89,16 +98,30 @@ public class SlaveTask implements Task {
         stop = true;
         break;
 
-      case ComputeGradient:
-        final Vector model = modelBroadcaster.receive();
-        final Pair<Pair<Double,Integer>, Vector> lossAndGradient = computeLossAndGradient(model);
-        lossAndGradientReducer.send(lossAndGradient);
+      case ComputeGradientWithModel:
+        this.model = modelBroadcaster.receive();
+        lossAndGradientReducer.send(computeLossAndGradient());
+        break;
+
+      case ComputeGradientWithMinEta:
+        final double minEta = minEtaBroadcaster.receive();
+        assert(descentDirection!=null);
+        this.descentDirection.scale(minEta);
+        assert(model!=null);
+        this.model.add(descentDirection);
+        lossAndGradientReducer.send(computeLossAndGradient());
         break;
 
       case DoLineSearch:
+        this.descentDirection = descentDirectionBroadcaster.receive();
+        lineSearchEvaluationsReducer.send(lineSearchEvals());
+        break;
+
+      case DoLineSearchWithModel:
         final Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
-        final Pair<Vector,Integer> lineSearchEvals = lineSearchEvals(modelAndDescentDir);
-        lineSearchEvaluationsReducer.send(lineSearchEvals);
+        this.model = modelAndDescentDir.first;
+        this.descentDirection = modelAndDescentDir.second;
+        lineSearchEvaluationsReducer.send(lineSearchEvals());
         break;
 
         default:
@@ -112,16 +135,14 @@ public class SlaveTask implements Task {
    * @param modelAndDescentDir
    * @return
    */
-  private Pair<Vector,Integer> lineSearchEvals(final Pair<Vector, Vector> modelAndDescentDir) {
-    final Vector w = modelAndDescentDir.first;
-    final Vector desDir = modelAndDescentDir.second;
+  private Pair<Vector,Integer> lineSearchEvals() {
     final Vector zed = new DenseVector(examples.size());
     final Vector ee = new DenseVector(examples.size());
     for (int i=0;i<examples.size();i++) {
       final Example example = examples.get(i);
-      double f = example.predict(w);
+      double f = example.predict(model);
       zed.set(i, f);
-      f = example.predict(desDir);
+      f = example.predict(descentDirection);
       ee.set(i, f);
     }
 
@@ -144,7 +165,7 @@ public class SlaveTask implements Task {
    * @param model
    * @return
    */
-  private Pair<Pair<Double,Integer>, Vector> computeLossAndGradient(final Vector model) {
+  private Pair<Pair<Double,Integer>, Vector> computeLossAndGradient() {
     if(examples.isEmpty()) {
       loadData();
     }

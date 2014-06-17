@@ -57,4 +57,14 @@ public interface TaskNodeStatus {
    */
   void waitForTopologySetup();
 
+  /**
+   * @param taskId
+   */
+  void setFailed(String taskId);
+
+  /**
+   *
+   */
+  void topoSetupSent();
+
 }

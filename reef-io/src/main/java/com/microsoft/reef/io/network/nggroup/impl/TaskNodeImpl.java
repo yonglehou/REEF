@@ -78,7 +78,7 @@ public class TaskNodeImpl implements TaskNode {
     }
     LOG.info(getQualifiedName() + "Changed status to failed");
     nodeStatus.setFailed();
-    LOG.info(getQualifiedName() + "Resetting topoSetupSent to true");
+    LOG.info(getQualifiedName() + "Resetting topoSetupSent to false");
     topoSetupSent.set(false);
     if(parent!=null) {
       synchronized (parent) {
@@ -162,6 +162,7 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Parent Death");
+    nodeStatus.setFailed(parent.taskId());
     nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ParentDead, parent.taskId(), taskId, EmptyByteArr));
   }
 
@@ -172,6 +173,7 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Child " + childId + " death");
+    nodeStatus.setFailed(childId);
     nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ChildDead, childId, taskId, EmptyByteArr));
   }
 
@@ -235,20 +237,20 @@ public class TaskNodeImpl implements TaskNode {
   }
 
   @Override
-  public void resetTopologySetupSent() {
+  public boolean resetTopologySetupSent() {
     synchronized (ackLock) {
-      topoSetupSent.set(false);
+      return topoSetupSent.compareAndSet(true,false);
     }
   }
 
   @Override
-  public boolean chkAndSendTopSetup() {
+  public void chkAndSendTopSetup() {
     synchronized (ackLock ) {
       LOG.info(getQualifiedName()
           + "Checking if I am ready to send TopoSetup msg");
       if (topoSetupSent.get()) {
         LOG.info(getQualifiedName() + "topology setup msg sent already");
-        return true;
+        return;
       }
       final boolean parentActive = parentActive();
       final boolean allChildrenActive = allChildrenActive();
@@ -256,13 +258,8 @@ public class TaskNodeImpl implements TaskNode {
         final boolean activeNeighborOfParent = activeNeighborOfParent();
         final boolean activeNeighborOfAllChildren = activeNeighborOfAllChildren();
         if (activeNeighborOfParent && activeNeighborOfAllChildren) {
-          LOG.info(getQualifiedName() + " Sending TopoSetup msg to " + taskId);
-          senderStage.onNext(Utils.bldGCM(groupName, operName,
-              Type.TopologySetup, driverId, taskId, new byte[0]));
-          if(!topoSetupSent.compareAndSet(false, true)) {
-            LOG.warning(getQualifiedName() + "TopologySetup msg was sent more than once. Something fishy!!!");
-          }
-          return true;
+          sendTopoSetupMsg();
+          return;
         } else {
           if (!activeNeighborOfParent) {
             LOG.info(getQualifiedName()
@@ -283,7 +280,16 @@ public class TaskNodeImpl implements TaskNode {
           LOG.info(getQualifiedName() + "not all children active yet");
         }
       }
-      return false;
+    }
+  }
+
+  private void sendTopoSetupMsg() {
+    LOG.info(getQualifiedName() + " Sending TopoSetup msg to " + taskId);
+    senderStage.onNext(Utils.bldGCM(groupName, operName,
+        Type.TopologySetup, driverId, taskId, new byte[0]));
+    nodeStatus.topoSetupSent();
+    if(!topoSetupSent.compareAndSet(false, true)) {
+      LOG.warning(getQualifiedName() + "TopologySetup msg was sent more than once. Something fishy!!!");
     }
   }
 

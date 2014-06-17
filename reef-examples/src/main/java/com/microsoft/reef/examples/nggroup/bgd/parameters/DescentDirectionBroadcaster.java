@@ -13,15 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.bgd.parameters;
 
-import java.io.Serializable;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradientWithModel,
-  ComputeGradientWithMinEta,
-  DoLineSearch,
-  DoLineSearchWithModel,
-  Synchronize,
-  Stop
-}
+@NamedParameter()
+public final class DescentDirectionBroadcaster implements Name<String> { }

@@ -116,6 +116,10 @@ public class FlatTopology implements Topology {
 
   @Override
   public void removeTask(final String taskId) {
+    if(!nodes.containsKey(taskId)) {
+      LOG.warning("Trying to remove a non-existent node in the task graph");
+      return;
+    }
     if(taskId.equals(rootId)) {
       unsetRootNode(taskId);
     }
@@ -126,6 +130,10 @@ public class FlatTopology implements Topology {
 
   @Override
   public void addTask(final String taskId) {
+    if(nodes.containsKey(taskId)) {
+      LOG.warning("Got a request to add a task that is already in the graph");
+      LOG.warning("We need to block this request till the delete finishes");
+    }
     if(taskId.equals(rootId)) {
       setRootNode(taskId);
     }
@@ -137,37 +145,46 @@ public class FlatTopology implements Topology {
   /**
    * @param taskId
    */
-  private synchronized void addChild(final String taskId) {
-    LOG.info(getQualifiedName() + "Adding leaf " + taskId);
-    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, taskId, driverId);
-    final TaskNode leaf = node;
-    if(root!=null) {
-      LOG.info(getQualifiedName() + "Setting " + rootId + " as parent of " + taskId);
-      leaf.setParent(root);
-      LOG.info(getQualifiedName() + "Adding " + taskId + " as leaf of " + rootId);
-      root.addChild(leaf);
+  private void addChild(final String taskId) {
+    synchronized (nodes) {
+      LOG.info(getQualifiedName() + "Adding leaf " + taskId);
+      final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName,
+          taskId, driverId);
+      final TaskNode leaf = node;
+      if (root != null) {
+        LOG.info(getQualifiedName() + "Setting " + rootId + " as parent of "
+            + taskId);
+        leaf.setParent(root);
+        LOG.info(getQualifiedName() + "Adding " + taskId + " as leaf of "
+            + rootId);
+        root.addChild(leaf);
+      }
+      nodes.put(taskId, leaf);
     }
-    nodes.put(taskId,leaf);
   }
 
   /**
    * @param taskId
    */
   private void removeChild(final String taskId) {
-    LOG.info(getQualifiedName() + "Removing leaf " + taskId);
-    if(root!=null) {
-      LOG.info(getQualifiedName() + "Removing " + taskId + " as leaf of " + rootId);
-      root.removeChild(nodes.get(taskId));
+    synchronized (nodes) {
+      LOG.info(getQualifiedName() + "Removing leaf " + taskId);
+      if (root != null) {
+        LOG.info(getQualifiedName() + "Removing " + taskId + " as leaf of "
+            + rootId);
+        root.removeChild(nodes.get(taskId));
+      }
+      nodes.remove(taskId);
     }
-    nodes.remove(taskId);
   }
 
-  private synchronized void setRootNode(final String rootId){
-    LOG.info(getQualifiedName() + "Setting " + rootId + " as root");
-    final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, rootId, driverId);
-    this.root = node;
-
+  private void setRootNode(final String rootId){
     synchronized (nodes) {
+      LOG.info(getQualifiedName() + "Setting " + rootId + " as root");
+      final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, rootId, driverId);
+      this.root = node;
+
+
       for (final Map.Entry<String, TaskNode> nodeEntry : nodes.entrySet()) {
         final String id = nodeEntry.getKey();
 
@@ -179,17 +196,19 @@ public class FlatTopology implements Topology {
             + id);
         leaf.setParent(root);
       }
+
+      nodes.put(rootId, root);
     }
-    nodes.put(rootId, root);
   }
 
   /**
    * @param taskId
    */
   private void unsetRootNode(final String taskId) {
-    LOG.info(getQualifiedName() + "Unsetting " + rootId + " as root");
-    nodes.remove(rootId);
     synchronized (nodes) {
+      LOG.info(getQualifiedName() + "Unsetting " + rootId + " as root");
+      nodes.remove(rootId);
+
       for (final Map.Entry<String, TaskNode> nodeEntry : nodes.entrySet()) {
         final String id = nodeEntry.getKey();
 
@@ -204,14 +223,24 @@ public class FlatTopology implements Topology {
   @Override
   public void setFailed(final String id) {
     LOG.info(getQualifiedName() + "Task-" + id + " failed");
-    nodes.get(id).setFailed();
     allTasksAdded.increment();
+    final TaskNode taskNode = nodes.get(id);
+    if(taskNode!=null) {
+      taskNode.setFailed();
+    } else {
+      LOG.warning(getQualifiedName() + id + " does not exist");
+    }
   }
 
   @Override
   public void setRunning(final String id) {
     LOG.info(getQualifiedName() + "Task-" + id + " is running");
-    nodes.get(id).setRunning();
+    final TaskNode taskNode = nodes.get(id);
+    if(taskNode!=null) {
+      taskNode.setRunning();
+    } else {
+      LOG.warning(getQualifiedName() + id + " does not exist");
+    }
     allTasksAdded.decrement();
   }
 
@@ -282,10 +311,9 @@ public class FlatTopology implements Topology {
         for (final TaskNode node : nodes.values()) {
           if(node.isRunning()) {
             LOG.info(getQualifiedName() + node.taskId() + " is running");
-            if(node.hasChanges()) {
+            if(node.hasChanges() && node.resetTopologySetupSent()) {
               LOG.info(getQualifiedName() + node.taskId() + " has changes. " +
               		"Reset the TopologySetupSent flag & add to list");
-              node.resetTopologySetupSent();
               toBeUpdatedNodes.add(node);
             }
             else {

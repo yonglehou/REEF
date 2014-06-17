@@ -25,11 +25,13 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.DescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.Tuple;
@@ -54,7 +56,9 @@ public class MasterTask implements Task {
   private final Broadcast.Sender<Vector> modelBroadcaster;
   private final Reduce.Receiver<Pair<Pair<Double,Integer>, Vector>> lossAndGradientReducer;
   private final Broadcast.Sender<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
+  private final Broadcast.Sender<Vector> descentDriectionBroadcaster;
   private final Reduce.Receiver<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
+  private final Broadcast.Sender<Double> minEtaBroadcaster;
   private final int dimensions;
   private final boolean ignoreAndContinue = false;
   private final com.microsoft.reef.examples.nggroup.bgd.StepSizes ts;
@@ -76,7 +80,9 @@ public class MasterTask implements Task {
     this.modelBroadcaster = communicationGroupClient.getBroadcastSender(ModelBroadcaster.class);
     this.lossAndGradientReducer = communicationGroupClient.getReduceReceiver(LossAndGradientReducer.class);
     this.modelAndDescentDirectionBroadcaster = communicationGroupClient.getBroadcastSender(ModelAndDescentDirectionBroadcaster.class);
+    this.descentDriectionBroadcaster = communicationGroupClient.getBroadcastSender(DescentDirectionBroadcaster.class);
     this.lineSearchEvaluationsReducer = communicationGroupClient.getReduceReceiver(LineSearchEvaluationsReducer.class);
+    this.minEtaBroadcaster = communicationGroupClient.getBroadcastSender(MinEtaBroadcaster.class);
     this.dimensions = dimensions;
   }
 
@@ -85,16 +91,33 @@ public class MasterTask implements Task {
     final ArrayList<Double> losses = new ArrayList<>();
     final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
     final Vector model = new DenseVector(dimensions);
+    boolean sendModel = true;
+    double minEta = 0;
 
     int iters = 1;
     while(true){
-      controlMessageBroadcaster.send(ControlMessages.ComputeGradient);
-      modelBroadcaster.send(model);
-      final Pair<Pair<Double,Integer>,Vector> lossAndGradient = lossAndGradientReducer.reduce();
+      Pair<Pair<Double,Integer>,Vector> lossAndGradient;
+      do{
+        if(sendModel) {
+          System.out.println("ComputeGradientWithModel");
+          controlMessageBroadcaster.send(ControlMessages.ComputeGradientWithModel);
+          modelBroadcaster.send(model);
+        }
+        else {
+          System.out.println("ComputeGradientWithMinEta");
+          controlMessageBroadcaster.send(ControlMessages.ComputeGradientWithMinEta);
+          minEtaBroadcaster.send(minEta);
+        }
+        lossAndGradient = lossAndGradientReducer.reduce();
 
-      if(chkAndUpdate()) {
-        continue;
-      }
+        if(!chkAndUpdate()) {
+          sendModel = false;
+          break;
+        }
+        else {
+          sendModel = true;
+        }
+      }while(true);
 
       final double loss = regularizeLoss(lossAndGradient.first.first, lossAndGradient.first.second, model);
       System.out.println("Loss: " + loss);
@@ -102,6 +125,7 @@ public class MasterTask implements Task {
       System.out.println("Gradient: " + gradient);
       losses.add(loss);
       if(converged(iters, gradient.norm2())){
+        System.out.println("Stop");
         controlMessageBroadcaster.send(ControlMessages.Stop);
         break;
       }
@@ -109,15 +133,31 @@ public class MasterTask implements Task {
       final Vector descentDirection = getDescentDirection(gradient);
       System.out.println("DescentDirection: " + descentDirection);
 
-      controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
-      modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
-      final Pair<Vector,Integer> lineSearchEvals = lineSearchEvaluationsReducer.reduce();
-      System.out.println("LineSearchEvals: " + lineSearchEvals.first);
-      if(chkAndUpdate()) {
-        continue;
-      }
+      Pair<Vector,Integer> lineSearchEvals;
+      do {
+        if(sendModel) {
+          System.out.println("DoLineSearchWithModel");
+          controlMessageBroadcaster.send(ControlMessages.DoLineSearchWithModel);
+          modelAndDescentDirectionBroadcaster.send(new Pair<>(model,
+              descentDirection));
+        }
+        else {
+          System.out.println("DoLineSearch");
+          controlMessageBroadcaster.send(ControlMessages.DoLineSearch);
+          descentDriectionBroadcaster.send(descentDirection);
+        }
+        lineSearchEvals = lineSearchEvaluationsReducer.reduce();
+        System.out.println("LineSearchEvals: " + lineSearchEvals.first);
+        if (!chkAndUpdate()) {
+          sendModel = false;
+          break;
+        }
+        else {
+          sendModel = true;
+        }
+      } while (true);
 
-      final double minEta = findMinEta(model,descentDirection,lineSearchEvals);
+      minEta = findMinEta(model,descentDirection,lineSearchEvals);
       descentDirection.scale(minEta);
       model.add(descentDirection);
 

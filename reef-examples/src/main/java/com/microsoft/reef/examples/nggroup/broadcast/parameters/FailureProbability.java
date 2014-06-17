@@ -13,15 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.broadcast.parameters;
 
-import java.io.Serializable;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
-public enum ControlMessages implements Serializable{
-  ComputeGradientWithModel,
-  ComputeGradientWithMinEta,
-  DoLineSearch,
-  DoLineSearchWithModel,
-  Synchronize,
-  Stop
+/**
+ *
+ */
+@NamedParameter(doc="Prob(failure)", default_value="0.1")
+public class FailureProbability implements Name<Double> {
+
 }

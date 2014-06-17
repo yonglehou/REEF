@@ -15,11 +15,14 @@
  */
 package com.microsoft.reef.examples.nggroup.broadcast;
 
+import java.util.Random;
+
 import javax.inject.Inject;
 
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.FailureProbability;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelReceiveAckReducer;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
@@ -27,6 +30,7 @@ import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.task.Task;
+import com.microsoft.tang.annotations.Parameter;
 
 /**
  *
@@ -36,13 +40,20 @@ public class SlaveTask implements Task {
   private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
   private final Broadcast.Receiver<Vector> modelBroadcaster;
   private final Reduce.Sender<Boolean> modelReceiveAckReducer;
+  private final double failProb;
+  private final Random r;
+  private int iter = 0;
 
   @Inject
-  public SlaveTask(final GroupCommClient groupCommClient){
+  public SlaveTask(
+      final GroupCommClient groupCommClient,
+      @Parameter(FailureProbability.class) final double failProb){
+    this.failProb = failProb;
     this.communicationGroupClient = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     this.controlMessageBroadcaster = communicationGroupClient.getBroadcastReceiver(ControlMessageBroadcaster.class);
     this.modelBroadcaster = communicationGroupClient.getBroadcastReceiver(ModelBroadcaster.class);
     this.modelReceiveAckReducer = communicationGroupClient.getReduceSender(ModelReceiveAckReducer.class);
+    r = new Random();
   }
 
   @Override
@@ -57,7 +68,11 @@ public class SlaveTask implements Task {
 
       case ReceiveModel:
         modelBroadcaster.receive();
+        if(iter==3 && r.nextDouble()<=failProb) {
+          throw new RuntimeException("Simulated Failure");
+        }
         modelReceiveAckReducer.send(true);
+        ++iter;
         break;
 
         default:
