@@ -23,6 +23,7 @@ import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.OperatorSpec;
 import com.microsoft.reef.io.network.nggroup.api.Topology;
+import com.microsoft.reef.io.network.nggroup.impl.config.AllReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
@@ -130,6 +131,51 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
 
+    return this;
+  }
+  
+  @Override
+  public CommunicationGroupDriver addAllReduce(
+    final Class<? extends Name<String>> operatorName,
+    final AllReduceOperatorSpec spec) {
+    // This is the implementation of "addAllReduce" call
+    // It uses hyper cube topology
+    if (finalised) {
+      throw new IllegalStateException(
+        "Can't add more operators to a finalised spec");
+    }
+    operatorSpecs.put(operatorName, spec);
+    // Currently only AllReduce uses hyper cube topology
+    final Topology topology = new HyperCubeTopology(senderStage, groupName,
+      operatorName, driverId, numberOfTasks);
+    // No root to set, use hyper cube topology
+    // topology.setRoot(spec.getReceiverId());
+    topology.setOperSpec(spec);
+    topologies.put(operatorName, topology);
+    // Add running task handler
+    // commGroupRunningTaskHandler is used by groupCommRunningTaskStage
+    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(
+      topology);
+    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
+    // Add failed task handler
+    // commGroupFailedTaskHandler is used by groupCommFailedTaskStage
+    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(
+      topology);
+    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    // Add failed evaluator handler
+    // This handler is not added to any stage?
+    // See newCommunicationGroup in GroupCommDriverImpl
+    // final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new
+    // TopologyFailedEvaluatorHandler(topology);
+    // commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
+    // Add topology message handler
+    // commGroupMessageHandler is used by groupCommMessageStage
+    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(
+      topology);
+    commGroupMessageHandler.addTopologyMessageHandler(operatorName,
+      topologyMessageHandler);
+    // Each stage is a single thread pool,
+    // take event from the queue and processed by the handler
     return this;
   }
 

@@ -15,6 +15,8 @@
  */
 package com.microsoft.reef.examples.nggroup.broadcast;
 
+import javax.inject.Inject;
+
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.operatornames.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
@@ -25,8 +27,6 @@ import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.task.Task;
-
-import javax.inject.Inject;
 
 /**
  *
@@ -48,6 +48,7 @@ public class SlaveTask implements Task {
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
+    int count  = 0;
     boolean stop = false;
     while (!stop) {
       final ControlMessages controlMessage = controlMessageBroadcaster.receive();
@@ -55,7 +56,6 @@ public class SlaveTask implements Task {
         case Stop:
           stop = true;
           break;
-
         case ReceiveModel:
           modelBroadcaster.receive();
           if (Math.random() < 0.1) {
@@ -67,6 +67,7 @@ public class SlaveTask implements Task {
         default:
           break;
       }
+      count++;
     }
     return null;
   }

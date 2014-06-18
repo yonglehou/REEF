@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import com.microsoft.reef.io.network.nggroup.impl.config.AllReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.tang.Configuration;
@@ -41,6 +42,19 @@ public interface CommunicationGroupDriver {
    */
   public CommunicationGroupDriver addReduce(
       Class<? extends Name<String>> operatorName, ReduceOperatorSpec spec);
+  
+  /**
+   * Add AllReduce operation.
+   * 
+   * @param string
+   * @param dataCodec
+   * @param reduceFunction
+   * @return
+   * 
+   * @author zhangbj
+   */
+  public CommunicationGroupDriver addAllReduce(
+    Class<? extends Name<String>> operatorName, AllReduceOperatorSpec spec);
 
   /**
    *

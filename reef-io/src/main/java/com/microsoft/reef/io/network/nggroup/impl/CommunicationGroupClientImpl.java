@@ -18,6 +18,7 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.exception.evaluator.NetworkException;
+import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -165,7 +166,16 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     commGroupNetworkHandler.addTopologyElement(operatorName);
     return (Reduce.Sender) op;
   }
-
+  
+  @Override
+  public AllReduce getAllReducer(Class<? extends Name<String>> operatorName) {
+    final GroupCommOperator op = operators.get(operatorName);
+    if (!(op instanceof AllReduce)) {
+      throw new RuntimeException("Configured operator is not allreduce");
+    }
+    commGroupNetworkHandler.addTopologyElement(operatorName);
+    return (AllReduce) op;
+  }
 
   @Override
   public void initialize() {
@@ -279,5 +289,4 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public Class<? extends Name<String>> getName() {
     return groupName;
   }
-
 }

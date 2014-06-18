@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.tang.annotations.DefaultImplementation;
@@ -52,6 +53,12 @@ public interface CommunicationGroupClient {
    * @return
    */
   Reduce.Sender getReduceSender(Class<? extends Name<String>> operatorName);
+  
+  /**
+   * @param operatorName
+   * @return
+   */
+  AllReduce getAllReducer(Class<? extends Name<String>> operatorName);
 
   /**
    *

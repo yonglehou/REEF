@@ -147,7 +147,6 @@ public class OperatorTopologyImpl implements OperatorTopology {
           topologyLockAquired = new CountDownLatch(1);
           sendAckToDriver(msg);
           break;
-
         case TopologySetup:
           LOG.info(getQualifiedName() + "Adding to deltas queue");
           deltas.put(msg);

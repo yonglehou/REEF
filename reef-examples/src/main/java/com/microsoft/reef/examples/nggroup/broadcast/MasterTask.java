@@ -67,8 +67,11 @@ public class MasterTask implements Task {
     final int numIters = 10;
     for (int i = 0; i < numIters; i++) {
       controlMessageBroadcaster.send(ControlMessages.ReceiveModel);
+      System.out.println("Iter: " + i + " send control message");
       modelBroadcaster.send(model);
+      System.out.println("Iter: " + i + " broadcast data");
       modelReceiveAckReducer.reduce();
+      System.out.println("Iter: " + i + " reduce data");
       final GroupChanges changes = communicationGroupClient.getTopologyChanges();
       if (changes.exist()) {
         Log.info("There exist topology changes. Asking to update Topology");
