@@ -35,7 +35,8 @@ message GroupCommMessage {
   required string destid = 3;
   optional string groupname = 4;
   optional string operatorname = 5;
-  repeated GroupMessageBody msgs = 6;
+  optional int32 version = 6;
+  repeated GroupMessageBody msgs = 7;
 }
 
 message GroupMessageBody {

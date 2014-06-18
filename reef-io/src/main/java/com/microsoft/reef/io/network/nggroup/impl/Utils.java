@@ -55,6 +55,36 @@ public class Utils {
     return GCMBuilder.build();
   }
 
+  /**
+   * @param groupName
+   * @param operName
+   * @param broadcast
+   * @param from
+   * @param to
+   * @param data
+   * @return
+   */
+  public static GroupCommMessage bldVersionedGCM(
+      final Class<? extends Name<String>> groupName,
+      final Class<? extends Name<String>> operName, final int version, final Type msgType, final String from,
+      final String to, final byte[]... data) {
+    final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
+    GCMBuilder.setGroupname(groupName.getName());
+    GCMBuilder.setOperatorname(operName.getName());
+    GCMBuilder.setVersion(version);
+    GCMBuilder.setType(msgType);
+    GCMBuilder.setSrcid(from);
+    GCMBuilder.setDestid(to);
+
+    final GroupMessageBody.Builder bodyBuilder = GroupMessageBody.newBuilder();
+    for (final byte[] element : data) {
+      bodyBuilder.setData(ByteString.copyFrom(element));
+      GCMBuilder.addMsgs(bodyBuilder.build());
+    }
+
+    return GCMBuilder.build();
+  }
+
   public static Class<? extends Name<String>> getClass(final String className){
     try {
       return (Class<? extends Name<String>>) Class.forName(className);

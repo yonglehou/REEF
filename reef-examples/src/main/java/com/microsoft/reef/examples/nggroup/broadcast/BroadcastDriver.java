@@ -36,7 +36,6 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.FailureProbability;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelReceiveAckReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
@@ -46,6 +45,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
+import com.microsoft.reef.poison.context.PoisonedConfiguration;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -179,9 +179,13 @@ public class BroadcastDriver {
               TaskConfiguration.CONF
               .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
               .set(TaskConfiguration.TASK, SlaveTask.class)
-              .build())
+              .build(),
+              PoisonedConfiguration.TASK_CONF
+              .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
+              .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+              .build()
+              )
           .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
-          .bindNamedParameter(FailureProbability.class, failureSet.compareAndSet(1, 2) ? "1.0" : "0.0")
           .build();
       //Do not add the task back
       //allCommGroup.addTask(partialTaskConf);
@@ -230,9 +234,13 @@ public class BroadcastDriver {
                   TaskConfiguration.CONF
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class)
-                  .build())
+                  .build(),
+                  PoisonedConfiguration.TASK_CONF
+                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
+                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "4")
+                  .build()
+                  )
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
-              .bindNamedParameter(FailureProbability.class, failureSet.compareAndSet(0, 1) ? "1.0" : "0.0")
               .build();
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);

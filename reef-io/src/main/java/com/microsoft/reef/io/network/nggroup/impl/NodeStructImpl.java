@@ -64,6 +64,11 @@ public abstract class NodeStructImpl implements NodeStruct {
     return Utils.getData(gcm);
   }
 
+  @Override
+  public String toString() {
+    return id;
+  }
+
   public abstract boolean checkDead(final GroupCommMessage gcm);
 
 }

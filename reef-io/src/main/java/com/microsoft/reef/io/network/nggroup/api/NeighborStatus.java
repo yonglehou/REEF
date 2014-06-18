@@ -44,4 +44,14 @@ public interface NeighborStatus extends Iterable<String>{
    */
   void updateProcessed();
 
+  /**
+   *
+   */
+  void clear();
+
+  /**
+   * @param taskId
+   */
+  void remove(String taskId);
+
 }

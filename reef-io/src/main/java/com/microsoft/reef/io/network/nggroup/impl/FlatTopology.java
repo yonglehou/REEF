@@ -75,7 +75,7 @@ public class FlatTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverId = driverId;
-    this.allTasksAdded = new CountingSemaphore(numberOfTasks);
+    this.allTasksAdded = new CountingSemaphore(numberOfTasks, getQualifiedName());
   }
 
   @Override

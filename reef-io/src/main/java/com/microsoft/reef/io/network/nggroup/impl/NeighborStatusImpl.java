@@ -19,6 +19,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.nggroup.api.NeighborStatus;
@@ -32,10 +35,27 @@ public class NeighborStatusImpl implements NeighborStatus {
   private static final Logger LOG = Logger.getLogger(NeighborStatusImpl.class.getName());
 
 
-  private final Map<String, StatusProcessor> neighborStatus = new HashMap<>();
+  private final ConcurrentMap<String, StatusProcessor> neighborStatus = new ConcurrentHashMap<>();
 
 
-  private boolean update = false;
+  private final AtomicBoolean update = new AtomicBoolean(false);
+
+
+  private final String name;
+
+  public NeighborStatusImpl(final String name) {
+    this.name = name;
+  }
+
+  @Override
+  public void clear() {
+    neighborStatus.clear();
+  }
+
+  @Override
+  public void remove(final String taskId) {
+    neighborStatus.remove(taskId);
+  }
 
   @Override
   public void add(final String from, final Type type) {
@@ -44,44 +64,55 @@ public class NeighborStatusImpl implements NeighborStatus {
     case ParentDead:
     case ChildAdd:
     case ChildDead:
-      final StatusProcessor statusProcessor = neighborStatus.containsKey(from) ? neighborStatus.get(from) : new StatusProcessor();
+      final StatusProcessor statusProcessor = neighborStatus.containsKey(from) ? neighborStatus.get(from) : new StatusProcessor(name);
       statusProcessor.addStatus(type);
       neighborStatus.put(from, statusProcessor);
       break;
 
     default:
-      LOG.warning(type.toString() + " is not a valid type for neighborstatus");
+      LOG.warning(name + type.toString() + " is not a valid type for neighborstatus");
       break;
     }
-    LOG.info("Handled " + type.toString() + " msg from " + from);
+    LOG.info(name + "Handled " + type.toString() + " msg from " + from);
   }
 
   @Override
   public void updateDone(){
-    this.update  = true;
-    LOG.info("Update done");
+    if(this.update.compareAndSet(false, true)) {
+      LOG.info(name + "Update done");
+    } else {
+      LOG.warning(name + "UpdateDone called when it was already marked done");
+    }
   }
 
   @Override
   public void updateProcessed() {
-    this.update = false;
-    LOG.info("All updates have been processed. Resetting update to false");
+    if(this.update.compareAndSet(true, false)) {
+      LOG.info(name + "All updates have been processed. Resetting update to false");
+    } else {
+      LOG.warning(name + "UpdateProcessed called when it was already marked processed");
+    }
   }
 
   @Override
   public Type getStatus(final String neighbor){
-    if(!update) {
-      LOG.warning("Can't get status until all the updates are processed");
+    if(!update.get()) {
+      LOG.warning(name + "Can't get status until all the updates are processed");
       return null;
     }
-    LOG.info("Getting status for " + neighbor);
+    LOG.info(name + "Getting status for " + neighbor);
     final Type status = neighborStatus.get(neighbor).getStatus();
-    LOG.info("Returning status " + status.toString() + " for " + neighbor);
+    LOG.info(name + "Returning status " + status.toString() + " for " + neighbor);
     return status;
   }
 
   static class StatusProcessor {
     final Map<Type, Integer> typeCounts = new HashMap<Type, Integer>();
+    private final String name;
+
+    public StatusProcessor(final String name) {
+      this.name = name;
+    }
 
     public void addStatus(final Type status) {
       final int value = typeCounts.containsKey(status) ? typeCounts.get(status) : 0;
@@ -89,9 +120,9 @@ public class NeighborStatusImpl implements NeighborStatus {
     }
 
     public Type getStatus() {
-      LOG.info(typeCounts.toString());
+      LOG.info(name + typeCounts.toString());
       if(typeCounts.size()>2) {
-        LOG.warning("Each neighbor expects at most 2 types of status updates");
+        LOG.warning(name + "Each neighbor expects at most 2 types of status updates");
         return null;
       }
       final Set<Type> types = typeCounts.keySet();
@@ -105,34 +136,34 @@ public class NeighborStatusImpl implements NeighborStatus {
         switch (t1) {
         case ParentAdd:
           if(!t2.equals(Type.ParentDead)) {
-            LOG.warning("Expect to find ParentDead as counter part to ParentAdd. Instead found" + t2);
+            LOG.warning(name + "Expect to find ParentDead as counter part to ParentAdd. Instead found" + t2);
             return null;
           }
           break;
 
         case ParentDead:
           if(!t2.equals(Type.ParentAdd)) {
-            LOG.warning("Expect to find ParentAdd as counter part to ParentDead. Instead found" + t2);
+            LOG.warning(name + "Expect to find ParentAdd as counter part to ParentDead. Instead found" + t2);
             return null;
           }
           break;
 
         case ChildAdd:
           if(!t2.equals(Type.ChildDead)) {
-            LOG.warning("Expect to find ChildDead as counter part to ChildAdd. Instead found" + t2);
+            LOG.warning(name + "Expect to find ChildDead as counter part to ChildAdd. Instead found" + t2);
             return null;
           }
           break;
 
         case ChildDead:
           if(!t2.equals(Type.ChildAdd)) {
-            LOG.warning("Expect to find ChildAdd as counter part to ChildDead. Instead found" + t2);
+            LOG.warning(name + "Expect to find ChildAdd as counter part to ChildDead. Instead found" + t2);
             return null;
           }
           break;
 
         default:
-          LOG.warning("Unexpected type in status");
+          LOG.warning(name + "Unexpected type in status");
           return null;
         }
         if(typeCounts.get(t1) == typeCounts.get(t2)) {

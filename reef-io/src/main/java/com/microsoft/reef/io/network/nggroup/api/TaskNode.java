@@ -119,4 +119,9 @@ public interface TaskNode {
    * @param taskNode
    */
   public void removeChild(TaskNode taskNode);
+
+  /**
+   * @return
+   */
+  public int getVersion();
 }

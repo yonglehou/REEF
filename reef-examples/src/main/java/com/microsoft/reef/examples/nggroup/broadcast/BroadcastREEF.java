@@ -119,24 +119,6 @@ public class BroadcastREEF {
   public static LauncherStatus runBGDReef(
       final Configuration runtimeConfiguration
   ) throws BindException, InjectionException {
-    /*final JobConf jobConf = new JobConf();
-    jobConf.setInputFormat(TextInputFormat.class);
-    TextInputFormat.addInputPath(jobConf, new Path(input));
-    final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
-        .setNumber(1)
-        .setMemory(512)
-        .build();
-    final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
-        .setMemoryMB(1024)
-        .setJobConf(jobConf)
-        .setNumberOfDesiredSplits(2)
-        .setComputeRequest(computeRequest)
-        .setDriverConfigurationModule(EnvironmentUtils
-            .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
-            .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
-            .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
-            .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))
-        .build();*/
 
     final Configuration driverConfiguration = EnvironmentUtils
         .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)

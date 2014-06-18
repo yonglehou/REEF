@@ -196,6 +196,8 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   public void update(final GroupCommMessage msg) {
     final String srcId = msg.getSrcid();
     LOG.info(getQualifiedName() + "Updating " + msg.getType() + " msg from " + srcId);
+    LOG.info(getQualifiedName() + "Before update: parent=" + ((parent!=null) ? parent.getId() : "NULL"));
+    LOG.info(getQualifiedName() + "Before update: children=" + children);
     switch(msg.getType()) {
     case ParentAdd:
       LOG.info(getQualifiedName() + "Creating new parent node for " + srcId);
@@ -207,21 +209,29 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       break;
     case ChildAdd:
       LOG.info(getQualifiedName() + "creating new child node for " + srcId);
+      final NodeStruct toBeAddedchild = findChild(srcId);
+      if(toBeAddedchild!=null) {
+        LOG.warning(getQualifiedName() + "Received a ChildAdd message for an existing child " + srcId);
+      }
+      else {
       children.add(new ChildNodeStruct(srcId));
+      }
       break;
     case ChildDead:
       LOG.info(getQualifiedName() + "Removing child node " + srcId);
-      final NodeStruct child = findChild(srcId);
-      if(child!=null) {
-        children.remove(child);
+      final NodeStruct toBeRemovedchild = findChild(srcId);
+      if(toBeRemovedchild!=null) {
+        children.remove(toBeRemovedchild);
       } else {
-        LOG.warning("Received a ChildDead message for non-existent child " + srcId);
+        LOG.warning(getQualifiedName() + "Received a ChildDead message for non-existent child " + srcId);
       }
       break;
     default:
       LOG.warning("Received a non control message in update");
       throw new RuntimeException("Received a non control message in update");
     }
+    LOG.info(getQualifiedName() + "After update: parent=" + ((parent!=null) ? parent.getId() : "NULL"));
+    LOG.info(getQualifiedName() + "After update: children=" + children);
   }
 
   /**

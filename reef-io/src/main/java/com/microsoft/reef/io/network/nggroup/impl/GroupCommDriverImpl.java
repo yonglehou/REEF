@@ -150,9 +150,9 @@ public class GroupCommDriverImpl implements GroupCommDriver {
         final Connection<GroupCommMessage> link = GroupCommDriverImpl.this.netService.newConnection(id);
         try {
           LOG.info("Sending source ctrl msg " + srcCtrlMsg.getType() + " for " + srcCtrlMsg.getSrcid() + " to " + id);
-          LOG.info("Opening connection to " + id);
+//          LOG.info("Opening connection to " + id);
           link.open();
-          LOG.info("Writing data to " + id);
+//          LOG.info("Writing data to " + id);
           link.write(srcCtrlMsg);
         } catch (final NetworkException e) {
           LOG.log(Level.WARNING, "Unable to send ctrl task msg to parent " + id, e);

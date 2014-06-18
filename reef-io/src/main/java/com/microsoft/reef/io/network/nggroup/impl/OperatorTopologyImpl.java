@@ -228,26 +228,30 @@ public class OperatorTopologyImpl implements OperatorTopology {
     try {
       LOG.info(getQualifiedName() + "Sending ACK to driver " + driverId);
       final String srcId = msg.getSrcid();
+      if(!msg.hasVersion()) {
+        throw new RuntimeException(getQualifiedName() + "Ack Sender can only deal with versioned msgs");
+      }
+      final int version = msg.getVersion();
       switch(msg.getType()) {
       case UpdateTopology:
         LOG.info(getQualifiedName() + "Sending TopologySetup msg to driver");
-        sender.send(Utils.bldGCM(groupName, operName, Type.TopologySetup, selfId, driverId, emptyByte));
+        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.TopologySetup, selfId, driverId, emptyByte));
         break;
       case ParentAdd:
-        LOG.info(getQualifiedName() + "Seding ParentAdded msg for " + srcId);
-        sender.send(Utils.bldGCM(groupName, operName, Type.ParentAdded, selfId, srcId, emptyByte), driverId);
+        LOG.info(getQualifiedName() + "Sending ParentAdded msg for " + srcId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentAdded, selfId, srcId, emptyByte), driverId);
         break;
       case ParentDead:
         LOG.info(getQualifiedName() + "Sending ParentRemoved msg for " + srcId);
-        sender.send(Utils.bldGCM(groupName, operName, Type.ParentRemoved, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentRemoved, selfId, srcId, emptyByte), driverId);
         break;
       case ChildAdd:
         LOG.info(getQualifiedName() + "Sending ChildAdded msg for " + srcId);
-        sender.send(Utils.bldGCM(groupName, operName, Type.ChildAdded, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildAdded, selfId, srcId, emptyByte), driverId);
         break;
       case ChildDead:
         LOG.info(getQualifiedName() + "Sending ChildRemoved msg for " + srcId);
-        sender.send(Utils.bldGCM(groupName, operName, Type.ChildRemoved, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildRemoved, selfId, srcId, emptyByte), driverId);
         break;
       default:
         LOG.warning("Received a non control message for acknowledgement");

@@ -18,6 +18,7 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
@@ -55,6 +56,8 @@ public class TaskNodeImpl implements TaskNode {
 
   private final Object ackLock = new Object();
 
+  private final AtomicInteger version = new AtomicInteger(0);
+
   public TaskNodeImpl(
       final EStage<GroupCommMessage> senderStage,
       final Class<? extends Name<String>> groupName,
@@ -76,7 +79,8 @@ public class TaskNodeImpl implements TaskNode {
       LOG.warning(getQualifiedName() + "Trying to set failed on an already failed task. Something fishy!!!");
       return;
     }
-    LOG.info(getQualifiedName() + "Changed status to failed");
+    final int version = this.version.incrementAndGet();
+    LOG.info(getQualifiedName() + "Changed status to failed. Bumping up to version-" + version);
     nodeStatus.setFailed();
     LOG.info(getQualifiedName() + "Resetting topoSetupSent to false");
     topoSetupSent.set(false);
@@ -107,14 +111,15 @@ public class TaskNodeImpl implements TaskNode {
       LOG.warning(getQualifiedName() + "Trying to set running on an already running task. Something fishy!!!");
       return;
     }
-    LOG.info(getQualifiedName() + "Changed status to running");
+    final int version = this.version.get();
+    LOG.info(getQualifiedName() + "Changed status to running version-" + version);
     if(parent!=null) {
       synchronized (parent) {
         if(!parent.isRunning()) {
           LOG.info("Parent " + parent.taskId() + " not running yet. Skipping src add");
         }
         else {
-          nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
+          nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
           parent.processChildRunning(taskId);
         }
       }
@@ -125,7 +130,7 @@ public class TaskNodeImpl implements TaskNode {
           LOG.info(getQualifiedName() + child.taskId() + " is not running yet. skipping src add send");
           continue;
         }
-        nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ChildAdd, child.taskId(), taskId, EmptyByteArr));
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildAdd, child.taskId(), taskId, EmptyByteArr));
         child.processParentRunning();
       }
     }
@@ -142,7 +147,7 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Parent Running");
-    nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
+    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
   }
 
   @Override
@@ -152,7 +157,7 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Child " + childId + " running");
-    nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ChildAdd, childId, taskId, EmptyByteArr));
+    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ChildAdd, childId, taskId, EmptyByteArr));
   }
 
   @Override
@@ -163,7 +168,7 @@ public class TaskNodeImpl implements TaskNode {
     }
     LOG.info(getQualifiedName() + "Processing Parent Death");
     nodeStatus.setFailed(parent.taskId());
-    nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ParentDead, parent.taskId(), taskId, EmptyByteArr));
+    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ParentDead, parent.taskId(), taskId, EmptyByteArr));
   }
 
   @Override
@@ -174,7 +179,7 @@ public class TaskNodeImpl implements TaskNode {
     }
     LOG.info(getQualifiedName() + "Processing Child " + childId + " death");
     nodeStatus.setFailed(childId);
-    nodeStatus.sendMsg(Utils.bldGCM(groupName, operName, Type.ChildDead, childId, taskId, EmptyByteArr));
+    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ChildDead, childId, taskId, EmptyByteArr));
   }
 
   /**** Methods pertaining to my neighbors status change ends ****/
@@ -285,7 +290,7 @@ public class TaskNodeImpl implements TaskNode {
 
   private void sendTopoSetupMsg() {
     LOG.info(getQualifiedName() + " Sending TopoSetup msg to " + taskId);
-    senderStage.onNext(Utils.bldGCM(groupName, operName,
+    senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version.get(),
         Type.TopologySetup, driverId, taskId, new byte[0]));
     nodeStatus.topoSetupSent();
     if(!topoSetupSent.compareAndSet(false, true)) {
@@ -296,7 +301,11 @@ public class TaskNodeImpl implements TaskNode {
   @Override
   public void chkAndSendTopSetup(final String source) {
     final TaskNode srcNode = findTask(source);
-    srcNode.chkAndSendTopSetup();
+    if(srcNode!=null) {
+      srcNode.chkAndSendTopSetup();
+    } else {
+      LOG.warning(getQualifiedName() + "Can't chk topology setup on a null node for task " + source);
+    }
   }
   /**
    * @param sourceId
@@ -387,5 +396,10 @@ public class TaskNodeImpl implements TaskNode {
   @Override
   public boolean hasChanges() {
     return nodeStatus.hasChanges();
+  }
+
+  @Override
+  public int getVersion() {
+    return version.get();
   }
 }

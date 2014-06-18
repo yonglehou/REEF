@@ -15,6 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.logging.Logger;
+
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.io.network.nggroup.api.Topology;
 import com.microsoft.wake.EventHandler;
@@ -24,6 +26,8 @@ import com.microsoft.wake.EventHandler;
  */
 public class TopologyRunningTaskHandler implements EventHandler<RunningTask> {
 
+  private static final Logger LOG = Logger.getLogger(TopologyRunningTaskHandler.class.getName());
+
   private final Topology topology;
 
   public TopologyRunningTaskHandler(final Topology topology) {
@@ -32,6 +36,7 @@ public class TopologyRunningTaskHandler implements EventHandler<RunningTask> {
 
   @Override
   public void onNext(final RunningTask runningTask) {
+    LOG.info("Got running task: " + runningTask.getId());
     topology.setRunning(runningTask.getId());
   }
 
