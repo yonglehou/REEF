@@ -237,7 +237,7 @@ public class BroadcastDriver {
                   .build(),
                   PoisonedConfiguration.TASK_CONF
                   .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
-                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "4")
+                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
                   .build()
                   )
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
