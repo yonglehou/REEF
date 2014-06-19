@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.poison.context;
+package com.microsoft.reef.poison.task;
 
 import java.util.Random;
 import java.util.logging.Logger;
@@ -21,14 +21,15 @@ import java.util.logging.Logger;
 import javax.inject.Inject;
 
 import com.microsoft.reef.poison.PoisonException;
-import com.microsoft.reef.poison.context.params.CrashProbability;
-import com.microsoft.reef.poison.context.params.CrashTimeout;
+import com.microsoft.reef.poison.PoisonedAlarmHandler;
+import com.microsoft.reef.poison.params.CrashProbability;
+import com.microsoft.reef.poison.params.CrashTimeout;
 import com.microsoft.reef.task.events.TaskStart;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.time.Clock;
 
-final class PoisonedTaskStartHandler implements EventHandler<TaskStart> {
+public final class PoisonedTaskStartHandler implements EventHandler<TaskStart> {
 
   private static final Logger LOG = Logger.getLogger(PoisonedTaskStartHandler.class.getName());
 

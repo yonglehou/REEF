@@ -15,17 +15,19 @@
  */
 package com.microsoft.reef.poison.context;
 
+import java.util.Random;
+
+import javax.inject.Inject;
+
 import com.microsoft.reef.evaluator.context.events.ContextStart;
-import com.microsoft.reef.poison.context.params.CrashProbability;
-import com.microsoft.reef.poison.context.params.CrashTimeout;
+import com.microsoft.reef.poison.PoisonedAlarmHandler;
+import com.microsoft.reef.poison.params.CrashProbability;
+import com.microsoft.reef.poison.params.CrashTimeout;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.time.Clock;
 
-import javax.inject.Inject;
-import java.util.Random;
-
-final class PoisonedContextStartHandler implements EventHandler<ContextStart> {
+public final class PoisonedContextStartHandler implements EventHandler<ContextStart> {
 
   private final double crashProbability;
   private final int timeOut;

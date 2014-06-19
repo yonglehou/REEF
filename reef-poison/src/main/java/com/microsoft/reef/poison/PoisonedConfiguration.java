@@ -13,12 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.poison.context;
+package com.microsoft.reef.poison;
 
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.evaluator.context.parameters.ContextStartHandlers;
-import com.microsoft.reef.poison.context.params.CrashProbability;
-import com.microsoft.reef.poison.context.params.CrashTimeout;
+import com.microsoft.reef.poison.context.PoisonedContextStartHandler;
+import com.microsoft.reef.poison.params.CrashProbability;
+import com.microsoft.reef.poison.params.CrashTimeout;
+import com.microsoft.reef.poison.task.PoisonedTaskStartHandler;
 import com.microsoft.tang.formats.ConfigurationModule;
 import com.microsoft.tang.formats.ConfigurationModuleBuilder;
 import com.microsoft.tang.formats.OptionalParameter;
