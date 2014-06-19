@@ -15,10 +15,6 @@
  */
 package com.microsoft.reef.tests.yarn.failure;
 
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
@@ -35,9 +31,13 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.CommandLine;
 
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public final class FailureREEF {
 
-  public static final int NUM_LOCAL_THREADS = 75;
+  public static final int NUM_LOCAL_THREADS = 16;
 
   private static final Logger LOG = Logger.getLogger(FailureREEF.class.getName());
 
@@ -99,7 +99,6 @@ public final class FailureREEF {
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "FailureREEF")
             .set(DriverConfiguration.ON_DRIVER_STARTED, FailureDriver.StartHandler.class)
             .set(DriverConfiguration.ON_EVALUATOR_ALLOCATED, FailureDriver.EvaluatorAllocatedHandler.class)
-            .set(DriverConfiguration.ON_CONTEXT_ACTIVE, FailureDriver.ContextActiveHandler.class)
             .set(DriverConfiguration.ON_EVALUATOR_FAILED, FailureDriver.EvaluatorFailedHandler.class)
             .build();
 

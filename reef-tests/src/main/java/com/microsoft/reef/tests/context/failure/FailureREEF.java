@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.tests.local.failure;
+package com.microsoft.reef.tests.context.failure;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -37,7 +37,7 @@ import com.microsoft.tang.formats.CommandLine;
 
 public final class FailureREEF {
 
-  public static final int NUM_LOCAL_THREADS = 75;
+  public static final int NUM_LOCAL_THREADS = 16;
 
   private static final Logger LOG = Logger.getLogger(FailureREEF.class.getName());
 
@@ -96,7 +96,7 @@ public final class FailureREEF {
 
     final Configuration driverConf =
         EnvironmentUtils.addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
-            .set(DriverConfiguration.DRIVER_IDENTIFIER, "FailureREEF")
+            .set(DriverConfiguration.DRIVER_IDENTIFIER, "ContextFailureREEF")
             .set(DriverConfiguration.ON_DRIVER_STARTED, FailureDriver.StartHandler.class)
             .set(DriverConfiguration.ON_EVALUATOR_ALLOCATED, FailureDriver.EvaluatorAllocatedHandler.class)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, FailureDriver.ContextActiveHandler.class)

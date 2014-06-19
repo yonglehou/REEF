@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.tests.local.failure;
+package com.microsoft.reef.tests.context.failure;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
