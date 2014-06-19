@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.tests.yarn.failure;
+package com.microsoft.reef.tests.local.failure;
 
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,7 +25,8 @@ import com.microsoft.reef.driver.context.ContextConfiguration;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequestor;
-import com.microsoft.reef.driver.evaluator.FailedEvaluator;
+import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.poison.PoisonedConfiguration;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
@@ -36,14 +36,11 @@ import com.microsoft.wake.time.event.StartTime;
 @Unit
 public class FailureDriver {
 
-  private static final int NUM_EVALUATORS = 40;
-  private static final int NUM_FAILURES = 10;
+  private static final int NUM_EVALUATORS = 1;
 
   private static final Logger LOG = Logger.getLogger(FailureDriver.class.getName());
 
   private final EvaluatorRequestor requestor;
-
-  private final AtomicInteger toSubmit = new AtomicInteger(NUM_FAILURES);
 
   @Inject
   public FailureDriver(final EvaluatorRequestor requestor) {
@@ -73,23 +70,14 @@ public class FailureDriver {
     public void onNext(final AllocatedEvaluator allocatedEvaluator) {
       final String evalId = allocatedEvaluator.getId();
       LOG.log(Level.FINE, "Got allocated evaluator: {0}", evalId);
-      if (toSubmit.getAndDecrement() > 0) {
-        LOG.log(Level.FINE, "Submitting poisoned context. {0} to go.", toSubmit);
-        allocatedEvaluator.submitContext(
-            Tang.Factory.getTang()
-                .newConfigurationBuilder(
-                    ContextConfiguration.CONF
-                        .set(ContextConfiguration.IDENTIFIER, "Poisoned Context: " + evalId)
-                        .build(),
-                    PoisonedConfiguration.CONTEXT_CONF
-                        .set(PoisonedConfiguration.CRASH_PROBABILITY, "1")
-                        .set(PoisonedConfiguration.CRASH_TIMEOUT, "4")
-                        .build())
-                .build());
-      } else {
-        LOG.log(Level.FINE, "Closing evaluator {0}", evalId);
-        allocatedEvaluator.close();
-      }
+      LOG.log(Level.FINE, "Submitting id context");
+      allocatedEvaluator.submitContext(
+          Tang.Factory.getTang()
+              .newConfigurationBuilder(
+                  ContextConfiguration.CONF
+                      .set(ContextConfiguration.IDENTIFIER, "RootContext-" + evalId)
+                      .build())
+              .build());
     }
   }
 
@@ -97,13 +85,35 @@ public class FailureDriver {
 
     @Override
     public void onNext(final ActiveContext activeContext) {
-      LOG.log(Level.FINE, "Got active context: {0}. Closing it.", activeContext.getId());
-      try {
-        Thread.sleep(5000);
-      } catch (final InterruptedException e) {
-        throw new RuntimeException("InterruptedException", e);
+      final String ctxId = activeContext.getId();
+      LOG.log(Level.FINE, "Got active context: {0}.", ctxId);
+      if(ctxId.startsWith("Root")) {
+        activeContext.submitContext(
+            Tang.Factory.getTang().newConfigurationBuilder(
+                ContextConfiguration.CONF
+                    .set(ContextConfiguration.IDENTIFIER, "First-" + ctxId)
+                    .build()
+               ).build());
       }
-      activeContext.close();
+      else if(ctxId.startsWith("First")) {
+        activeContext.submitContext(
+            Tang.Factory.getTang().newConfigurationBuilder(
+                ContextConfiguration.CONF
+                    .set(ContextConfiguration.IDENTIFIER, "Poisoned-" + ctxId)
+                    .build(),
+                PoisonedConfiguration.TASK_CONF
+                    .set(PoisonedConfiguration.CRASH_PROBABILITY, "1")
+                    .set(PoisonedConfiguration.CRASH_TIMEOUT, "4")
+                    .build())
+                .build());
+      }
+      else {
+        activeContext.submitTask(
+            TaskConfiguration.CONF
+                .set(TaskConfiguration.IDENTIFIER, "EmptyTask-" + ctxId)
+                .set(TaskConfiguration.TASK, FailureTask.class)
+                .build());
+      }
     }
 
   }
@@ -111,14 +121,11 @@ public class FailureDriver {
   /**
    * Handles FailedEvaluator: Resubmits the single Evaluator resource request.
    */
-  final class EvaluatorFailedHandler implements EventHandler<FailedEvaluator> {
+  final class TaskFailedHandler implements EventHandler<FailedTask> {
     @Override
-    public void onNext(final FailedEvaluator failedEvaluator) {
-      LOG.log(Level.FINE, "Got failed evaluator: {0} - re-request", failedEvaluator.getId());
-      FailureDriver.this.requestor.submit(EvaluatorRequest.newBuilder()
-          .setNumber(1)
-          .setMemory(64)
-          .build());
+    public void onNext(final FailedTask failedTask) {
+      LOG.info("Got failed task - " + failedTask.getId() + " closing active context");
+      failedTask.getActiveContext().get().close();
     }
   }
 }
