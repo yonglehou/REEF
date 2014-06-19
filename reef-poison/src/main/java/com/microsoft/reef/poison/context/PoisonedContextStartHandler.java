@@ -32,7 +32,6 @@ import com.microsoft.wake.time.Clock;
 
 public final class PoisonedContextStartHandler implements EventHandler<ContextStart> {
 
-
   private static final Logger LOG = Logger.getLogger(PoisonedContextStartHandler.class.getName());
 
   private final Random random = new Random();
@@ -55,7 +54,8 @@ public final class PoisonedContextStartHandler implements EventHandler<ContextSt
   @Override
   public void onNext(final ContextStart contextStart) {
 
-    LOG.log(Level.INFO, "Start poison injector with prescribed dose: {0}", this.crashProbability);
+    LOG.log(Level.INFO, "Starting Context poison injector with prescribed dose: {0} units",
+        this.crashProbability);
 
     if (this.random.nextDouble() <= this.crashProbability) {
 
