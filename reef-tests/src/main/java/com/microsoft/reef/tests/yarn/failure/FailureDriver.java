@@ -21,6 +21,7 @@ import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
@@ -90,6 +91,21 @@ public class FailureDriver {
         allocatedEvaluator.close();
       }
     }
+  }
+
+  final class ContextActiveHandler implements EventHandler<ActiveContext> {
+
+    @Override
+    public void onNext(final ActiveContext activeContext) {
+      LOG.log(Level.FINE, "Got active context: {0}. Closing it.", activeContext.getId());
+      try {
+        Thread.sleep(5000);
+      } catch (final InterruptedException e) {
+        throw new RuntimeException("InterruptedException", e);
+      }
+      activeContext.close();
+    }
+
   }
 
   /**
