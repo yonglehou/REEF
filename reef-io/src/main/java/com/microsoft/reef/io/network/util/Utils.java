@@ -15,6 +15,7 @@
  */
 package com.microsoft.reef.io.network.util;
 
+import java.io.Serializable;
 import java.net.Inet4Address;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,8 +73,12 @@ public class Utils {
     return Collections.unmodifiableList(result);
   }
 
-  public final static class Pair<T1, T2> {
+  public final static class Pair<T1, T2> implements Serializable{
 
+    /**
+     *
+     */
+    private static final long serialVersionUID = 4569625538664573508L;
     public final T1 first;
     public final T2 second;
 
