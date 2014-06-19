@@ -43,7 +43,7 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>${project.groupId}</groupId>
+            <groupId>com.microsoft.reef</groupId>
             <artifactId>reef-poison</artifactId>
             <version>${project.version}</version>
         </dependency>
