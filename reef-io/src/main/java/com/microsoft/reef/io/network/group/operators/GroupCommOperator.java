@@ -37,4 +37,9 @@ public interface GroupCommOperator {
    */
   void initialize();
 
+  /**
+   * @return
+   */
+  int getVersion();
+
 }

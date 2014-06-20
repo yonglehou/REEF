@@ -45,15 +45,18 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   private NodeStruct parent;
   private final List<NodeStruct> children = new ArrayList<>();
 
+  private int version;
+
   public OperatorTopologyStructImpl(final Class<? extends Name<String>> groupName,
       final Class<? extends Name<String>> operName, final String selfId, final String driverId,
-      final Sender sender) {
+      final Sender sender, final int version) {
     super();
     this.groupName = groupName;
     this.operName = operName;
     this.selfId = selfId;
     this.driverId = driverId;
     this.sender = sender;
+    this.version = version;
   }
 
   public OperatorTopologyStructImpl(final OperatorTopologyStruct topology) {
@@ -141,7 +144,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     final String parentId = parent.getId();
     try {
       LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + parentId);
-      sender.send(Utils.bldGCM(groupName, operName, msgType, selfId, parentId, data));
+      sender.send(Utils.bldVersionedGCM(groupName, operName, version, msgType, selfId, parentId, data));
     } catch (final NetworkException e) {
       throw new RuntimeException("NetworkException while sending " + msgType + " data from " + selfId + " to " + parentId, e);
     }
@@ -154,7 +157,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       try {
         LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + child);
         sender.send(
-            Utils.bldGCM(groupName, operName, msgType, selfId, child, data));
+            Utils.bldVersionedGCM(groupName, operName, version, msgType, selfId, child, data));
       } catch (final NetworkException e) {
         throw new RuntimeException("NetworkException while sending "
             + msgType + " data from " + selfId + " to " + child, e);

@@ -79,9 +79,9 @@ public class TaskNodeImpl implements TaskNode {
       LOG.warning(getQualifiedName() + "Trying to set failed on an already failed task. Something fishy!!!");
       return;
     }
+    nodeStatus.setFailed();
     final int version = this.version.incrementAndGet();
     LOG.info(getQualifiedName() + "Changed status to failed. Bumping up to version-" + version);
-    nodeStatus.setFailed();
     LOG.info(getQualifiedName() + "Resetting topoSetupSent to false");
     topoSetupSent.set(false);
     if(parent!=null) {

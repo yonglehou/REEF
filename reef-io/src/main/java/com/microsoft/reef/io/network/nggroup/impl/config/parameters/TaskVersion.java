@@ -13,32 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.group.operators;
+package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
 import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
  *
  */
-public abstract class AbstractGroupCommOperator implements GroupCommOperator{
+@NamedParameter(doc="The version that this task is assigned")
+public class TaskVersion implements Name<Integer> {
 
-  @Override
-  public Class<? extends Name<String>> getOperName() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public Class<? extends Name<String>> getGroupName() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public void initialize() {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int getVersion() {
-    throw new UnsupportedOperationException();
-  }
 }

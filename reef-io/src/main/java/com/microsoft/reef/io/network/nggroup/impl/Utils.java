@@ -35,7 +35,7 @@ public class Utils {
    * @param data
    * @return
    */
-  public static GroupCommMessage bldGCM(
+  /*public static GroupCommMessage bldGCM(
       final Class<? extends Name<String>> groupName,
       final Class<? extends Name<String>> operName, final Type msgType, final String from,
       final String to, final byte[]... data) {
@@ -54,7 +54,7 @@ public class Utils {
 
     return GCMBuilder.build();
   }
-
+*/
   /**
    * @param groupName
    * @param operName

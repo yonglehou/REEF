@@ -82,10 +82,10 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
   }
 
   @Override
-  public void waitForTopologyUpdate(final Class<? extends Name<String>> operName) {
+  public GroupCommMessage waitForTopologyUpdate(final Class<? extends Name<String>> operName) {
     try {
       LOG.info("Waiting for topology update msg for " + operName);
-      topologyNotifications.get(operName).take();
+      return topologyNotifications.get(operName).take();
     } catch (final InterruptedException e) {
       throw new RuntimeException("InterruptedException while waiting for topology update of " + operName.getSimpleName(), e);
     }

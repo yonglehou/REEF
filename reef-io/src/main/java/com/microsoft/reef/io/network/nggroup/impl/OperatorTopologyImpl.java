@@ -59,16 +59,20 @@ public class OperatorTopologyImpl implements OperatorTopology {
   private OperatorTopologyStruct effectiveTopology;
   private CountDownLatch topologyLockAquired = new CountDownLatch(1);
 
+
+  private final int version;
+
   @Inject
   public OperatorTopologyImpl(final Class<? extends Name<String>> groupName,
       final Class<? extends Name<String>> operName, final String selfId, final String driverId,
-      final Sender sender) {
+      final Sender sender, final int version) {
     super();
     this.groupName = groupName;
     this.operName = operName;
     this.selfId = selfId;
     this.driverId = driverId;
     this.sender = sender;
+    this.version = version;
     baseTopologyUpdateStage = new SingleThreadStage<>(new EventHandler<GroupCommMessage>() {
 
       @Override
@@ -88,6 +92,15 @@ public class OperatorTopologyImpl implements OperatorTopology {
   @Override
   public void handle(final GroupCommMessage msg) {
     final String srcId = msg.getSrcid();
+    if(!msg.hasVersion()) {
+      throw new RuntimeException(getQualifiedName() + "can only deal with versioned msgs");
+    }
+    final int msgVersion = msg.getVersion();
+    if(msgVersion<version) {
+      LOG.warning(getQualifiedName() + "Received a ver-" + msgVersion
+          + " msg while expecting ver-" + version + ". Discarding msg");
+      return;
+    }
     LOG.info(getQualifiedName() + "Handling " + msg.getType() + " msg from " + srcId);
     try {
       switch(msg.getType()) {
@@ -194,7 +207,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
    *
    */
   private void createBaseTopology() {
-    baseTopology = new OperatorTopologyStructImpl(groupName,operName,selfId,driverId,sender);
+    baseTopology = new OperatorTopologyStructImpl(groupName,operName,selfId,driverId,sender,version);
     updateBaseTopology();
   }
 

@@ -46,6 +46,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
   private final Set<String> activeNeighbors = new HashSet<>();
   private final CountingMap<String> neighborStatus = new CountingMap<>();
   private final ResettingCDL topoSetup = new ResettingCDL(1);
+  private final AtomicBoolean isTopoUpdateStageWaiting = new AtomicBoolean(false);
   private final AtomicBoolean insideUpdateTopology = new AtomicBoolean(false);
 
   private final TaskNode node;
@@ -81,13 +82,28 @@ public class NodeStatusImpl implements TaskNodeStatus {
                 if(!insideUpdateTopology.compareAndSet(false, true)) {
                   LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got an UpdateTopology when I was still updating topology");
                 }
+                //UpdateTopology might be queued up
+                //but the task might have died. If so,
+                //do not send this msg
+                if(statusMap.isEmpty()) {
+                  break;
+                }
                 //Send to taskId because srcId is usually always MasterTask
-                LOG.info(getQualifiedName() + "Sending UpdateTopology msg to " + taskId);
+                LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Sending UpdateTopology msg to " + taskId);
                 senderStage.onNext(Utils.bldVersionedGCM(groupName, operatorName, node.getVersion(), Type.UpdateTopology, driverId, taskId, new byte[0]));
                 break;
               case TopologySetup:
-                LOG.info(getQualifiedName() + "Releasing stage to send TopologyUpdated msg");
-                topoSetup.countDown();
+                synchronized (isTopoUpdateStageWaiting) {
+                  if (!isTopoUpdateStageWaiting.compareAndSet(true, false)) {
+                    LOG.info(getQualifiedName()
+                        + "NodeStatusMsgProcessorStage Nobody waiting. Nothing to release");
+                  }
+                  else {
+                    LOG.info(getQualifiedName()
+                        + "NodeStatusMsgProcessorStage Releasing stage to send TopologyUpdated msg");
+                    topoSetup.countDown();
+                  }
+                }
                 break;
               case ParentAdded:
               case ChildAdded:
@@ -103,7 +119,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
                       + " msg while expecting ver-" + nodeVersion + ". Discarding msg");
                   break;
                 }
-                if(rcvVersion<nodeVersion) {
+                if(nodeVersion<rcvVersion) {
                   LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage received a HIGHER ver-" + rcvVersion
                       + " msg while expecting ver-" + nodeVersion + ". Something fishy!!!");
                   break;
@@ -132,22 +148,17 @@ public class NodeStatusImpl implements TaskNodeStatus {
                     else {
                       LOG.info(getQualifiedName() + "Not done processing " + sourceId + " acks yet. So it is still inactive");
                     }
-                    /*if(isAddMsg(msgAcked)) {
-                      activeNeighbors.add(sourceId);
-                      node.chkAndSendTopSetup(sourceId);
-                    }
-                    else if(isDeadMsg(msgAcked)) {
-                      activeNeighbors.remove(sourceId);
-                    }*/
                     chkAndSendTopoSetup(msgAcked);
                   } else {
                     LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got " + msgType +
-                        " from a source(" + sourceId + ") to whom ChildAdd was not sent");
+                        " from a source(" + sourceId + ") to whom ChildAdd was not sent. " +
+                        "Perhaps reset during failure. If context not indicative use ***CAUTION***");
                   }
                 }
                 else {
                   LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no " + msgAcked +
-                      " msgs sent in the previous update cycle");
+                      " msgs sent in the previous update cycle. " +
+                      "Perhaps reset during failure. If context not indicative use ***CAUTION***");
                 }
                 break;
 
@@ -205,7 +216,8 @@ public class NodeStatusImpl implements TaskNodeStatus {
       }
     } else {
       LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Trying to set " +
-          "UpdateTopology ended when it has already ended");
+          "UpdateTopology ended when it has already ended. Either initializing or " +
+          "was reset during failure. If context not indicative use ***CAUTION***");
     }
   }
 
@@ -256,6 +268,23 @@ public class NodeStatusImpl implements TaskNodeStatus {
       statusMap.clear();
       activeNeighbors.clear();
       neighborStatus.clear();
+      if(insideUpdateTopology.compareAndSet(true, false)) {
+        statusMap.notifyAll();
+      } else {
+        LOG.warning(getQualifiedName() + "FaliureSet Not insideUpdateTopology. " +
+        		"So not notifying");
+      }
+      synchronized (isTopoUpdateStageWaiting) {
+        if (!isTopoUpdateStageWaiting.compareAndSet(true, false)) {
+          LOG.info(getQualifiedName()
+              + "NodeStatusMsgProcessorStage Nobody waiting. Nothing to release");
+        }
+        else {
+          LOG.info(getQualifiedName()
+              + "NodeStatusMsgProcessorStage Releasing stage to send TopologyUpdated msg");
+          topoSetup.countDown();
+        }
+      }
     }
   }
 
@@ -286,7 +315,15 @@ public class NodeStatusImpl implements TaskNodeStatus {
 
   @Override
   public void waitForTopologySetup() {
-    topoSetup.awaitAndReset(1);
+    synchronized (isTopoUpdateStageWaiting) {
+      if (!isTopoUpdateStageWaiting.compareAndSet(false, true)) {
+        final String msg = getQualifiedName()
+            + "Don't expect someone else to be waiting. Something wrong!";
+        LOG.severe(msg);
+        throw new RuntimeException(msg);
+      }
+      topoSetup.awaitAndReset(1);
+    }
   }
 
 }

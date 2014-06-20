@@ -32,6 +32,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.ReduceFunctionParam;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.TaskVersion;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.reef.io.serialization.Codec;
@@ -90,8 +91,10 @@ public class FlatTopology implements Topology {
 
   @Override
   public Configuration getConfig(final String taskId) {
+    final int version = getNodeVersion(taskId);
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
+    jcb.bindNamedParameter(TaskVersion.class, Integer.toString(version));
     if(operatorSpec instanceof BroadcastOperatorSpec){
       final BroadcastOperatorSpec broadcastOperatorSpec = (BroadcastOperatorSpec) operatorSpec;
       if(taskId.equals(broadcastOperatorSpec.getSenderId())){
@@ -112,6 +115,17 @@ public class FlatTopology implements Topology {
       }
     }
     return jcb.build();
+  }
+
+  private int getNodeVersion(final String taskId) {
+    final TaskNode node = nodes.get(taskId);
+    if(node==null) {
+      final String msg = getQualifiedName() + taskId + " is not available on the nodes map";
+      LOG.warning(msg);
+      throw new RuntimeException(msg);
+    }
+    final int version = node.getVersion();
+    return version;
   }
 
   @Override
@@ -274,13 +288,16 @@ public class FlatTopology implements Topology {
         }
       }
       final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
-      LOG.info("Sending GroupChanges to " + dstId);
-      senderStage.onNext(Utils.bldGCM(groupName, operName, Type.TopologyChanges, driverId, dstId, changesCodec.encode(changes)));
+      final int version = getNodeVersion(dstId);
+      LOG.info("Sending version-" + version + " GroupChanges to " + dstId);
+      senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version, Type.TopologyChanges, driverId, dstId, changesCodec.encode(changes)));
       return;
     }
     if(msg.getType().equals(Type.UpdateTopology)) {
       allTasksAdded.await();
       final String dstId = msg.getSrcid();
+      final int version = getNodeVersion(dstId);
+
       LOG.info(getQualifiedName() + "Creating NodeTopologyUpdateWaitStage to wait on nodes to be updated");
       //This stage only waits for receiving TopologySetup
       //Sending UpdateTopology to the tasks is left to NodeStatusImpl as part
@@ -298,10 +315,12 @@ public class FlatTopology implements Topology {
                     + node.taskId() + " to receive TopologySetup");
                 node.waitForTopologySetup();
               }
+
               LOG.info(getQualifiedName()
                   + "NodeTopologyUpdateWaitStage All to be updated nodes " +
-                  "have received TopologySetup. Sending TopologyUpdated");
-              senderStage.onNext(Utils.bldGCM(groupName, operName,
+                  "have received TopologySetup. Sending version-" + version +
+                  " TopologyUpdated to " + dstId);
+              senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version,
                   Type.TopologyUpdated, driverId, dstId, new byte[0]));
             }
       }, nodes.size());

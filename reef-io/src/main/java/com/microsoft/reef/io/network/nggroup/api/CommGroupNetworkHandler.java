@@ -40,9 +40,10 @@ public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> 
 
   /**
    * @param operName
+   * @return
    *
    */
-  void waitForTopologyUpdate(Class<? extends Name<String>> operName);
+  GroupCommMessage waitForTopologyUpdate(Class<? extends Name<String>> operName);
 
   /**
    * @param operName

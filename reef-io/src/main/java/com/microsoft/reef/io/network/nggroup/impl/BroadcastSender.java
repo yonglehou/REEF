@@ -31,6 +31,7 @@ import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.CommunicationGroupName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.DataCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
+import com.microsoft.reef.io.network.nggroup.impl.config.parameters.TaskVersion;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.reef.io.serialization.Codec;
@@ -61,6 +62,9 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
 
   private final CommunicationGroupClient commGroupClient;
 
+
+  private final int version;
+
   @Inject
   public BroadcastSender(
       @Parameter(CommunicationGroupName.class) final String groupName,
@@ -68,10 +72,12 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
       @Parameter(TaskConfigurationOptions.Identifier.class) final String selfId,
       @Parameter(DataCodec.class) final Codec<T> dataCodec,
       @Parameter(DriverIdentifier.class) final String driverId,
+      @Parameter(TaskVersion.class) final int version,
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService,
       final CommunicationGroupClient commGroupClient) {
     super();
+    this.version = version;
     LOG.info(getQualifiedName() + "has CommGroupHandler-" + commGroupNetworkHandler.toString());
     this.groupName = Utils.getClass(groupName);
     this.operName = Utils.getClass(operName);
@@ -79,9 +85,14 @@ public class BroadcastSender<T> implements Broadcast.Sender<T>, EventHandler<Gro
     this.commGroupNetworkHandler = commGroupNetworkHandler;
     this.netService = netService;
     this.sender = new Sender(this.netService);
-    this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender);
+    this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender, version);
     this.commGroupNetworkHandler.register(this.operName,this);
     this.commGroupClient = commGroupClient;
+  }
+
+  @Override
+  public int getVersion() {
+    return version;
   }
 
   @Override

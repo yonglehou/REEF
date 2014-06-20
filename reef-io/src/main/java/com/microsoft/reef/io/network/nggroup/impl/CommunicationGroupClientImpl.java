@@ -187,7 +187,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
       final Class<? extends Name<String>> operName = op.getOperName();
       LOG.info("Sending TopologyChanges msg to driver");
       try {
-        sender.send(Utils.bldGCM(groupName, operName, Type.TopologyChanges, taskId, driverId, new byte[0]));
+        sender.send(Utils.bldVersionedGCM(groupName, operName, 0, Type.TopologyChanges, taskId, driverId, new byte[0]));
       } catch (final NetworkException e) {
         throw new RuntimeException("NetworkException while sending GetTopologyChanges", e);
       }
@@ -224,15 +224,39 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
       final Class<? extends Name<String>> operName = op.getOperName();
       LOG.info("Sending UpdateTopology msg to driver" + driverId);
       try {
-        sender.send(Utils.bldGCM(groupName, operName, Type.UpdateTopology, taskId, driverId, new byte[0]));
+        sender.send(Utils.bldVersionedGCM(groupName, operName, 0, Type.UpdateTopology, taskId, driverId, new byte[0]));
       } catch (final NetworkException e) {
         throw new RuntimeException("NetworkException while sending UpdateTopology", e);
       }
     }
     for(final GroupCommOperator op : operators.values()) {
       final Class<? extends Name<String>> operName = op.getOperName();
-      commGroupNetworkHandler.waitForTopologyUpdate(operName);
+      while (true) {
+        final GroupCommMessage msg = commGroupNetworkHandler
+            .waitForTopologyUpdate(operName);
+        if (!msg.hasVersion()) {
+          throw new RuntimeException(getQualifiedName()
+              + "can only deal with versioned msgs");
+        }
+        final int msgVersion = msg.getVersion();
+        final GroupCommOperator operator = operators.get(Utils.getClass(msg
+            .getOperatorname()));
+        final int nodeVersion = operator.getVersion();
+        if (msgVersion < nodeVersion) {
+          LOG.warning(getQualifiedName() + "Received a ver-" + msgVersion
+              + " msg while expecting ver-" + nodeVersion + ". Discarding msg");
+          continue;
+        }
+        break;
+      }
     }
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + " ";
   }
 
   @Override
