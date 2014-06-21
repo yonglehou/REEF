@@ -187,7 +187,8 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
       final Class<? extends Name<String>> operName = op.getOperName();
       LOG.info("Sending TopologyChanges msg to driver");
       try {
-        sender.send(Utils.bldVersionedGCM(groupName, operName, 0, Type.TopologyChanges, taskId, driverId, new byte[0]));
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.TopologyChanges, taskId, op.getVersion(), driverId, 0, new byte[0]));
       } catch (final NetworkException e) {
         throw new RuntimeException("NetworkException while sending GetTopologyChanges", e);
       }
@@ -224,7 +225,8 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
       final Class<? extends Name<String>> operName = op.getOperName();
       LOG.info("Sending UpdateTopology msg to driver" + driverId);
       try {
-        sender.send(Utils.bldVersionedGCM(groupName, operName, 0, Type.UpdateTopology, taskId, driverId, new byte[0]));
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.UpdateTopology, taskId, op.getVersion(), driverId, 0, new byte[0]));
       } catch (final NetworkException e) {
         throw new RuntimeException("NetworkException while sending UpdateTopology", e);
       }

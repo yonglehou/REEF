@@ -38,4 +38,14 @@ public interface NodeStruct {
    */
   byte[] getData();
 
+  /**
+   * @return
+   */
+  int getVersion();
+
+  /**
+   * @param version
+   */
+  void setVersion(int version);
+
 }

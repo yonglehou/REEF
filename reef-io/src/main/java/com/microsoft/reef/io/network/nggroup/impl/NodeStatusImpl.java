@@ -45,7 +45,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
   private final EStage<GroupCommMessage> msgProcessorStage;
   private final Set<String> activeNeighbors = new HashSet<>();
   private final CountingMap<String> neighborStatus = new CountingMap<>();
-  private final ResettingCDL topoSetup = new ResettingCDL(1);
+  private final AtomicBoolean topoSetupRcvd = new AtomicBoolean(false);
   private final AtomicBoolean isTopoUpdateStageWaiting = new AtomicBoolean(false);
   private final AtomicBoolean insideUpdateTopology = new AtomicBoolean(false);
 
@@ -90,7 +90,9 @@ public class NodeStatusImpl implements TaskNodeStatus {
                 }
                 //Send to taskId because srcId is usually always MasterTask
                 LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Sending UpdateTopology msg to " + taskId);
-                senderStage.onNext(Utils.bldVersionedGCM(groupName, operatorName, node.getVersion(), Type.UpdateTopology, driverId, taskId, new byte[0]));
+                senderStage.onNext(Utils.bldVersionedGCM(groupName,
+                    operatorName, Type.UpdateTopology,
+                    driverId, 0, taskId, node.getVersion(), new byte[0]));
                 break;
               case TopologySetup:
                 synchronized (isTopoUpdateStageWaiting) {
@@ -101,7 +103,8 @@ public class NodeStatusImpl implements TaskNodeStatus {
                   else {
                     LOG.info(getQualifiedName()
                         + "NodeStatusMsgProcessorStage Releasing stage to send TopologyUpdated msg");
-                    topoSetup.countDown();
+                    topoSetupRcvd.set(true);
+                    isTopoUpdateStageWaiting.notifyAll();
                   }
                 }
                 break;
@@ -282,7 +285,8 @@ public class NodeStatusImpl implements TaskNodeStatus {
         else {
           LOG.info(getQualifiedName()
               + "NodeStatusMsgProcessorStage Releasing stage to send TopologyUpdated msg");
-          topoSetup.countDown();
+          topoSetupRcvd.set(true);
+          isTopoUpdateStageWaiting.notifyAll();
         }
       }
     }
@@ -322,7 +326,15 @@ public class NodeStatusImpl implements TaskNodeStatus {
         LOG.severe(msg);
         throw new RuntimeException(msg);
       }
-      topoSetup.awaitAndReset(1);
+      while(!topoSetupRcvd.get()) {
+        try {
+          isTopoUpdateStageWaiting.wait();
+        } catch (final InterruptedException e) {
+          throw new RuntimeException("InterruptedException in NodeTopologyUpdateWaitStage " +
+          		"while waiting for receiving TopologySetup", e);
+        }
+      }
+      topoSetupRcvd.set(false);
     }
   }
 

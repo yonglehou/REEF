@@ -33,9 +33,23 @@ public abstract class NodeStructImpl implements NodeStruct {
   private final String id;
   private final BlockingQueue<GroupCommMessage> dataQue = new LinkedBlockingQueue<>();
 
-  public NodeStructImpl(final String id) {
+
+  private int version;
+
+  public NodeStructImpl(final String id, final int version) {
     super();
     this.id = id;
+    this.version = version;
+  }
+
+  @Override
+  public int getVersion() {
+    return version;
+  }
+
+  @Override
+  public void setVersion(final int version) {
+    this.version = version;
   }
 
   @Override

@@ -128,23 +128,29 @@ public class OperatorTopologyImpl implements OperatorTopology {
       case ChildDead:
         LOG.info(getQualifiedName() + "Adding to deltas queue");
         deltas.put(msg);
-        if(effectiveTopology!=null) {
-          LOG.info(getQualifiedName() + "Adding as data msg to non-null effective topology struct with msg");
-          effectiveTopology.addAsData(msg);
-//          effectiveTopology.update(msg);
-        }else {
-          LOG.warning("Received a death message before effective topology was setup");
+        synchronized (topologyLock) {
+          if (effectiveTopology != null) {
+            LOG.info(getQualifiedName()
+                + "Adding as data msg to non-null effective topology struct with msg");
+            effectiveTopology.addAsData(msg);
+            //          effectiveTopology.update(msg);
+          } else {
+            LOG.warning("Received a death message before effective topology was setup");
+          }
         }
         break;
 
         default:
+        synchronized (topologyLock) {
           //Data msg
-          if(effectiveTopology!=null) {
-            LOG.info(getQualifiedName() + "Non-null effectiveTopo.addAsData(msg)");
+          if (effectiveTopology != null) {
+            LOG.info(getQualifiedName()
+                + "Non-null effectiveTopo.addAsData(msg)");
             effectiveTopology.addAsData(msg);
-          }else {
+          } else {
             LOG.warning("Received a data message before effective topology was setup");
           }
+        }
       }
     } catch (final InterruptedException e) {
       throw new RuntimeException("InterruptedException while trying to put ctrl msg into delta queue", e);
@@ -244,27 +250,32 @@ public class OperatorTopologyImpl implements OperatorTopology {
       if(!msg.hasVersion()) {
         throw new RuntimeException(getQualifiedName() + "Ack Sender can only deal with versioned msgs");
       }
-      final int version = msg.getVersion();
+      final int msgVersion = msg.getVersion();
       switch(msg.getType()) {
       case UpdateTopology:
         LOG.info(getQualifiedName() + "Sending TopologySetup msg to driver");
-        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.TopologySetup, selfId, driverId, emptyByte));
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.TopologySetup, selfId, this.version, driverId, msgVersion, emptyByte));
         break;
       case ParentAdd:
         LOG.info(getQualifiedName() + "Sending ParentAdded msg for " + srcId);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentAdded, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.ParentAdded, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
         break;
       case ParentDead:
         LOG.info(getQualifiedName() + "Sending ParentRemoved msg for " + srcId);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentRemoved, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.ParentRemoved, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
         break;
       case ChildAdd:
         LOG.info(getQualifiedName() + "Sending ChildAdded msg for " + srcId);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildAdded, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.ChildAdded, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
         break;
       case ChildDead:
         LOG.info(getQualifiedName() + "Sending ChildRemoved msg for " + srcId);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildRemoved, selfId, srcId, emptyByte), driverId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.ChildRemoved, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
         break;
       default:
         LOG.warning("Received a non control message for acknowledgement");

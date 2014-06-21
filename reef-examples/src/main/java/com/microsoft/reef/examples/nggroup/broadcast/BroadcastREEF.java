@@ -52,7 +52,7 @@ public class BroadcastREEF {
   /**
    * Number of milliseconds to wait for the job to complete.
    */
-  private static final int JOB_TIMEOUT = 10 * 60 * 1000;
+  private static final int JOB_TIMEOUT = 2 * 60 * 1000;
 
   /**
    * Command line parameter = true to run locally, or false to run on YARN.

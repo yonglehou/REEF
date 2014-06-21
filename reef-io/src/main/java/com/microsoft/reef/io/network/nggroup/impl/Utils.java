@@ -66,15 +66,21 @@ public class Utils {
    */
   public static GroupCommMessage bldVersionedGCM(
       final Class<? extends Name<String>> groupName,
-      final Class<? extends Name<String>> operName, final int version, final Type msgType, final String from,
-      final String to, final byte[]... data) {
+      final Class<? extends Name<String>> operName,
+      final Type msgType,
+      final String from,
+      final int srcVersion,
+      final String to,
+      final int dstVersion,
+      final byte[]... data) {
     final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
     GCMBuilder.setGroupname(groupName.getName());
     GCMBuilder.setOperatorname(operName.getName());
-    GCMBuilder.setVersion(version);
     GCMBuilder.setType(msgType);
     GCMBuilder.setSrcid(from);
+    GCMBuilder.setSrcVersion(srcVersion);
     GCMBuilder.setDestid(to);
+    GCMBuilder.setVersion(dstVersion);
 
     final GroupMessageBody.Builder bodyBuilder = GroupMessageBody.newBuilder();
     for (final byte[] element : data) {

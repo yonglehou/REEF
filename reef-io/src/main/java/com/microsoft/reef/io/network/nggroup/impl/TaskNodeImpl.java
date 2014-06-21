@@ -55,6 +55,8 @@ public class TaskNodeImpl implements TaskNode {
   private final TaskNodeStatus nodeStatus;
 
   private final Object ackLock = new Object();
+  private final Object parentLock = new Object();
+  private final Object childrenLock = new Object();
 
   private final AtomicInteger version = new AtomicInteger(0);
 
@@ -80,21 +82,18 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     nodeStatus.setFailed();
-    final int version = this.version.incrementAndGet();
-    LOG.info(getQualifiedName() + "Changed status to failed. Bumping up to version-" + version);
+    LOG.info(getQualifiedName() + "Changed status to failed.");
     LOG.info(getQualifiedName() + "Resetting topoSetupSent to false");
     topoSetupSent.set(false);
-    if(parent!=null) {
-      synchronized (parent) {
-        if(!parent.isRunning()) {
-          LOG.info("Parent " + parent.taskId() + " not running yet. Skipping asking it to process child death");
-        }
-        else {
-          parent.processChildDead(taskId);
-        }
+    synchronized (parentLock) {
+      if(checkParentAliveNKicking()) {
+        parent.processChildDead(taskId);
+      }
+      else {
+        LOG.info(getQualifiedName() + "Skipping asking parent to process child death");
       }
     }
-    synchronized (children) {
+    synchronized (childrenLock) {
       for (final TaskNode child : children) {
         if (!child.isRunning()) {
           LOG.info(getQualifiedName() + child.taskId() + " is not running yet. skipping asking it to process parent death");
@@ -103,6 +102,9 @@ public class TaskNodeImpl implements TaskNode {
         child.processParentDead();
       }
     }
+    final int version = this.version.incrementAndGet();
+    LOG.info(getQualifiedName() + "Bumping up to version-" + version);
+
   }
 
   @Override
@@ -113,24 +115,25 @@ public class TaskNodeImpl implements TaskNode {
     }
     final int version = this.version.get();
     LOG.info(getQualifiedName() + "Changed status to running version-" + version);
-    if(parent!=null) {
-      synchronized (parent) {
-        if(!parent.isRunning()) {
-          LOG.info("Parent " + parent.taskId() + " not running yet. Skipping src add");
-        }
-        else {
-          nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version, Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
-          parent.processChildRunning(taskId);
-        }
+    synchronized (parentLock) {
+      if(checkParentAliveNKicking()) {
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ParentAdd, parent.taskId(), parent.getVersion(), taskId,
+            version, EmptyByteArr));
+        parent.processChildRunning(taskId);
+      }
+      else {
+        LOG.info(getQualifiedName() + "Skipping src add to & for parent");
       }
     }
-    synchronized (children) {
+    synchronized (childrenLock) {
       for (final TaskNode child : children) {
         if (!child.isRunning()) {
           LOG.info(getQualifiedName() + child.taskId() + " is not running yet. skipping src add send");
           continue;
         }
-        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version, Type.ChildAdd, child.taskId(), taskId, EmptyByteArr));
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ChildAdd, child.taskId(), child.getVersion(), taskId, version, EmptyByteArr));
         child.processParentRunning();
       }
     }
@@ -140,6 +143,19 @@ public class TaskNodeImpl implements TaskNode {
 
   /**** Methods pertaining to my neighbors status change ****/
 
+
+  private boolean checkParentAliveNKicking() {
+    if(parent==null) {
+      LOG.warning(getQualifiedName() + "Parent does not exist");
+      return false;
+    }
+    if(!parent.isRunning()) {
+      LOG.warning(getQualifiedName() + "Parent is not running");
+      return false;
+    }
+    return true;
+  }
+
   @Override
   public void processParentRunning() {
     if(!running.get()) {
@@ -147,18 +163,22 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Parent Running");
-    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ParentAdd, parent.taskId(), taskId, EmptyByteArr));
+    synchronized (parentLock) {
+      if(checkParentAliveNKicking()) {
+        final int parentVersion = parent.getVersion();
+        final String parentTaskId = parent.taskId();
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ParentAdd, parentTaskId, parentVersion, taskId, version.get(),
+            EmptyByteArr));
+      }
+      else {
+        LOG.warning(getQualifiedName() + "Parent was running when I was asked to add him."
+            + " However, he is not active anymore. Returning without sending ParentAdd"
+            + " msg. ***CHECK***");
+      }
+    }
   }
 
-  @Override
-  public void processChildRunning(final String childId) {
-    if(!running.get()) {
-      LOG.warning(getQualifiedName() + "Was running when a child asked me to process its start. But I am not running anymore");
-      return;
-    }
-    LOG.info(getQualifiedName() + "Processing Child " + childId + " running");
-    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ChildAdd, childId, taskId, EmptyByteArr));
-  }
 
   @Override
   public void processParentDead() {
@@ -167,9 +187,65 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Parent Death");
-    nodeStatus.setFailed(parent.taskId());
-    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ParentDead, parent.taskId(), taskId, EmptyByteArr));
+
+    synchronized (parentLock) {
+      //Need to grab the lock since
+      //parent might start running
+      //though unlikely
+      if (parent!=null) {
+        final int parentVersion = parent.getVersion();
+        final String parentTaskId = parent.taskId();
+        nodeStatus.setFailed(parent.taskId());
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ParentDead, parentTaskId, parentVersion, taskId,
+            version.get(), EmptyByteArr));
+      }
+      else {
+        final String msg = getQualifiedName() + "Don't expect parent to be null. Something wrong";
+        LOG.warning(msg);
+        throw new RuntimeException(msg);
+      }
+    }
   }
+
+  private TaskNode checkChildAliveNKicking(final String childId) {
+    final TaskNode childTask = findChildTask(childId);
+    if (childTask == null) {
+      LOG.warning(getQualifiedName() + childId + " is not active");
+      return null;
+    }
+    if(!childTask.isRunning()) {
+      LOG.warning(getQualifiedName() + childId + " is not running");
+      return null;
+    }
+    return childTask;
+  }
+
+  @Override
+  public void processChildRunning(final String childId) {
+    if(!running.get()) {
+      LOG.warning(getQualifiedName()
+          + "Was running when a child asked me to process its start. But I am not running anymore");
+      return;
+    }
+    LOG.info(getQualifiedName() + "Processing Child " + childId + " running");
+
+    synchronized (childrenLock) {
+      final TaskNode childTask = checkChildAliveNKicking(childId);
+      if(childTask!=null) {
+        final int childVersion = childTask.getVersion();
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ChildAdd, childId, childVersion, taskId, version.get(), EmptyByteArr));
+      }
+      else {
+        LOG.warning(getQualifiedName()
+            + childId + " was running when I was asked to add him."
+            + " However, I can't find a task corresponding to him now."
+            + " Returning without sending ChildAdd msg. ***CHECK***");
+      }
+    }
+  }
+
 
   @Override
   public void processChildDead(final String childId) {
@@ -178,8 +254,22 @@ public class TaskNodeImpl implements TaskNode {
       return;
     }
     LOG.info(getQualifiedName() + "Processing Child " + childId + " death");
-    nodeStatus.setFailed(childId);
-    nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName, version.get(), Type.ChildDead, childId, taskId, EmptyByteArr));
+
+    synchronized (childrenLock) {
+      final TaskNode childTask = findChildTask(childId);
+      if (childTask!=null) {
+        final int childVersion = childTask.getVersion();
+        nodeStatus.setFailed(childId);
+        nodeStatus.sendMsg(Utils.bldVersionedGCM(groupName, operName,
+            Type.ChildDead, childId, childVersion, taskId, version.get(), EmptyByteArr));
+      }
+      else {
+        final String msg = getQualifiedName() + "Don't expect task for " + childId
+            + " to be null. Something wrong";
+        LOG.warning(msg);
+        throw new RuntimeException(msg);
+      }
+    }
   }
 
   /**** Methods pertaining to my neighbors status change ends ****/
@@ -196,21 +286,21 @@ public class TaskNodeImpl implements TaskNode {
 
   @Override
   public void addChild(final TaskNode child) {
-    synchronized (children) {
+    synchronized (childrenLock) {
       children.add(child);
     }
   }
 
   @Override
   public void removeChild(final TaskNode child) {
-    synchronized (children) {
+    synchronized (childrenLock) {
       children.remove(child);
     }
   }
 
   @Override
   public void setParent(final TaskNode parent) {
-    synchronized (parent) {
+    synchronized (parentLock) {
       this.parent = parent;
     }
   }
@@ -222,7 +312,7 @@ public class TaskNodeImpl implements TaskNode {
 
   @Override
   public TaskNode getParent() {
-    synchronized (parent) {
+    synchronized (parentLock) {
       return parent;
     }
   }
@@ -290,8 +380,8 @@ public class TaskNodeImpl implements TaskNode {
 
   private void sendTopoSetupMsg() {
     LOG.info(getQualifiedName() + " Sending TopoSetup msg to " + taskId);
-    senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version.get(),
-        Type.TopologySetup, driverId, taskId, new byte[0]));
+    senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+        Type.TopologySetup, driverId, 0, taskId, version.get(), new byte[0]));
     nodeStatus.topoSetupSent();
     if(!topoSetupSent.compareAndSet(false, true)) {
       LOG.warning(getQualifiedName() + "TopologySetup msg was sent more than once. Something fishy!!!");
@@ -312,41 +402,55 @@ public class TaskNodeImpl implements TaskNode {
    * @return
    */
   private TaskNode findTask(final String sourceId) {
-    if(parent!=null && parent.taskId().equals(sourceId)) {
-      return parent;
-    }
-    for (final TaskNode child : children) {
-      if(child.taskId().equals(sourceId)) {
-        return child;
+    synchronized (parentLock) {
+      if (parent != null && parent.taskId().equals(sourceId)) {
+        return parent;
       }
     }
-    return null;
+    return findChildTask(sourceId);
+  }
+
+  private TaskNode findChildTask(final String sourceId) {
+    synchronized (childrenLock) {
+      LOG.info(getQualifiedName() + children);
+      for(final TaskNode child : children) {
+        if(child.taskId().equals(sourceId)) {
+          return child;
+        }
+      }
+      return null;
+    }
   }
 
   /**
    * @return
    */
   private boolean parentActive() {
-    if(parent==null) {
-      LOG.info(getQualifiedName() + "Parent null. Perhaps I am root. A non-existent neghboris always active");
-      return true;
+    synchronized (parentLock) {
+      if (parent == null) {
+        LOG.info(getQualifiedName()
+            + "Parent null. Perhaps I am root. A non-existent neghboris always active");
+        return true;
+      }
+      if(!parent.isRunning() || isNeighborActive(parent.taskId())) {
+        LOG.info(getQualifiedName() + parent.taskId() + " is an active neghbor");
+        return true;
+      }
+      return false;
     }
-    if(!parent.isRunning() || isNeighborActive(parent.taskId())) {
-      LOG.info(getQualifiedName() + parent.taskId() + " is an active neghbor");
-      return true;
-    }
-    return false;
   }
 
   /**
    * @return
    */
   private boolean allChildrenActive() {
-    for (final TaskNode child : children) {
-      final String childId = child.taskId();
-      if(child.isRunning() && !isNeighborActive(childId)) {
-        LOG.info(getQualifiedName() + childId + " not active yet");
-        return false;
+    synchronized (childrenLock) {
+      for (final TaskNode child : children) {
+        final String childId = child.taskId();
+        if (child.isRunning() && !isNeighborActive(childId)) {
+          LOG.info(getQualifiedName() + childId + " not active yet");
+          return false;
+        }
       }
     }
     LOG.info(getQualifiedName() + "All children active");
@@ -361,7 +465,7 @@ public class TaskNodeImpl implements TaskNode {
       LOG.info(getQualifiedName() + "Parent null. Perhaps I am root. Always an active neghbor of non-existent parent");
       return true;
     }
-    synchronized (parent) {
+    synchronized (parentLock) {
       if (!parent.isRunning() || parent.isNeighborActive(taskId)) {
         LOG.info(getQualifiedName() + "I am an active neighbor of parent "
             + parent.taskId());
@@ -375,7 +479,7 @@ public class TaskNodeImpl implements TaskNode {
    * @return
    */
   private boolean activeNeighborOfAllChildren() {
-    synchronized (children) {
+    synchronized (childrenLock) {
       for (final TaskNode child : children) {
         if (child.isRunning() && !child.isNeighborActive(taskId)) {
           LOG.info(getQualifiedName() + "Not an active neighbor of child "

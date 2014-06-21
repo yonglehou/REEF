@@ -29,8 +29,8 @@ public class ChildNodeStruct extends NodeStructImpl {
   private static final Logger LOG = Logger.getLogger(ChildNodeStruct.class.getName());
 
 
-  public ChildNodeStruct(final String id) {
-    super(id);
+  public ChildNodeStruct(final String id, final int version) {
+    super(id, version);
   }
 
   @Override

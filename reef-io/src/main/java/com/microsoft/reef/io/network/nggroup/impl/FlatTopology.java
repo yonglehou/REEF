@@ -290,7 +290,8 @@ public class FlatTopology implements Topology {
       final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
       final int version = getNodeVersion(dstId);
       LOG.info("Sending version-" + version + " GroupChanges to " + dstId);
-      senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version, Type.TopologyChanges, driverId, dstId, changesCodec.encode(changes)));
+      senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+          Type.TopologyChanges, driverId, 0, dstId, version, changesCodec.encode(changes)));
       return;
     }
     if(msg.getType().equals(Type.UpdateTopology)) {
@@ -320,8 +321,8 @@ public class FlatTopology implements Topology {
                   + "NodeTopologyUpdateWaitStage All to be updated nodes " +
                   "have received TopologySetup. Sending version-" + version +
                   " TopologyUpdated to " + dstId);
-              senderStage.onNext(Utils.bldVersionedGCM(groupName, operName, version,
-                  Type.TopologyUpdated, driverId, dstId, new byte[0]));
+              senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+                  Type.TopologyUpdated, driverId, 0, dstId, version, new byte[0]));
             }
       }, nodes.size());
       final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());

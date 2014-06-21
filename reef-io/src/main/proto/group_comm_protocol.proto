@@ -36,7 +36,8 @@ message GroupCommMessage {
   optional string groupname = 4;
   optional string operatorname = 5;
   optional int32 version = 6;
-  repeated GroupMessageBody msgs = 7;
+  optional int32 srcVersion = 7;
+  repeated GroupMessageBody msgs = 8;
 }
 
 message GroupMessageBody {
