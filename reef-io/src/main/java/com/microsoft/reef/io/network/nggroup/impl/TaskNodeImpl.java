@@ -54,7 +54,6 @@ public class TaskNodeImpl implements TaskNode {
 
   private final TaskNodeStatus nodeStatus;
 
-  private final Object ackLock = new Object();
   private final Object parentLock = new Object();
   private final Object childrenLock = new Object();
 
@@ -276,6 +275,21 @@ public class TaskNodeImpl implements TaskNode {
 
   @Override
   public void processMsg(final GroupCommMessage msg) {
+    if(!msg.hasVersion()) {
+      throw new RuntimeException(getQualifiedName() + "NodeStatusMsgProcessorStage can only deal with versioned msgs");
+    }
+    final int rcvVersion = msg.getVersion();
+    final int version = this.version.get();
+    if(rcvVersion<version) {
+      LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage received a ver-" + rcvVersion
+          + " msg while expecting ver-" + version + ". Discarding msg");
+      return;
+    }
+    if(version<rcvVersion) {
+      LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage received a HIGHER ver-" + rcvVersion
+          + " msg while expecting ver-" + version + ". Something fishy!!!");
+      return;
+    }
     nodeStatus.processMsg(msg);
   }
 
@@ -321,7 +335,8 @@ public class TaskNodeImpl implements TaskNode {
    * @return
    */
   private String getQualifiedName() {
-    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + taskId + " - ";
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
+        + taskId + ":ver(" + getVersion() + ") - ";
   }
 
 
@@ -333,47 +348,48 @@ public class TaskNodeImpl implements TaskNode {
 
   @Override
   public boolean resetTopologySetupSent() {
-    synchronized (ackLock) {
-      return topoSetupSent.compareAndSet(true,false);
-    }
+    return topoSetupSent.compareAndSet(true,false);
+  }
+
+  @Override
+  public boolean wasTopologySetupSent() {
+    return topoSetupSent.get();
   }
 
   @Override
   public void chkAndSendTopSetup() {
-    synchronized (ackLock ) {
-      LOG.info(getQualifiedName()
-          + "Checking if I am ready to send TopoSetup msg");
-      if (topoSetupSent.get()) {
-        LOG.info(getQualifiedName() + "topology setup msg sent already");
+    LOG.info(getQualifiedName()
+        + "Checking if I am ready to send TopoSetup msg");
+    if (wasTopologySetupSent()) {
+      LOG.info(getQualifiedName() + "topology setup msg sent already");
+      return;
+    }
+    final boolean parentActive = parentActive();
+    final boolean allChildrenActive = allChildrenActive();
+    if (parentActive && allChildrenActive) {
+      final boolean activeNeighborOfParent = activeNeighborOfParent();
+      final boolean activeNeighborOfAllChildren = activeNeighborOfAllChildren();
+      if (activeNeighborOfParent && activeNeighborOfAllChildren) {
+        sendTopoSetupMsg();
         return;
-      }
-      final boolean parentActive = parentActive();
-      final boolean allChildrenActive = allChildrenActive();
-      if (parentActive && allChildrenActive) {
-        final boolean activeNeighborOfParent = activeNeighborOfParent();
-        final boolean activeNeighborOfAllChildren = activeNeighborOfAllChildren();
-        if (activeNeighborOfParent && activeNeighborOfAllChildren) {
-          sendTopoSetupMsg();
-          return;
-        } else {
-          if (!activeNeighborOfParent) {
-            LOG.info(getQualifiedName()
-                + "I am not an active neighbor of parent "
-                + (parent != null ? parent.taskId() : "NULL"));
-          }
-          if (!activeNeighborOfAllChildren) {
-            LOG.info(getQualifiedName()
-                + "I am not an active neighbor of all children");
-          }
-        }
       } else {
-        if (!parentActive) {
-          LOG.info(getQualifiedName() + "parent "
-              + (parent != null ? parent.taskId() : "NULL") + " not active yet");
+        if (!activeNeighborOfParent) {
+          LOG.info(getQualifiedName()
+              + "I am not an active neighbor of parent "
+              + (parent != null ? parent.taskId() : "NULL"));
         }
-        if (!allChildrenActive) {
-          LOG.info(getQualifiedName() + "not all children active yet");
+        if (!activeNeighborOfAllChildren) {
+          LOG.info(getQualifiedName()
+              + "I am not an active neighbor of all children");
         }
+      }
+    } else {
+      if (!parentActive) {
+        LOG.info(getQualifiedName() + "parent "
+            + (parent != null ? parent.taskId() : "NULL") + " not active yet");
+      }
+      if (!allChildrenActive) {
+        LOG.info(getQualifiedName() + "not all children active yet");
       }
     }
   }
@@ -412,7 +428,6 @@ public class TaskNodeImpl implements TaskNode {
 
   private TaskNode findChildTask(final String sourceId) {
     synchronized (childrenLock) {
-      LOG.info(getQualifiedName() + children);
       for(final TaskNode child : children) {
         if(child.taskId().equals(sourceId)) {
           return child;
@@ -493,8 +508,13 @@ public class TaskNodeImpl implements TaskNode {
   }
 
   @Override
-  public void waitForTopologySetup() {
+  public void waitForTopologySetupOrFailure() {
     nodeStatus.waitForTopologySetup();
+  }
+
+  @Override
+  public void waitForUpdatedTopologyOrFailure() {
+    nodeStatus.waitForUpdatedTopologyOrFailure();
   }
 
   @Override

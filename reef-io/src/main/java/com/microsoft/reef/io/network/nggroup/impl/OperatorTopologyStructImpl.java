@@ -412,6 +412,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    * @return
    */
   private String getQualifiedName() {
-    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + selfId + " - ";
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
+        + selfId + ":ver(" + version + ") - ";
   }
 }

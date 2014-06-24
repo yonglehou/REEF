@@ -104,6 +104,9 @@ public class SlaveTask implements Task {
         break;
 
       case ComputeGradientWithMinEta:
+        /*if(Math.random()<0.1) {
+          throw new RuntimeException("Simulated Failure");
+        }*/
         final double minEta = minEtaBroadcaster.receive();
         assert(descentDirection!=null);
         this.descentDirection.scale(minEta);

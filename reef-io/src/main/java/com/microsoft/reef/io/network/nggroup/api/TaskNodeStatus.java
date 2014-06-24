@@ -67,4 +67,9 @@ public interface TaskNodeStatus {
    */
   void topoSetupSent();
 
+  /**
+   *
+   */
+  void waitForUpdatedTopologyOrFailure();
+
 }

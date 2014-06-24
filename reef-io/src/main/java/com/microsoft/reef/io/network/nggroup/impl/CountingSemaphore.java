@@ -31,45 +31,64 @@ public class CountingSemaphore {
 
   private final String name;
 
-  public CountingSemaphore(final int initCount, final String name) {
+
+  private final Object lock;
+
+  public CountingSemaphore(final int initCount, final String name, final Object lock) {
     super();
     this.name = name;
+    this.lock = lock;
     this.counter = new AtomicInteger(initCount);
     LOG.info("Counter initialized to " + initCount);
   }
 
-  public synchronized int increment() {
-    final int retVal = counter.incrementAndGet();
-    LOG.info(name + "Incremented counter to " + retVal);
-    return retVal;
+  public int increment() {
+    synchronized (lock) {
+      final int retVal = counter.incrementAndGet();
+      LOG.info(name + "Incremented counter to " + retVal);
+      return retVal;
+    }
   }
 
-  public synchronized int decrement() {
-    final int retVal = counter.decrementAndGet();
-    LOG.info(name + "Decremented counter to " + retVal);
-    if(retVal<0) {
-      LOG.warning("Counter negative. Something fishy");
-    }
-    if(retVal==0) {
-      LOG.info(name + "All workers are done with their task. Notifying waiting threads");
-      notifyAll();
-    } else {
-      LOG.info(name + "Some workers are not done yet");
-    }
-    return retVal;
-  }
-
-  public synchronized void await() {
-    LOG.info(name + "Waiting for workers to be done");
-    while(counter.get()!=0) {
-      try {
-        wait();
-        LOG.info(name + "Notified with counter=" + counter.get());
-      } catch (final InterruptedException e) {
-        throw new RuntimeException("InterruptedException while waiting for counting semaphore counter", e);
+  public int decrement() {
+    synchronized (lock) {
+      final int retVal = counter.decrementAndGet();
+      LOG.info(name + "Decremented counter to " + retVal);
+      if (retVal < 0) {
+        LOG.warning("Counter negative. Something fishy");
       }
+      if (retVal == 0) {
+        LOG.info(name
+            + "All workers are done with their task. Notifying waiting threads");
+        lock.notifyAll();
+      } else {
+        LOG.info(name + "Some workers are not done yet");
+      }
+      return retVal;
     }
-    LOG.info(name + "Returning from wait");
+  }
+
+  public int get() {
+    synchronized (lock) {
+     return counter.get();
+    }
+  }
+
+  public void await() {
+    synchronized (lock) {
+      LOG.info(name + "Waiting for workers to be done");
+      while (counter.get() != 0) {
+        try {
+          lock.wait();
+          LOG.info(name + "Notified with counter=" + counter.get());
+        } catch (final InterruptedException e) {
+          throw new RuntimeException(
+              "InterruptedException while waiting for counting semaphore counter",
+              e);
+        }
+      }
+      LOG.info(name + "Returning from wait");
+    }
   }
 
 }

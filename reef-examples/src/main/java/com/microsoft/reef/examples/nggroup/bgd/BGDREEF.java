@@ -153,13 +153,15 @@ public class BGDREEF {
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
             .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
+            .set(DriverConfiguration.ON_TASK_FAILED, BGDDriver.TaskFailedHandler.class)
+            .set(DriverConfiguration.ON_TASK_COMPLETED, BGDDriver.TaskCompletedHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))
         .build();
 
     final Configuration groupCommServConfiguration = GroupCommService.getConfiguration();
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
-        .newConfigurationBuilder(dataLoadConfiguration, groupCommServConfiguration)
+        .newConfigurationBuilder(groupCommServConfiguration, dataLoadConfiguration)
         .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
         .bindNamedParameter(Lambda.class, Double.toString(lambda))
         .bindNamedParameter(Eps.class, Double.toString(eps))

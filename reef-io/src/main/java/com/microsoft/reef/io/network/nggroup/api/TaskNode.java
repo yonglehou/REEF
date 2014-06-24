@@ -102,7 +102,7 @@ public interface TaskNode {
   /**
    *
    */
-  public void waitForTopologySetup();
+  public void waitForTopologySetupOrFailure();
 
   /**
    * @return
@@ -124,4 +124,14 @@ public interface TaskNode {
    * @return
    */
   public int getVersion();
+
+  /**
+   *
+   */
+  public void waitForUpdatedTopologyOrFailure();
+
+  /**
+   * @return
+   */
+  boolean wasTopologySetupSent();
 }

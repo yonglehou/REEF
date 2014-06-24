@@ -235,10 +235,10 @@ public class BroadcastDriver {
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class)
                   .build()
-                  /*,PoisonedConfiguration.TASK_CONF
+                  ,PoisonedConfiguration.TASK_CONF
                   .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
                   .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-                  .build()*/
+                  .build()
                   )
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
               .build();

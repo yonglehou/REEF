@@ -27,6 +27,7 @@ import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.task.CompletedTask;
+import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
@@ -55,6 +56,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
+import com.microsoft.reef.poison.PoisonedConfiguration;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -247,6 +249,10 @@ public class BGDDriver {
                   TaskConfiguration.CONF
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class)
+                  .build()
+                  ,PoisonedConfiguration.TASK_CONF
+                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
+                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
                   .build())
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
               .bindImplementation(Parser.class, SVMLightParser.class)
@@ -301,6 +307,35 @@ public class BGDDriver {
      */
     private boolean masterTaskSubmitted() {
       return !masterSubmitted.compareAndSet(false, true);
+    }
+  }
+
+  class TaskFailedHandler implements EventHandler<FailedTask> {
+
+    @Override
+    public void onNext(final FailedTask failedTask) {
+      LOG.info("Got failed Task " + failedTask.getId());
+      final ActiveContext activeContext = failedTask.getActiveContext().get();
+      final Configuration partialTaskConf = Tang.Factory.getTang()
+          .newConfigurationBuilder(
+              TaskConfiguration.CONF
+              .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
+              .set(TaskConfiguration.TASK, SlaveTask.class)
+              .build()
+              ,PoisonedConfiguration.TASK_CONF
+              .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
+              .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+              .build())
+          .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+          .bindImplementation(Parser.class, SVMLightParser.class)
+          .bindImplementation(LossFunction.class, LogisticLossFunction.class)
+          .build();
+      //Do not add the task back
+      //allCommGroup.addTask(partialTaskConf);
+      final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+      LOG.info("Submitting SlaveTask conf");
+      LOG.info(confSerializer.toString(taskConf));
+      activeContext.submitTask(taskConf);
     }
   }
 

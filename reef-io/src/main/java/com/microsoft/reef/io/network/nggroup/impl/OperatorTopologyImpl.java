@@ -96,12 +96,15 @@ public class OperatorTopologyImpl implements OperatorTopology {
       throw new RuntimeException(getQualifiedName() + "can only deal with versioned msgs");
     }
     final int msgVersion = msg.getVersion();
+    LOG.info(getQualifiedName() + "Handling " + msg.getType() + " msg from ("
+        + srcId + "," + msg.getSrcVersion() + ") for (" + msg.getDestid() + ","
+        + msgVersion + ")");
     if(msgVersion<version) {
       LOG.warning(getQualifiedName() + "Received a ver-" + msgVersion
           + " msg while expecting ver-" + version + ". Discarding msg");
       return;
     }
-    LOG.info(getQualifiedName() + "Handling " + msg.getType() + " msg from " + srcId);
+
     try {
       switch(msg.getType()) {
       case UpdateTopology:
@@ -128,15 +131,13 @@ public class OperatorTopologyImpl implements OperatorTopology {
       case ChildDead:
         LOG.info(getQualifiedName() + "Adding to deltas queue");
         deltas.put(msg);
-        synchronized (topologyLock) {
-          if (effectiveTopology != null) {
-            LOG.info(getQualifiedName()
-                + "Adding as data msg to non-null effective topology struct with msg");
-            effectiveTopology.addAsData(msg);
-            //          effectiveTopology.update(msg);
-          } else {
-            LOG.warning("Received a death message before effective topology was setup");
-          }
+        if (effectiveTopology != null) {
+          LOG.info(getQualifiedName()
+              + "Adding as data msg to non-null effective topology struct with msg");
+          effectiveTopology.addAsData(msg);
+          //          effectiveTopology.update(msg);
+        } else {
+          LOG.warning("Received a death message before effective topology was setup");
         }
         break;
 
@@ -333,7 +334,8 @@ public class OperatorTopologyImpl implements OperatorTopology {
    * @return
    */
   private String getQualifiedName() {
-    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":" + selfId + " - ";
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
+        + selfId + ":ver(" + version + ") - ";
   }
 
 }
