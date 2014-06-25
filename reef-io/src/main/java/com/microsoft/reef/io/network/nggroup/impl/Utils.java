@@ -75,7 +75,9 @@ public class Utils {
       final byte[]... data) {
     final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
     GCMBuilder.setGroupname(groupName.getName());
-    GCMBuilder.setOperatorname(operName.getName());
+    if(operName!=null) {
+      GCMBuilder.setOperatorname(operName.getName());
+    }
     GCMBuilder.setType(msgType);
     GCMBuilder.setSrcid(from);
     GCMBuilder.setSrcVersion(srcVersion);
