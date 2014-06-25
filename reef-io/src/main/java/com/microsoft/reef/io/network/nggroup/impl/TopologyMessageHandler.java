@@ -15,7 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.reef.io.network.nggroup.api.Topology;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.wake.EventHandler;
 
@@ -24,15 +23,15 @@ import com.microsoft.wake.EventHandler;
  */
 public class TopologyMessageHandler implements EventHandler<GroupCommMessage> {
 
-  private final Topology topology;
+  private final CommunicationGroupDriverImpl communicationGroupDriverImpl;
 
-  public TopologyMessageHandler(final Topology topology) {
-    this.topology = topology;
+  public TopologyMessageHandler(final CommunicationGroupDriverImpl communicationGroupDriverImpl) {
+    this.communicationGroupDriverImpl = communicationGroupDriverImpl;
   }
 
   @Override
   public void onNext(final GroupCommMessage msg) {
-    topology.processMsg(msg);
+    communicationGroupDriverImpl.processMsg(msg);
   }
 
 }

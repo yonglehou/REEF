@@ -27,9 +27,9 @@ import com.microsoft.wake.EventHandler;
  */
 public class GroupCommMessageHandler implements EventHandler<GroupCommMessage> {
 
-  Map<Class<? extends Name<String>>, CommGroupMessageHandler> commGroupMessageHandlers = new HashMap<>();
+  Map<Class<? extends Name<String>>, BroadcastingEventHandler<GroupCommMessage>> commGroupMessageHandlers = new HashMap<>();
 
-  public void addCommGroupMessageHandler(final Class<? extends Name<String>> groupName, final CommGroupMessageHandler handler) {
+  public void addHandler(final Class<? extends Name<String>> groupName, final BroadcastingEventHandler<GroupCommMessage> handler) {
     commGroupMessageHandlers.put(groupName, handler);
   }
 

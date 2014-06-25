@@ -13,25 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.io.network.nggroup.impl;
+package com.microsoft.reef.io.network.nggroup.impl.config.parameters;
 
-import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.wake.EventHandler;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
  *
  */
-public class TopologyFailedTaskHandler implements EventHandler<FailedTask> {
-
-  private final CommunicationGroupDriverImpl communicationGroupDriverImpl;
-
-  public TopologyFailedTaskHandler(final CommunicationGroupDriverImpl communicationGroupDriverImpl) {
-    this.communicationGroupDriverImpl = communicationGroupDriverImpl;
-  }
-
-  @Override
-  public void onNext(final FailedTask failedTask) {
-    communicationGroupDriverImpl.failTask(failedTask.getId());
-  }
+@NamedParameter()
+public class AnyOper implements Name<String>{
 
 }

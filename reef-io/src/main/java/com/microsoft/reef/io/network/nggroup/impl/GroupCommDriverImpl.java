@@ -169,7 +169,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler = new BroadcastingEventHandler<>();
     final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler = new BroadcastingEventHandler<>();
     final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler = new BroadcastingEventHandler<>();
-    final CommGroupMessageHandler commGroupMessageHandler = new CommGroupMessageHandler();
+    final BroadcastingEventHandler<GroupCommMessage> commGroupMessageHandler = new BroadcastingEventHandler<>();
     final CommunicationGroupDriver commGroupDriver = new
         CommunicationGroupDriverImpl(
             groupName,
@@ -184,7 +184,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     commGroupDrivers.put(groupName, commGroupDriver);
     groupCommRunningTaskHandler.addHandler(commGroupRunningTaskHandler);
     groupCommFailedTaskHandler.addHandler(commGroupFailedTaskHandler);
-    groupCommMessageHandler.addCommGroupMessageHandler(groupName, commGroupMessageHandler);
+    groupCommMessageHandler.addHandler(groupName, commGroupMessageHandler);
     return commGroupDriver;
   }
 

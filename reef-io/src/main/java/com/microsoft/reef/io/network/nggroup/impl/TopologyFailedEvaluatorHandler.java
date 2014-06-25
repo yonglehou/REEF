@@ -17,7 +17,6 @@ package com.microsoft.reef.io.network.nggroup.impl;
 
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.task.FailedTask;
-import com.microsoft.reef.io.network.nggroup.api.Topology;
 import com.microsoft.wake.EventHandler;
 
 /**
@@ -25,18 +24,18 @@ import com.microsoft.wake.EventHandler;
  */
 public class TopologyFailedEvaluatorHandler implements EventHandler<FailedEvaluator> {
 
-  private final Topology topology;
+  private final CommunicationGroupDriverImpl communicationGroupDriverImpl;
 
-  public TopologyFailedEvaluatorHandler(final Topology topology) {
-    this.topology = topology;
+  public TopologyFailedEvaluatorHandler(final CommunicationGroupDriverImpl communicationGroupDriverImpl) {
+    this.communicationGroupDriverImpl = communicationGroupDriverImpl;
   }
 
   @Override
   public void onNext(final FailedEvaluator failedEvaluator) {
     if(failedEvaluator.getFailedTask().isPresent()) {
       final FailedTask failedTask = failedEvaluator.getFailedTask().get();
-      topology.setFailed(failedTask.getId());
-      topology.removeTask(failedTask.getId());
+      communicationGroupDriverImpl.failTask(failedTask.getId());
+      communicationGroupDriverImpl.removeTask(failedTask.getId());
     }
   }
 

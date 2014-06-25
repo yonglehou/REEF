@@ -15,10 +15,13 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
@@ -42,26 +45,33 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EStage;
+import com.microsoft.wake.impl.SyncStage;
 
 /**
  *
  */
 public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
 
+  private static final Logger LOG = Logger
+      .getLogger(CommunicationGroupDriverImpl.class.getName());
+
+
   private final Class<? extends Name<String>> groupName;
-  private final Map<Class<? extends Name<String>>, OperatorSpec> operatorSpecs;
-  private final Map<Class<? extends Name<String>>, Topology> topologies;
+  private final ConcurrentMap<Class<? extends Name<String>>, OperatorSpec> operatorSpecs = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Class<? extends Name<String>>, Topology> topologies = new ConcurrentHashMap<>();
   private final Set<String> taskIds = new HashSet<>();
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
-  private final EStage<GroupCommMessage> senderStage;
+  private final EStage<GroupCommMessage> pseudoSenderStage;
+  private final MsgAggregator msgAggregator;
   private final String driverId;
-  private final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler;
-  private final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler;
-  private final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler;
-  private final CommGroupMessageHandler commGroupMessageHandler;
   private final int numberOfTasks;
 
+  private final Object topologiesLock = new Object();
+  private final Object updatingToplogiesLock = new Object();
+  private final Object configLock = new Object();
+
+  private final AtomicBoolean updatingTopologies = new AtomicBoolean(false);
 
   public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
       final ConfigurationSerializer confSerializer,
@@ -69,21 +79,25 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       final BroadcastingEventHandler<RunningTask> commGroupRunningTaskHandler,
       final BroadcastingEventHandler<FailedTask> commGroupFailedTaskHandler,
       final BroadcastingEventHandler<FailedEvaluator> commGroupFailedEvaluatorHandler,
-      final CommGroupMessageHandler commGroupMessageHandler,
+      final BroadcastingEventHandler<GroupCommMessage> commGroupMessageHandler,
       final String driverId,
       final int numberOfTasks) {
     super();
     this.groupName = groupName;
     this.numberOfTasks = numberOfTasks;
-    this.commGroupRunningTaskHandler = commGroupRunningTaskHandler;
-    this.commGroupFailedTaskHandler = commGroupFailedTaskHandler;
-    this.commGroupFailedEvaluatorHandler = commGroupFailedEvaluatorHandler;
-    this.commGroupMessageHandler = commGroupMessageHandler;
     this.driverId = driverId;
-    this.operatorSpecs = new HashMap<>();
-    this.topologies = new HashMap<>();
     this.confSerializer = confSerializer;
-    this.senderStage = senderStage;
+    this.msgAggregator = new MsgAggregator(senderStage);
+    this.pseudoSenderStage = new SyncStage<>(msgAggregator);
+
+    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(this);
+    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
+    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(this);
+    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new TopologyFailedEvaluatorHandler(this);
+    commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
+    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(this);
+    commGroupMessageHandler.addHandler(topologyMessageHandler);
   }
 
   @Override
@@ -93,18 +107,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
+    final Topology topology = new FlatTopology(pseudoSenderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
-    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(topology);
-    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
-    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
-    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
-    final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new TopologyFailedEvaluatorHandler(topology);
-    commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
-    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
-    commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
+
     return this;
   }
 
@@ -115,18 +122,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
+    final Topology topology = new FlatTopology(pseudoSenderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
-    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(topology);
-    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
-    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(topology);
-    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
-    final TopologyFailedEvaluatorHandler topologyFailedEvaluatorHandler = new TopologyFailedEvaluatorHandler(topology);
-    commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
-    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(topology);
-    commGroupMessageHandler.addTopologyMessageHandler(operatorName, topologyMessageHandler);
+
     return this;
   }
 
@@ -152,16 +152,86 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   @Override
   public void finalise() {
     finalised = true;
+    msgAggregator.setNumTopologies(topologies.size());
   }
 
   @Override
   public void addTask(final Configuration partialTaskConf) {
-    final String taskId = taskId(partialTaskConf);
-    for(final Class<? extends Name<String>> operName : operatorSpecs.keySet()){
-      final Topology topology = topologies.get(operName);
-      topology.addTask(taskId);
+    synchronized (topologiesLock) {
+      LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      final String taskId = taskId(partialTaskConf);
+      for (final Class<? extends Name<String>> operName : operatorSpecs
+          .keySet()) {
+        final Topology topology = topologies.get(operName);
+        topology.addTask(taskId);
+      }
+      taskIds.add(taskId);
     }
-    taskIds.add(taskId);
+    LOG.info(getQualifiedName() + "Released topologiesLock");
+  }
+
+  /**
+   * @param id
+   */
+  public void removeTask(final String id) {
+    // TODO Auto-generated method stub
+
+  }
+
+
+  /**
+   * @param id
+   */
+  public void runTask(final String id) {
+    synchronized (updatingToplogiesLock) {
+      LOG.info(getQualifiedName() + "Acquired updatingTopologiesLock");
+      while(updatingTopologies.get()) {
+        LOG.info(getQualifiedName() + "is updating topologies. Will wait for it to finish");
+        try {
+          updatingToplogiesLock.wait();
+        } catch (final InterruptedException e) {
+          throw new RuntimeException(
+              "InterruptedException while waiting for updatingTopologies lock", e);
+        }
+        LOG.info(getQualifiedName() + "Finished updating topologies");
+      }
+      LOG.info(getQualifiedName() + "Released updatingTopologiesLock");
+    }
+
+    synchronized (topologiesLock) {
+      LOG.info(getQualifiedName() + "Acquired topologieslock");
+      for (final Class<? extends Name<String>> operName : operatorSpecs
+          .keySet()) {
+        final Topology topology = topologies.get(operName);
+        topology.setRunning(id);
+      }
+      msgAggregator.aggregateNSend();
+    }
+    LOG.info(getQualifiedName() + "Released topologieslock");
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + " - ";
+  }
+
+  /**
+   * @param id
+   */
+  public void failTask(final String id) {
+    // TODO Auto-generated method stub
+
+  }
+
+
+  /**
+   * @param msg
+   */
+  public void processMsg(final GroupCommMessage msg) {
+    // TODO Auto-generated method stub
+
   }
 
   private String taskId(final Configuration partialTaskConf){
