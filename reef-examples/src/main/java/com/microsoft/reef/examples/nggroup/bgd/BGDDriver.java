@@ -64,7 +64,9 @@ import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
+import com.microsoft.wake.impl.SingleThreadStage;
 
 /**
  *
@@ -312,30 +314,40 @@ public class BGDDriver {
 
   class TaskFailedHandler implements EventHandler<FailedTask> {
 
+    EStage<FailedTask> failedTaskHandlingStage = new SingleThreadStage<>(new EventHandler<FailedTask>() {
+
+      @Override
+      public void onNext(final FailedTask failedTask) {
+        LOG.info("Processing failed Task " + failedTask.getId()
+            + " insided stage");
+        final ActiveContext activeContext = failedTask.getActiveContext().get();
+        final Configuration partialTaskConf = Tang.Factory.getTang()
+            .newConfigurationBuilder(
+                TaskConfiguration.CONF
+                .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
+                .set(TaskConfiguration.TASK, SlaveTask.class)
+                .build()
+                ,PoisonedConfiguration.TASK_CONF
+                .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
+                .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+                .build())
+            .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+            .bindImplementation(Parser.class, SVMLightParser.class)
+            .bindImplementation(LossFunction.class, LogisticLossFunction.class)
+            .build();
+        //Do not add the task back
+        //allCommGroup.addTask(partialTaskConf);
+        final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+        LOG.info("Submitting SlaveTask conf");
+        LOG.info(confSerializer.toString(taskConf));
+        activeContext.submitTask(taskConf);
+      }
+    }, 5);
+
     @Override
     public void onNext(final FailedTask failedTask) {
-      LOG.info("Got failed Task " + failedTask.getId());
-      final ActiveContext activeContext = failedTask.getActiveContext().get();
-      final Configuration partialTaskConf = Tang.Factory.getTang()
-          .newConfigurationBuilder(
-              TaskConfiguration.CONF
-              .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
-              .set(TaskConfiguration.TASK, SlaveTask.class)
-              .build()
-              ,PoisonedConfiguration.TASK_CONF
-              .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
-              .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-              .build())
-          .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
-          .bindImplementation(Parser.class, SVMLightParser.class)
-          .bindImplementation(LossFunction.class, LogisticLossFunction.class)
-          .build();
-      //Do not add the task back
-      //allCommGroup.addTask(partialTaskConf);
-      final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
-      LOG.info("Submitting SlaveTask conf");
-      LOG.info(confSerializer.toString(taskConf));
-      activeContext.submitTask(taskConf);
+      LOG.info("Got failed Task " + failedTask.getId() + ". Queing up in stage");
+      failedTaskHandlingStage.onNext(failedTask);
     }
   }
 

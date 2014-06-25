@@ -64,7 +64,7 @@ public class FlatTopology implements Topology {
 
   private final CountingSemaphore allTasksAdded;
 
-  private final AtomicBoolean firstTime = new AtomicBoolean(false);
+  private final AtomicBoolean initializing = new AtomicBoolean(true);
 
   private final Object topologyLock = new Object();
   private final Object updatingToplogyLock = new Object();
@@ -319,10 +319,10 @@ public class FlatTopology implements Topology {
   public void processMsg(final GroupCommMessage msg) {
     synchronized (topologyLock) {
       LOG.info(getQualifiedName() + "Acquired topologyLock");
-      if(firstTime.get()) {
+      if(initializing.get()) {
         LOG.info(getQualifiedName() + "waiting for all nodes to run");
         allTasksAdded.await();
-        firstTime.compareAndSet(false, true);
+        initializing.compareAndSet(true, false);
       }
       LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
           + msg.getSrcid());
