@@ -18,6 +18,7 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import javax.inject.Inject;
 
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
+import com.microsoft.reef.driver.parameters.EvaluatorDispatcherThreads;
 import com.microsoft.reef.driver.parameters.ServiceEvaluatorFailedHandlers;
 import com.microsoft.reef.driver.parameters.ServiceTaskFailedHandlers;
 import com.microsoft.reef.driver.parameters.TaskRunningHandlers;
@@ -48,6 +49,7 @@ public class GroupCommService {
     jcb.bindSetEntry(TaskRunningHandlers.class, RunningTaskHandler.class);
     jcb.bindSetEntry(ServiceTaskFailedHandlers.class, FailedTaskHandler.class);
     jcb.bindSetEntry(ServiceEvaluatorFailedHandlers.class, FailedEvaluatorHandler.class);
+    jcb.bindNamedParameter(EvaluatorDispatcherThreads.class, "1");
     return jcb.build();
   }
 

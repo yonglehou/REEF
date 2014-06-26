@@ -15,9 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -59,7 +58,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private final Class<? extends Name<String>> groupName;
   private final ConcurrentMap<Class<? extends Name<String>>, OperatorSpec> operatorSpecs = new ConcurrentHashMap<>();
   private final ConcurrentMap<Class<? extends Name<String>>, Topology> topologies = new ConcurrentHashMap<>();
-  private final Set<String> taskIds = new HashSet<>();
+  private final Map<String, TaskState> perTaskState = new HashMap<>();
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
   private final EStage<GroupCommMessage> senderStage;
@@ -141,12 +140,21 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   public Configuration getConfiguration(final Configuration taskConf) {
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     final String taskId = taskId(taskConf);
-    if(taskIds.contains(taskId)){
+    if(perTaskState.containsKey(taskId)){
       jcb.bindNamedParameter(DriverIdentifier.class, driverId);
       jcb.bindNamedParameter(CommunicationGroupName.class, groupName.getName());
       synchronized (configLock) {
         LOG.info(getQualifiedName() + "Acquired configLock");
-        String operWithRunningTask;
+        while(cantGetConfig(taskId)) {
+          LOG.info(getQualifiedName() + "Need to wait for failure");
+          try {
+            configLock.wait();
+          } catch (final InterruptedException e) {
+            throw new RuntimeException("InterruptedException while waiting on configLock", e);
+          }
+        }
+        LOG.info(getQualifiedName() + taskId + " - Will fetch configuration now.");
+        /*String operWithRunningTask;
         while((operWithRunningTask=operWithRunningTask(taskId))!=null) {
           LOG.info(getQualifiedName() + operWithRunningTask + " thinks "
               + taskId + " is still running. Need to wait for failure");
@@ -156,7 +164,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
             throw new RuntimeException("InterruptedException while waiting on configLock", e);
           }
         }
-        LOG.info(getQualifiedName() + " - No operator thinks " + taskId + " is running. Will fetch configuration now.");
+        LOG.info(getQualifiedName() + " - No operator thinks " + taskId
+            + " is running. Will fetch configuration now.");*/
       }
       LOG.info(getQualifiedName() + "Released configLock");
       synchronized (topologiesLock) {
@@ -176,6 +185,26 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       LOG.info(getQualifiedName() + "Released topologiesLock");
     }
     return jcb.build();
+  }
+
+  private boolean cantGetConfig(final String taskId) {
+    LOG.info(getQualifiedName() + "Checking if I can't get config");
+    final TaskState taskState = perTaskState.get(taskId);
+    if(!taskState.equals(TaskState.NOT_STARTED)) {
+      LOG.info(getQualifiedName() + taskId + " has started.");
+      if(taskState.equals(TaskState.RUNNING)) {
+        LOG.info(getQualifiedName() + "But " + taskId + " is running. We can't get config");
+        return true;
+      }
+      else {
+        LOG.info(getQualifiedName() + "But " + taskId + " has failed. We can get config");
+        return false;
+      }
+    }
+    else {
+      LOG.info(getQualifiedName() + taskId + " has not started. We can get config");
+      return false;
+    }
   }
 
   /**
@@ -224,7 +253,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         final Topology topology = topologies.get(operName);
         topology.addTask(taskId);
       }
-      taskIds.add(taskId);
+      perTaskState.put(taskId, TaskState.NOT_STARTED);
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
   }
@@ -266,6 +295,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         topology.setRunning(id);
       }
       allTasksAdded.decrement();
+      perTaskState.put(id, TaskState.RUNNING);
 //      msgAggregator.aggregateNSend();
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
@@ -290,7 +320,16 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     LOG.info(getQualifiedName() + "Task-" + id + " failed");
     synchronized (yetToRunLock ) {
       LOG.info(getQualifiedName() + "Acquired yetToRunLock");
-      String operWithNotRunningTask;
+      while(cantFailTask(id)) {
+        LOG.warning(getQualifiedName() + "Need to wait for it run");
+        try {
+          yetToRunLock.wait();
+        } catch (final InterruptedException e) {
+          throw new RuntimeException("InterruptedException while waiting on yetToRunLock", e);
+        }
+      }
+      LOG.info(getQualifiedName() + id + " - Can safely set failure.");
+      /*String operWithNotRunningTask;
       while((operWithNotRunningTask=operWithNotRunningTask(id))!=null) {
         LOG.info(getQualifiedName() + operWithNotRunningTask + " thinks "
             + id + " is not running to set failure. Need to wait for it run");
@@ -301,7 +340,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         }
       }
       LOG.info(getQualifiedName() + " - No operator thinks " + id
-          + " is not running. Can safely set failure.");
+          + " is not running. Can safely set failure.");*/
     }
     LOG.info(getQualifiedName() + "Released yetToRunLock");
     synchronized (topologiesLock) {
@@ -312,6 +351,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         topology.setFailed(id);
       }
       allTasksAdded.increment();
+      perTaskState.put(id, TaskState.FAILED);
 //      msgAggregator.aggregateNSend();
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
@@ -322,6 +362,31 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     LOG.info(getQualifiedName() + "Released configLock");
   }
 
+
+  /**
+   * @param id
+   * @return
+   */
+  private boolean cantFailTask(final String taskId) {
+    LOG.info(getQualifiedName() + "Checking if I can't fail task");
+    final TaskState taskState = perTaskState.get(taskId);
+    if(!taskState.equals(TaskState.NOT_STARTED)) {
+      LOG.info(getQualifiedName() + taskId + " has started.");
+      if(!taskState.equals(TaskState.RUNNING)) {
+        LOG.warning(getQualifiedName() + "But " + taskId + " is not running yet. Can't set failure");
+        return true;
+      }
+      else {
+        LOG.info(getQualifiedName() + "But " + taskId + " is running. Can set failure");
+        return false;
+      }
+    }
+    else {
+      final String msg = getQualifiedName() + taskId + " has not started. We can't fail a task that hasn't started";
+      LOG.severe(msg);
+      throw new RuntimeException(msg);
+    }
+  }
 
   /**
    * @param msg
