@@ -67,8 +67,8 @@ public class FlatTopology implements Topology {
   private final AtomicBoolean initializing = new AtomicBoolean(true);
 
   private final Object topologyLock = new Object();
-  private final Object updatingToplogyLock = new Object();
-
+//  private final Object updatingToplogyLock = new Object();
+//
   private final AtomicBoolean updatingTopology = new AtomicBoolean(false);
 
 
@@ -294,7 +294,7 @@ public class FlatTopology implements Topology {
       LOG.warning(msg);
       throw new RuntimeException(msg);
     }
-    synchronized (updatingToplogyLock) {
+    /*synchronized (updatingToplogyLock) {
       while(updatingTopology.get()) {
         LOG.info(getQualifiedName() + "is updating topology. Will wait for it to finish");
         try {
@@ -305,7 +305,7 @@ public class FlatTopology implements Topology {
         }
         LOG.info(getQualifiedName() + "Finished updating topology");
       }
-    }
+    }*/
 
     synchronized (topologyLock) {
       LOG.info(getQualifiedName() + "Acquired topologyLock");
@@ -319,11 +319,11 @@ public class FlatTopology implements Topology {
   public void processMsg(final GroupCommMessage msg) {
     synchronized (topologyLock) {
       LOG.info(getQualifiedName() + "Acquired topologyLock");
-      if(initializing.get()) {
+      /*if(initializing.get()) {
         LOG.info(getQualifiedName() + "waiting for all nodes to run");
         allTasksAdded.await();
         initializing.compareAndSet(true, false);
-      }
+      }*/
       LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
           + msg.getSrcid());
       if (msg.getType().equals(Type.TopologyChanges)) {
@@ -359,14 +359,14 @@ public class FlatTopology implements Topology {
         return;
       }
       if (msg.getType().equals(Type.UpdateTopology)) {
-        LOG.info(getQualifiedName() + "Waiting for all tasks to run");
-        allTasksAdded.await();
-        LOG.info(getQualifiedName() + "All tasks running");
-        if(!updatingTopology.compareAndSet(false, true)) {
+//        LOG.info(getQualifiedName() + "Waiting for all tasks to run");
+//        allTasksAdded.await();
+//        LOG.info(getQualifiedName() + "All tasks running");
+        /*if(!updatingTopology.compareAndSet(false, true)) {
           final String logMsg = getQualifiedName() + "Got Update Topology when I was already updating topology";
           LOG.warning(logMsg);
           throw new RuntimeException(logMsg);
-        }
+        }*/
         final String dstId = msg.getSrcid();
         final int version = getNodeVersion(dstId);
 
@@ -401,7 +401,7 @@ public class FlatTopology implements Topology {
             }, nodes.size());
 
         //This stage waits for sending TopologySetup
-        final EStage<List<TaskNode>> nodeTopologySetupWaitStage = new SingleThreadStage<>(
+        /*final EStage<List<TaskNode>> nodeTopologySetupWaitStage = new SingleThreadStage<>(
             "NodeTopologySetupWaitStage", new EventHandler<List<TaskNode>>() {
 
               @Override
@@ -424,7 +424,7 @@ public class FlatTopology implements Topology {
                   updatingToplogyLock.notifyAll();
                 }
               }
-            }, nodes.size());
+            }, nodes.size());*/
         final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());
         synchronized (nodes) {
           LOG.info(getQualifiedName()
@@ -447,7 +447,7 @@ public class FlatTopology implements Topology {
           }
         }
         nodeTopologyUpdateWaitStage.onNext(toBeUpdatedNodes);
-        nodeTopologySetupWaitStage.onNext(toBeUpdatedNodes);
+//        nodeTopologySetupWaitStage.onNext(toBeUpdatedNodes);
         for (final TaskNode node : toBeUpdatedNodes) {
           LOG.info(getQualifiedName() + node.taskId()
               + " process UpdateTopology msg since you have changes");
@@ -475,5 +475,17 @@ public class FlatTopology implements Topology {
    */
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + " - ";
+  }
+
+  @Override
+  public boolean isRunning(final String taskId) {
+    final TaskNode taskNode = nodes.get(taskId);
+    if(taskNode==null) {
+      final String msg = getQualifiedName() + taskId + " does not exist";
+      LOG.warning(msg);
+//      throw new RuntimeException(msg);
+      return false;
+    }
+    return taskNode.isRunning();
   }
 }

@@ -37,6 +37,7 @@ import com.microsoft.reef.io.network.nggroup.impl.config.parameters.Communicatio
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.OperatorName;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.SerializedOperConfigs;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.JavaConfigurationBuilder;
@@ -45,7 +46,6 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EStage;
-import com.microsoft.wake.impl.SyncStage;
 
 /**
  *
@@ -62,16 +62,21 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private final Set<String> taskIds = new HashSet<>();
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
-  private final EStage<GroupCommMessage> pseudoSenderStage;
-  private final MsgAggregator msgAggregator;
+  private final EStage<GroupCommMessage> senderStage;
+//  private final MsgAggregator msgAggregator;
   private final String driverId;
   private final int numberOfTasks;
 
-  private final Object topologiesLock = new Object();
-  private final Object updatingToplogiesLock = new Object();
-  private final Object configLock = new Object();
+  private final CountingSemaphore allTasksAdded;
 
-  private final AtomicBoolean updatingTopologies = new AtomicBoolean(false);
+  private final Object topologiesLock = new Object();
+//  private final Object updatingToplogiesLock = new Object();
+  private final Object configLock = new Object();
+  private final AtomicBoolean initializing = new AtomicBoolean(true);
+//  private final AtomicBoolean updatingTopologies = new AtomicBoolean(false);
+
+
+  private final Object yetToRunLock = new Object();
 
   public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
       final ConfigurationSerializer confSerializer,
@@ -87,8 +92,10 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     this.numberOfTasks = numberOfTasks;
     this.driverId = driverId;
     this.confSerializer = confSerializer;
-    this.msgAggregator = new MsgAggregator(senderStage);
-    this.pseudoSenderStage = new SyncStage<>(msgAggregator);
+//    this.msgAggregator = new MsgAggregator(senderStage);
+//    this.pseudoSenderStage = new SyncStage<>(msgAggregator);
+    this.senderStage = senderStage;
+    this.allTasksAdded = new CountingSemaphore(numberOfTasks, getQualifiedName(),topologiesLock);
 
     final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(this);
     commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
@@ -107,7 +114,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(pseudoSenderStage, groupName, operatorName, driverId, numberOfTasks);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getSenderId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -122,7 +129,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       throw new IllegalStateException("Can't add more operators to a finalised spec");
     }
     operatorSpecs.put(operatorName, spec);
-    final Topology topology = new FlatTopology(pseudoSenderStage, groupName, operatorName, driverId, numberOfTasks);
+    final Topology topology = new FlatTopology(senderStage, groupName, operatorName, driverId, numberOfTasks);
     topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
@@ -137,22 +144,74 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     if(taskIds.contains(taskId)){
       jcb.bindNamedParameter(DriverIdentifier.class, driverId);
       jcb.bindNamedParameter(CommunicationGroupName.class, groupName.getName());
-      for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
-        final Class<? extends Name<String>> operName = operSpecEntry.getKey();
-        final Topology topology = topologies.get(operName);
-        final JavaConfigurationBuilder jcbInner = Tang.Factory.getTang().newConfigurationBuilder(topology.getConfig(taskId));
-        jcbInner.bindNamedParameter(DriverIdentifier.class, driverId);
-        jcbInner.bindNamedParameter(OperatorName.class, operName.getName());
-        jcb.bindSetEntry(SerializedOperConfigs.class, confSerializer.toString(jcbInner.build()));
+      synchronized (configLock) {
+        LOG.info(getQualifiedName() + "Acquired configLock");
+        String operWithRunningTask;
+        while((operWithRunningTask=operWithRunningTask(taskId))!=null) {
+          LOG.info(getQualifiedName() + operWithRunningTask + " thinks "
+              + taskId + " is still running. Need to wait for failure");
+          try {
+            configLock.wait();
+          } catch (final InterruptedException e) {
+            throw new RuntimeException("InterruptedException while waiting on configLock", e);
+          }
+        }
+        LOG.info(getQualifiedName() + " - No operator thinks " + taskId + " is running. Will fetch configuration now.");
       }
+      LOG.info(getQualifiedName() + "Released configLock");
+      synchronized (topologiesLock) {
+        LOG.info(getQualifiedName() + "Acquired topologiesLock");
+        for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs
+            .entrySet()) {
+          final Class<? extends Name<String>> operName = operSpecEntry.getKey();
+          final Topology topology = topologies.get(operName);
+          final JavaConfigurationBuilder jcbInner = Tang.Factory.getTang()
+              .newConfigurationBuilder(topology.getConfig(taskId));
+          jcbInner.bindNamedParameter(DriverIdentifier.class, driverId);
+          jcbInner.bindNamedParameter(OperatorName.class, operName.getName());
+          jcb.bindSetEntry(SerializedOperConfigs.class,
+              confSerializer.toString(jcbInner.build()));
+        }
+      }
+      LOG.info(getQualifiedName() + "Released topologiesLock");
     }
     return jcb.build();
+  }
+
+  /**
+   * @param taskId
+   * @return
+   */
+  private String operWithRunningTask(final String taskId) {
+    for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
+      final Class<? extends Name<String>> operName = operSpecEntry.getKey();
+      final Topology topology = topologies.get(operName);
+      if(topology.isRunning(taskId)) {
+        return Utils.simpleName(operName);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * @param taskId
+   * @return
+   */
+  private String operWithNotRunningTask(final String taskId) {
+    for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
+      final Class<? extends Name<String>> operName = operSpecEntry.getKey();
+      final Topology topology = topologies.get(operName);
+      if(!topology.isRunning(taskId)) {
+        return Utils.simpleName(operName);
+      }
+    }
+    return null;
   }
 
   @Override
   public void finalise() {
     finalised = true;
-    msgAggregator.setNumTopologies(topologies.size());
+//    msgAggregator.setNumTopologies(topologies.size());
   }
 
   @Override
@@ -183,7 +242,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    * @param id
    */
   public void runTask(final String id) {
-    synchronized (updatingToplogiesLock) {
+    LOG.info(getQualifiedName() + "Task-" + id + " running");
+    /*synchronized (updatingToplogiesLock) {
       LOG.info(getQualifiedName() + "Acquired updatingTopologiesLock");
       while(updatingTopologies.get()) {
         LOG.info(getQualifiedName() + "is updating topologies. Will wait for it to finish");
@@ -196,18 +256,24 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         LOG.info(getQualifiedName() + "Finished updating topologies");
       }
       LOG.info(getQualifiedName() + "Released updatingTopologiesLock");
-    }
+    }*/
 
     synchronized (topologiesLock) {
-      LOG.info(getQualifiedName() + "Acquired topologieslock");
+      LOG.info(getQualifiedName() + "Acquired topologiesLock");
       for (final Class<? extends Name<String>> operName : operatorSpecs
           .keySet()) {
         final Topology topology = topologies.get(operName);
         topology.setRunning(id);
       }
-      msgAggregator.aggregateNSend();
+      allTasksAdded.decrement();
+//      msgAggregator.aggregateNSend();
     }
-    LOG.info(getQualifiedName() + "Released topologieslock");
+    LOG.info(getQualifiedName() + "Released topologiesLock");
+    synchronized (yetToRunLock) {
+      LOG.info(getQualifiedName() + "Acquired yetToRunLock");
+      yetToRunLock.notifyAll();
+    }
+    LOG.info(getQualifiedName() + "Released yetToRunLock");
   }
 
   /**
@@ -221,8 +287,39 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    * @param id
    */
   public void failTask(final String id) {
-    // TODO Auto-generated method stub
-
+    LOG.info(getQualifiedName() + "Task-" + id + " failed");
+    synchronized (yetToRunLock ) {
+      LOG.info(getQualifiedName() + "Acquired yetToRunLock");
+      String operWithNotRunningTask;
+      while((operWithNotRunningTask=operWithNotRunningTask(id))!=null) {
+        LOG.info(getQualifiedName() + operWithNotRunningTask + " thinks "
+            + id + " is not running to set failure. Need to wait for it run");
+        try {
+          yetToRunLock.wait();
+        } catch (final InterruptedException e) {
+          throw new RuntimeException("InterruptedException while waiting on yetToRunLock", e);
+        }
+      }
+      LOG.info(getQualifiedName() + " - No operator thinks " + id
+          + " is not running. Can safely set failure.");
+    }
+    LOG.info(getQualifiedName() + "Released yetToRunLock");
+    synchronized (topologiesLock) {
+      LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      for (final Class<? extends Name<String>> operName : operatorSpecs
+          .keySet()) {
+        final Topology topology = topologies.get(operName);
+        topology.setFailed(id);
+      }
+      allTasksAdded.increment();
+//      msgAggregator.aggregateNSend();
+    }
+    LOG.info(getQualifiedName() + "Released topologiesLock");
+    synchronized (configLock) {
+      LOG.info(getQualifiedName() + "Acquired configLock");
+      configLock.notifyAll();
+    }
+    LOG.info(getQualifiedName() + "Released configLock");
   }
 
 
@@ -230,8 +327,19 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    * @param msg
    */
   public void processMsg(final GroupCommMessage msg) {
-    // TODO Auto-generated method stub
-
+    LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
+        + msg.getSrcid());
+    synchronized (topologiesLock) {
+      LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      if(initializing.get() || msg.getType().equals(Type.UpdateTopology)) {
+        LOG.info(getQualifiedName() + "waiting for all nodes to run");
+        allTasksAdded.await();
+        initializing.compareAndSet(true, false);
+      }
+      final Class<? extends Name<String>> operName = Utils.getClass(msg.getOperatorname());
+      topologies.get(operName).processMsg(msg);
+    }
+    LOG.info(getQualifiedName() + "Released topologiesLock");
   }
 
   private String taskId(final Configuration partialTaskConf){

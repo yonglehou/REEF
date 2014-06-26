@@ -65,4 +65,10 @@ public interface Topology {
    */
   void removeTask(String taskId);
 
+  /**
+   * @param taskId
+   * @return
+   */
+  boolean isRunning(String taskId);
+
 }

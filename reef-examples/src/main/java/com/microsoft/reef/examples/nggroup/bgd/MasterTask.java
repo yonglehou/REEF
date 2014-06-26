@@ -116,6 +116,9 @@ public class MasterTask implements Task {
         }
         else {
           sendModel = true;
+          if(ignoreAndContinue) {
+            break;
+          }
         }
       }while(true);
 
@@ -154,6 +157,9 @@ public class MasterTask implements Task {
         }
         else {
           sendModel = true;
+          if(ignoreAndContinue) {
+            break;
+          }
         }
       } while (true);
 
@@ -175,7 +181,7 @@ public class MasterTask implements Task {
    */
   private boolean chkAndUpdate() {
     final GroupChanges changes = communicationGroupClient.getTopologyChanges();
-    if(changes.exist() && !ignoreAndContinue){
+    if(changes.exist()){
       Log.info("There exist topology changes. Asking to update Topology");
       communicationGroupClient.updateTopology();
       return true;

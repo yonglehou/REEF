@@ -205,7 +205,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
               node.chkAndSendTopSetup(sourceId);
             }
             else {
-              LOG.warning(getQualifiedName() + sourceId + " is not a neighbor anymore");
+              LOG.info(getQualifiedName() + sourceId + " is not a neighbor anymore");
             }
           }
           else {

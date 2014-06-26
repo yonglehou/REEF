@@ -18,8 +18,8 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import javax.inject.Inject;
 
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
-import com.microsoft.reef.driver.parameters.EvaluatorFailedHandlers;
-import com.microsoft.reef.driver.parameters.TaskFailedHandlers;
+import com.microsoft.reef.driver.parameters.ServiceEvaluatorFailedHandlers;
+import com.microsoft.reef.driver.parameters.ServiceTaskFailedHandlers;
 import com.microsoft.reef.driver.parameters.TaskRunningHandlers;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
@@ -46,8 +46,8 @@ public class GroupCommService {
   public static Configuration getConfiguration() {
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindSetEntry(TaskRunningHandlers.class, RunningTaskHandler.class);
-    jcb.bindSetEntry(TaskFailedHandlers.class, FailedTaskHandler.class);
-    jcb.bindSetEntry(EvaluatorFailedHandlers.class, FailedEvaluatorHandler.class);
+    jcb.bindSetEntry(ServiceTaskFailedHandlers.class, FailedTaskHandler.class);
+    jcb.bindSetEntry(ServiceEvaluatorFailedHandlers.class, FailedEvaluatorHandler.class);
     return jcb.build();
   }
 
