@@ -60,6 +60,7 @@ import com.microsoft.wake.Identifier;
 import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.impl.LoggingEventHandler;
 import com.microsoft.wake.impl.SingleThreadStage;
+import com.microsoft.wake.impl.SyncStage;
 import com.microsoft.wake.impl.ThreadPoolStage;
 import com.microsoft.wake.remote.NetUtils;
 
@@ -109,11 +110,11 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     this.nameServicePort = nameService.getPort();
     this.confSerializer = confSerializer;
     this.groupCommRunningTaskHandler = new BroadcastingEventHandler<>();
-    this.groupCommRunningTaskStage = new SingleThreadStage<>("GroupCommRunningTaskStage", groupCommRunningTaskHandler, 10);
+    this.groupCommRunningTaskStage = new SyncStage<>("GroupCommRunningTaskStage", groupCommRunningTaskHandler);
     this.groupCommFailedTaskHandler = new BroadcastingEventHandler<>();
-    this.groupCommFailedTaskStage = new SingleThreadStage<>("GroupCommFailedTaskStage", groupCommFailedTaskHandler, 10);
+    this.groupCommFailedTaskStage = new SyncStage<>("GroupCommFailedTaskStage", groupCommFailedTaskHandler);
     this.groupCommFailedEvaluatorHandler = new BroadcastingEventHandler<>();
-    this.groupCommFailedEvaluatorStage = new SingleThreadStage<>("GroupCommFailedEvaluatorStage", groupCommFailedEvaluatorHandler, 10);
+    this.groupCommFailedEvaluatorStage = new SyncStage<>("GroupCommFailedEvaluatorStage", groupCommFailedEvaluatorHandler);
     this.groupCommMessageHandler = new GroupCommMessageHandler();
     this.groupCommMessageStage = new SingleThreadStage<>("GroupCommMessageStage", groupCommMessageHandler, 100 * 1000);
     this.netService = new NetworkService<>(idFac, 0, nameServiceAddr,

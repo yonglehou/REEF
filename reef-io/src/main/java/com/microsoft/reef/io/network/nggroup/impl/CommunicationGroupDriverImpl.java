@@ -321,7 +321,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     synchronized (yetToRunLock ) {
       LOG.info(getQualifiedName() + "Acquired yetToRunLock");
       while(cantFailTask(id)) {
-        LOG.warning(getQualifiedName() + "Need to wait for it run");
+        LOG.info(getQualifiedName() + "Need to wait for it run");
         try {
           yetToRunLock.wait();
         } catch (final InterruptedException e) {
@@ -373,7 +373,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     if(!taskState.equals(TaskState.NOT_STARTED)) {
       LOG.info(getQualifiedName() + taskId + " has started.");
       if(!taskState.equals(TaskState.RUNNING)) {
-        LOG.warning(getQualifiedName() + "But " + taskId + " is not running yet. Can't set failure");
+        LOG.info(getQualifiedName() + "But " + taskId + " is not running yet. Can't set failure");
         return true;
       }
       else {
@@ -383,8 +383,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     }
     else {
       final String msg = getQualifiedName() + taskId + " has not started. We can't fail a task that hasn't started";
-      LOG.severe(msg);
-      throw new RuntimeException(msg);
+      LOG.info(msg);
+      return true;
     }
   }
 
