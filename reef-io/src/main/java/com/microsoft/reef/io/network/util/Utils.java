@@ -73,12 +73,8 @@ public class Utils {
     return Collections.unmodifiableList(result);
   }
 
-  public final static class Pair<T1, T2> implements Serializable{
+  public final static class Pair<T1, T2> implements Serializable {
 
-    /**
-     *
-     */
-    private static final long serialVersionUID = 4569625538664573508L;
     public final T1 first;
     public final T2 second;
 
