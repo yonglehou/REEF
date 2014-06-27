@@ -16,7 +16,9 @@
 package com.microsoft.reef.io.network.nggroup.impl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -73,13 +75,17 @@ public class AllReducer<T> implements AllReduce<T>,
   // Version is used for iteration
   private AtomicInteger version;
 
-  private final ConcurrentMap<Integer, ConcurrentMap<String, BlockingQueue<GroupCommMessage>>> dataMap =
+  private final ConcurrentMap<Integer, ConcurrentMap<String, GroupCommMessage>> dataMap =
     new ConcurrentHashMap<>();
-  private final Object lockObject = new Object();
+  private final BlockingQueue<GroupCommMessage> dataQueue =
+    new LinkedBlockingQueue<>();
+  // private final Object lockObject = new Object();
 
-  private String selfID;
+  private final String selfID;
+  private final String driverID;
   private HyperCubeNode node;
   private ConcurrentMap<Integer, String> opTaskMap;
+  private final AtomicBoolean isLastIteFailed = new AtomicBoolean(false);
 
   @Inject
   public AllReducer(
@@ -113,6 +119,7 @@ public class AllReducer<T> implements AllReduce<T>,
     this.commGroupNetworkHandler.register(this.operName, this);
     // this.commGroupClient = commGroupClient;
     selfID = selfId;
+    driverID = driverId;
   }
 
   @Override
@@ -125,6 +132,10 @@ public class AllReducer<T> implements AllReduce<T>,
     // Due to the control on CommunicationGroupClientImpl initialization
     // This code won't be invoked repeatedly.
     topoClient.initialize();
+    updateTopology();
+  }
+
+  private void updateTopology() {
     node = topoClient.getNode();
     opTaskMap = topoClient.getOpTaskMap();
   }
@@ -141,25 +152,22 @@ public class AllReducer<T> implements AllReduce<T>,
 
   @Override
   public void onNext(final GroupCommMessage msg) {
-    // Use HyperCubeTopoClient to handle the message
+    // Use HyperCubeTopoClient to handle some messages
+    // This method can be invoked simultaneously with apply method
+    // If the msg type is TopologyChange or TopologyUpdated
+    // they cannot arrive here
+    System.out.println(getQualifiedName() + "Handling " + msg.getType()
+      + " msg from " + msg.getSrcid());
+    // Data are put in the queue
+    // and wait to be processed in "apply"
+    // Topology related messages are processed by topoClient
     if (msg.getType() == Type.AllReduce) {
-      System.out.println(getQualifiedName() + "Handling " + msg.getType()
-        + " msg from " + msg.getSrcid());
-      putData(msg);
+      dataQueue.add(msg);
+    } else if (msg.getType() == Type.SourceDead) {
+      dataQueue.add(msg);
     } else {
       topoClient.handle(msg);
     }
-  }
-
-  /**
-   * Store the data to the map when data is coming.
-   * 
-   * @param msg
-   */
-  public void putData(final GroupCommMessage msg) {
-    BlockingQueue<GroupCommMessage> dataQueue =
-      getDataQueueFromMap(msg.getVersion(), msg.getSrcid());
-    dataQueue.add(msg);
   }
 
   @Override
@@ -177,43 +185,227 @@ public class AllReducer<T> implements AllReduce<T>,
       // Here we just initialize this operator only
       initialize();
     }
-    System.out.println("Current version: " + version.get());
+    int iteration = version.get();
+    boolean isFailed = false;
+    System.out.println("Current version: " + version.get() + " "
+      + topoClient.getVersion());
+    // Update topology if failure happened
+    if (isLastIteFailed.get()) {
+      if (iteration == topoClient.getVersion()) {
+        updateTopology();
+        isLastIteFailed.set(false);
+      } else {
+        isFailed = true;
+      }
+    }
     T reducedValue = aElement;
     List<byte[]> valBytes = new ArrayList<byte[]>();
     List<T> vals = new ArrayList<T>();
-    List<List<int[]>> opList = node.getNeighborOpList();
-    List<int[]> opDimList = null;
-    int[] op = null;
-    String taskID = null;
-    for (int i = 0; i < opList.size(); i++) {
-      opDimList = opList.get(i);
-      for (int j = 0; j < opDimList.size(); j++) {
-        op = opDimList.get(j);
-        taskID = opTaskMap.get(op[0]);
-        System.out.println("Task ID: " + taskID + ", op ID: " + op[1]);
-        if (op[1] == 0) {
-          valBytes.add(receiveData(taskID));
-          sendData(EmptyByteArr, taskID);
-        } else if (op[1] == 1) {
-          sendData(dataCodec.encode(reducedValue), taskID);
-          receiveData(taskID);
-        } else if (op[1] == 2) {
-          sendData(dataCodec.encode(reducedValue), taskID);
-          valBytes.add(receiveData(taskID));
-        } else {
-          // No action
+    Map<Integer, Integer> opPerformed = new HashMap<>();
+    int exitCode = -1;
+    for (int i = 0; i < node.getNeighborOpList().size(); i++) {
+      if (isFailed) {
+        propagateFailure(iteration, selfID, node.getNeighborOpList().get(i),
+          opTaskMap, opPerformed);
+      } else {
+        exitCode =
+          applyInDim(reducedValue, iteration, selfID, driverID, valBytes, node
+            .getNeighborOpList().get(i), opTaskMap, opPerformed);
+        if (exitCode == 0) {
+          vals.add(reducedValue);
+          for (byte[] data : valBytes) {
+            vals.add(dataCodec.decode(data));
+          }
+          reducedValue = reduceFunction.apply(vals);
+          valBytes.clear();
+          vals.clear();
+          opPerformed.clear();
+        } else if (exitCode == 1) {
+          // Ask driver, send source failure message
+          sender.send(Utils.bldVersionedGCM(groupName, operName,
+            Type.SourceDead, selfID, iteration, driverID, iteration,
+            EmptyByteArr));
+          // Get the new topology
+          System.out.println("Waiting for the new topology");
+          topoClient.getTopology();
+          int topoIte = topoClient.getVersion();
+          if (topoIte > iteration) {
+            System.out.println("The current iteration " + iteration
+              + ", the version of topology got from the driver: " + topoIte);
+            // Fail the current iteration
+            // if the new topology is only agreed for the next iteration
+            isFailed = true;
+          } else {
+            System.out.println("Update topology at iteration: " + iteration);
+            // updateTopology();
+            // I doubt if this is correct
+            // because this node may already
+            // carry the data from dead node
+          }
+          // Restart this dimension
+          i--;
+        } else if (exitCode == 2) {
+          isFailed = true;
+          i--;
         }
       }
-      vals.add(reducedValue);
-      for (byte[] data : valBytes) {
-        vals.add(dataCodec.decode(data));
-      }
-      reducedValue = reduceFunction.apply(vals);
-      valBytes.clear();
-      vals.clear();
     }
+    if (isFailed) {
+      reducedValue = null;
+      isLastIteFailed.set(true);
+    }
+    dataMap.remove(version.get());
     version.incrementAndGet();
     return reducedValue;
+  }
+
+  private int applyInDim(T reducedValue, int iteration, String selfID,
+    String driverID, List<byte[]> valBytes, List<int[]> opDimList,
+    Map<Integer, String> opTaskMap, Map<Integer, Integer> opPerformed)
+    throws NetworkException, InterruptedException {
+    String taskID = null;
+    int[] op = null;
+    byte[] bytes = null;
+    for (int i = 0; i < opDimList.size(); i++) {
+      op = opDimList.get(i);
+      if (!opPerformed.containsKey(op[0])) {
+        // If op is not performed, continue
+        taskID = opTaskMap.get(op[0]);
+        System.out.println("Apply, Task ID: " + taskID + ", op ID: " + op[1]);
+        if (op[1] == 1 || op[1] == 2) {
+          // sender.send(Utils.bldVersionedGCM(groupName, operName,
+          // Type.AllReduce, selfID, iteration, taskID, iteration,
+          // dataCodec.encode(reducedValue)));
+          sendMsg(Type.AllReduce, selfID, iteration, taskID,
+            dataCodec.encode(reducedValue));
+        }
+        // For op 0, 1, 2, all need "receiving"
+        if (op[1] != -1) {
+          // Receive data
+          GroupCommMessage msg = receiveMsg(iteration, driverID, taskID);
+          if (msg.getType() == Type.AllReduce) {
+            bytes = Utils.getData(msg);
+            // If op is 0 or 2, the data is needed
+            if (op[1] != 1) {
+              valBytes.add(bytes);
+            }
+          } else if (msg.getType() == Type.SourceDead) {
+            if (msg.getSrcid().equals(driverID)) {
+              // Source Dead from driver
+              return 1;
+            } else {
+              // Source dead from neighbor
+              return 2;
+            }
+          }
+        }
+        // If there is no failure in receiving,
+        // we continue original operations.
+        if (op[1] == 0) {
+          // sender
+          // .send(Utils.bldVersionedGCM(groupName, operName, Type.AllReduce,
+          // selfID, iteration, taskID, iteration, EmptyByteArr));
+          sendMsg(Type.AllReduce, selfID, iteration, taskID, EmptyByteArr);
+        }
+        opPerformed.put(op[0], op[1]);
+      }
+    }
+    // Success
+    return 0;
+  }
+
+  private void propagateFailure(int iteration, String selfID,
+    List<int[]> opDimList, Map<Integer, String> opTaskMap,
+    Map<Integer, Integer> opPerformed) throws NetworkException,
+    InterruptedException {
+    String taskID = null;
+    int[] op = null;
+    for (int i = 0; i < opDimList.size(); i++) {
+      op = opDimList.get(i);
+      if (!opPerformed.containsKey(op[0])) {
+        // If op is not performed, continue
+        taskID = opTaskMap.get(op[0]);
+        System.out.println("Propagate failure, Task ID: " + taskID
+          + ", op ID: " + op[1]);
+        if (op[1] == 1 || op[1] == 2) {
+          // sender.send(Utils
+          // .bldVersionedGCM(groupName, operName, Type.SourceDead, selfID,
+          // iteration, taskID, iteration, EmptyByteArr));
+          sendMsg(Type.SourceDead, selfID, iteration, taskID, EmptyByteArr);
+        }
+        // No data receiving
+        // If a node is in applying, once it receive the data it will start to
+        // propagate failure. If a node already in failure propagation, it
+        // ignores the data sent to itself
+        if (op[1] == 0) {
+          // sender.send(Utils
+          // .bldVersionedGCM(groupName, operName, Type.SourceDead, selfID,
+          // iteration, taskID, iteration, EmptyByteArr));
+          sendMsg(Type.SourceDead, selfID, iteration, taskID, EmptyByteArr);
+        }
+        opPerformed.put(op[0], op[1]);
+      }
+    }
+  }
+
+  private void sendMsg(Type msgType, String selfID, int iteration,
+    String taskID, byte[] bytes) {
+    try {
+      sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfID,
+        iteration, taskID, iteration, bytes));
+    } catch (NetworkException e) {
+      e.printStackTrace();
+    }
+  }
+
+  private GroupCommMessage receiveMsg(int version, String driverID, String neighborID)
+    throws InterruptedException {
+    GroupCommMessage msg = null;
+    do {
+      msg = getMsgFromMap(version, neighborID);
+      if (msg != null) {
+        return msg;
+      }
+      msg = dataQueue.take();
+      if (msg.getType() == Type.SourceDead) {
+        if (msg.getSrcid().equals(driverID)) {
+          return msg;
+        } else {
+          if (msg.getSrcVersion() == version) {
+            return msg;
+          } else {
+            msg = null;
+          }
+        }
+      } else if (msg.getType() == Type.AllReduce) {
+        if (msg.getSrcid().equals(neighborID) && msg.getSrcVersion() == version) {
+          return msg;
+        } else {
+          addMsgToMap(msg);
+          msg = null;
+        }
+      }
+    } while (msg == null);
+    return msg;
+  }
+
+  private GroupCommMessage getMsgFromMap(int version, String taskID) {
+    ConcurrentMap<String, GroupCommMessage> versionMap = dataMap.get(version);
+    if (versionMap == null) {
+      versionMap = new ConcurrentHashMap<>();
+      dataMap.putIfAbsent(version, versionMap);
+    }
+    return versionMap.get(taskID);
+  }
+
+  private void addMsgToMap(GroupCommMessage msg) {
+    ConcurrentMap<String, GroupCommMessage> versionMap =
+      dataMap.get(msg.getSrcVersion());
+    if (versionMap == null) {
+      versionMap = new ConcurrentHashMap<>();
+      dataMap.putIfAbsent(msg.getSrcVersion(), versionMap);
+    }
+    versionMap.put(msg.getSrcid(), msg);
   }
 
   @Override
@@ -221,36 +413,6 @@ public class AllReducer<T> implements AllReduce<T>,
     throws InterruptedException, NetworkException {
     // Disable this method as what ReduceReceiver does.
     throw new UnsupportedOperationException();
-  }
-
-  private void sendData(byte[] data, String neighborID) throws NetworkException {
-    sender.send(Utils.bldVersionedGCM(groupName, operName, Type.AllReduce,
-      node.getTaskID(), version.get(), neighborID, version.get(), data));
-  }
-
-  private byte[] receiveData(String neighborID) throws InterruptedException {
-    BlockingQueue<GroupCommMessage> dataQueue =
-      getDataQueueFromMap(version.get(), neighborID);
-    return Utils.getData(dataQueue.take());
-    // We need to be careful about this "take" operation
-    // It will block the execution
-    // We may want to receive other messages for furthur control
-  }
-  
-  private BlockingQueue<GroupCommMessage> getDataQueueFromMap(int version,
-    String taskID) {
-    ConcurrentMap<String, BlockingQueue<GroupCommMessage>> versionMap =
-      dataMap.get(version);
-    if (versionMap == null) {
-      versionMap = new ConcurrentHashMap<>();
-      dataMap.putIfAbsent(version, versionMap);
-    }
-    BlockingQueue<GroupCommMessage> dataQueue = versionMap.get(taskID);
-    if (dataQueue == null) {
-      dataQueue = new LinkedBlockingQueue<>();
-      versionMap.putIfAbsent(taskID, dataQueue);
-    }
-    return dataQueue;
   }
 
   private String getQualifiedName() {

@@ -55,21 +55,27 @@ public class MasterTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1 });
+    Vector newModel = null;
     final long time1 = System.currentTimeMillis();
-    final int numIters = 3;
+    final int numIters = 10;
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
-      model = modelAllReducer.apply(model);
+      newModel = modelAllReducer.apply(model);
       System.out.println("Iter: " + i + " apply data");
+      if (newModel != null) {
+        StringBuffer sb = new StringBuffer();
+        for (int j = 0; j < newModel.size(); j++) {
+          sb.append(newModel.get(j) + ",");
+        }
+        System.out.println(sb);
+        model = newModel;
+      } else {
+        System.out.println("The result is null.");
+      }
     }
     final long time2 = System.currentTimeMillis();
-    StringBuffer sb = new StringBuffer();
-    for (int i = 0; i < model.size(); i++) {
-      sb.append(model.get(i) + ",");
-    }
-    System.out.println(sb);
-    LOG.info("Allreduce vector of dimensions " + dimensions + " took "
-      + (time2 - time1) / (numIters * 1000.0) + " secs");
+    System.out.println("Allreduce vector of dimensions " + dimensions
+      + " took " + (time2 - time1) / (numIters * 1000.0) + " secs");
     return null;
   }
 }

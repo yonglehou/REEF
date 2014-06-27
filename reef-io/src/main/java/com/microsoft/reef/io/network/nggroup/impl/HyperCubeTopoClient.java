@@ -18,11 +18,9 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
@@ -74,15 +72,19 @@ public class HyperCubeTopoClient {
   }
 
   public void handle(final GroupCommMessage msg) {
+    // No topology change or topology updated
     final String srcId = msg.getSrcid();
     LOG.info(getQualifiedName() + "Handling " + msg.getType() + " msg from "
       + srcId);
     try {
       switch (msg.getType()) {
       case TopologySetup:
-        LOG.info(getQualifiedName() + "Adding to deltas queue");
+        LOG.info(getQualifiedName() + "topology setup");
         ctrlQueue.put(msg);
         break;
+      case UpdateTopology:
+        LOG.info(getQualifiedName() + "topology updated.");
+        ctrlQueue.put(msg);
       default:
       }
     } catch (final InterruptedException e) {
@@ -91,33 +93,30 @@ public class HyperCubeTopoClient {
     }
   }
 
-  public void initialize() {
+  void initialize() {
     // refreshEffectiveTopology();
     // Just try to receive the topology
     getTopology();
-    LOG.info(nodeTopo.node.toString());
-    System.out.println(nodeTopo.node.toString());
   }
 
-  private void getTopology() {
+  void getTopology() {
     // Wait for the data
     GroupCommMessage msg = null;
-    LOG.info(getQualifiedName() + ": Get the topology from the driver.");
-    while (true) {
-      LOG.info(getQualifiedName() + ": Waiting for ctrl msgs");
-      try {
-        msg = ctrlQueue.take();
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-      LOG.info(getQualifiedName() + ": Got " + msg.getType() + " msg from "
-        + msg.getSrcid());
-      if (msg.getType() == Type.TopologySetup) {
-        break;
-      }
+    System.out.println(getQualifiedName()
+      + ": Get the topology from the driver.");
+    try {
+      msg = ctrlQueue.take();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
     }
+    System.out.println(getQualifiedName() + ": Got " + msg.getType()
+      + " msg from " + msg.getSrcid());
+    // Update topology version
+    version = msg.getVersion();
     // Decode the data
     nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
+    LOG.info(nodeTopo.node.toString());
+    System.out.println(nodeTopo.node.toString());
   }
 
   private NodeTopology decodeNodeTopologyFromBytes(byte[] bytes) {
@@ -161,5 +160,9 @@ public class HyperCubeTopoClient {
 
   ConcurrentMap<Integer, String> getOpTaskMap() {
     return this.nodeTopo.opTaskMap;
+  }
+
+  int getVersion() {
+    return version;
   }
 }
