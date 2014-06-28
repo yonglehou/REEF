@@ -15,8 +15,11 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,20 +65,19 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   private boolean finalised = false;
   private final ConfigurationSerializer confSerializer;
   private final EStage<GroupCommMessage> senderStage;
-//  private final MsgAggregator msgAggregator;
   private final String driverId;
   private final int numberOfTasks;
 
   private final CountingSemaphore allTasksAdded;
 
   private final Object topologiesLock = new Object();
-//  private final Object updatingToplogiesLock = new Object();
   private final Object configLock = new Object();
   private final AtomicBoolean initializing = new AtomicBoolean(true);
-//  private final AtomicBoolean updatingTopologies = new AtomicBoolean(false);
 
 
   private final Object yetToRunLock = new Object();
+
+  private final SetMap<MsgKey, IndexedMsg> msgQue = new SetMap<>();
 
   public CommunicationGroupDriverImpl(final Class<? extends Name<String>> groupName,
       final ConfigurationSerializer confSerializer,
@@ -91,8 +93,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     this.numberOfTasks = numberOfTasks;
     this.driverId = driverId;
     this.confSerializer = confSerializer;
-//    this.msgAggregator = new MsgAggregator(senderStage);
-//    this.pseudoSenderStage = new SyncStage<>(msgAggregator);
     this.senderStage = senderStage;
     this.allTasksAdded = new CountingSemaphore(numberOfTasks, getQualifiedName(),topologiesLock);
 
@@ -154,18 +154,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
           }
         }
         LOG.info(getQualifiedName() + taskId + " - Will fetch configuration now.");
-        /*String operWithRunningTask;
-        while((operWithRunningTask=operWithRunningTask(taskId))!=null) {
-          LOG.info(getQualifiedName() + operWithRunningTask + " thinks "
-              + taskId + " is still running. Need to wait for failure");
-          try {
-            configLock.wait();
-          } catch (final InterruptedException e) {
-            throw new RuntimeException("InterruptedException while waiting on configLock", e);
-          }
-        }
-        LOG.info(getQualifiedName() + " - No operator thinks " + taskId
-            + " is running. Will fetch configuration now.");*/
       }
       LOG.info(getQualifiedName() + "Released configLock");
       synchronized (topologiesLock) {
@@ -207,40 +195,9 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     }
   }
 
-  /**
-   * @param taskId
-   * @return
-   */
-  private String operWithRunningTask(final String taskId) {
-    for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
-      final Class<? extends Name<String>> operName = operSpecEntry.getKey();
-      final Topology topology = topologies.get(operName);
-      if(topology.isRunning(taskId)) {
-        return Utils.simpleName(operName);
-      }
-    }
-    return null;
-  }
-
-  /**
-   * @param taskId
-   * @return
-   */
-  private String operWithNotRunningTask(final String taskId) {
-    for (final Map.Entry<Class<? extends Name<String>>, OperatorSpec> operSpecEntry : operatorSpecs.entrySet()) {
-      final Class<? extends Name<String>> operName = operSpecEntry.getKey();
-      final Topology topology = topologies.get(operName);
-      if(!topology.isRunning(taskId)) {
-        return Utils.simpleName(operName);
-      }
-    }
-    return null;
-  }
-
   @Override
   public void finalise() {
     finalised = true;
-//    msgAggregator.setNumTopologies(topologies.size());
   }
 
   @Override
@@ -272,20 +229,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    */
   public void runTask(final String id) {
     LOG.info(getQualifiedName() + "Task-" + id + " running");
-    /*synchronized (updatingToplogiesLock) {
-      LOG.info(getQualifiedName() + "Acquired updatingTopologiesLock");
-      while(updatingTopologies.get()) {
-        LOG.info(getQualifiedName() + "is updating topologies. Will wait for it to finish");
-        try {
-          updatingToplogiesLock.wait();
-        } catch (final InterruptedException e) {
-          throw new RuntimeException(
-              "InterruptedException while waiting for updatingTopologies lock", e);
-        }
-        LOG.info(getQualifiedName() + "Finished updating topologies");
-      }
-      LOG.info(getQualifiedName() + "Released updatingTopologiesLock");
-    }*/
 
     synchronized (topologiesLock) {
       LOG.info(getQualifiedName() + "Acquired topologiesLock");
@@ -296,7 +239,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       }
       allTasksAdded.decrement();
       perTaskState.put(id, TaskState.RUNNING);
-//      msgAggregator.aggregateNSend();
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
     synchronized (yetToRunLock) {
@@ -329,18 +271,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         }
       }
       LOG.info(getQualifiedName() + id + " - Can safely set failure.");
-      /*String operWithNotRunningTask;
-      while((operWithNotRunningTask=operWithNotRunningTask(id))!=null) {
-        LOG.info(getQualifiedName() + operWithNotRunningTask + " thinks "
-            + id + " is not running to set failure. Need to wait for it run");
-        try {
-          yetToRunLock.wait();
-        } catch (final InterruptedException e) {
-          throw new RuntimeException("InterruptedException while waiting on yetToRunLock", e);
-        }
-      }
-      LOG.info(getQualifiedName() + " - No operator thinks " + id
-          + " is not running. Can safely set failure.");*/
     }
     LOG.info(getQualifiedName() + "Released yetToRunLock");
     synchronized (topologiesLock) {
@@ -352,7 +282,19 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       }
       allTasksAdded.increment();
       perTaskState.put(id, TaskState.FAILED);
-//      msgAggregator.aggregateNSend();
+      LOG.info(getQualifiedName() + "Removing msgs associated with dead task "
+          + id + " from msgQue.");
+      final Set<MsgKey> keys = msgQue.keySet();
+      final List<MsgKey> keysToBeRemoved = new ArrayList<>();
+      for(final MsgKey msgKey : keys) {
+        if(msgKey.getSrc().equals(id)) {
+          keysToBeRemoved.add(msgKey);
+        }
+      }
+      LOG.info(getQualifiedName() + keysToBeRemoved + " keys that will be removed");
+      for(final MsgKey key : keysToBeRemoved) {
+        msgQue.remove(key);
+      }
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
     synchronized (configLock) {
@@ -388,12 +330,62 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     }
   }
 
+  public void queNProcessMsg(final GroupCommMessage msg) {
+    LOG.info(getQualifiedName() + "Queing and processing " + msg.getType()
+        + " from " + msg.getSrcid());
+    final IndexedMsg indMsg = new IndexedMsg(msg);
+    final Class<? extends Name<String>> operName = indMsg.getOperName();
+    final MsgKey key = new MsgKey(msg);
+    if(msgQue.contains(key, indMsg)) {
+      final String mesg = getQualifiedName() + "MsgQue already contains " + msg.getType() +
+          " msg for " + key + " in " + Utils.simpleName(operName);
+      LOG.warning(mesg);
+      throw new RuntimeException(mesg);
+    }
+    LOG.info(getQualifiedName() + "Adding msg to que");
+    msgQue.add(key, indMsg);
+    if(msgQue.count(key)==topologies.size()) {
+      LOG.info(getQualifiedName() + "MsgQue for " + key + " contains " + msg.getType()
+          + " msgs from: " + msgQue.get(key));
+      for(final IndexedMsg innerIndMsg : msgQue.remove(key)) {
+        topologies.get(innerIndMsg.getOperName()).processMsg(innerIndMsg.getMsg());
+      }
+      LOG.info(getQualifiedName() + "All msgs processed and removed");
+    }
+  }
+
+  private boolean isMsgVersionOk(final GroupCommMessage msg) {
+    if(!msg.hasVersion()) {
+      throw new RuntimeException(getQualifiedName()
+          + "can only deal with versioned msgs");
+    }
+    final String srcId = msg.getSrcid();
+    final int rcvVersion = msg.getSrcVersion();
+
+    final int version = topologies.get(Utils.getClass(msg.getOperatorname()))
+        .getNodeVersion(srcId);
+    if(rcvVersion<version) {
+      LOG.warning(getQualifiedName() + "received a ver-" + rcvVersion
+          + " msg while expecting ver-" + version + ". Discarding msg");
+      return false;
+    }
+    if(rcvVersion>version) {
+      LOG.warning(getQualifiedName() + "received a HIGHER ver-" + rcvVersion
+          + " msg while expecting ver-" + version + ". Something fishy!!!");
+      return false;
+    }
+    return true;
+  }
+
   /**
    * @param msg
    */
   public void processMsg(final GroupCommMessage msg) {
     LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
         + msg.getSrcid());
+    if(!isMsgVersionOk(msg)) {
+      return;
+    }
     synchronized (topologiesLock) {
       LOG.info(getQualifiedName() + "Acquired topologiesLock");
       if(initializing.get() || msg.getType().equals(Type.UpdateTopology)) {
@@ -401,8 +393,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         allTasksAdded.await();
         initializing.compareAndSet(true, false);
       }
-      final Class<? extends Name<String>> operName = Utils.getClass(msg.getOperatorname());
-      topologies.get(operName).processMsg(msg);
+      queNProcessMsg(msg);
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");
   }

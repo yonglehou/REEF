@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
@@ -51,6 +52,9 @@ import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
+import com.microsoft.wake.EStage;
+import com.microsoft.wake.EventHandler;
+import com.microsoft.wake.impl.ThreadPoolStage;
 
 /**
  *
@@ -175,8 +179,23 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
       return;
     }
     LOG.info("CommGroup-" + groupName + " is initializing");
+    final CountDownLatch initLatch = new CountDownLatch(1);
+    final EStage<GroupCommOperator> initStage = new ThreadPoolStage<>(
+        new EventHandler<GroupCommOperator>() {
+
+          @Override
+          public void onNext(final GroupCommOperator op) {
+            op.initialize();
+            initLatch.countDown();
+          }
+        }, operators.size());
     for(final GroupCommOperator op : operators.values()) {
-      op.initialize();
+      initStage.onNext(op);
+    }
+    try {
+      initLatch.await();
+    } catch (final InterruptedException e) {
+      throw new RuntimeException("InterruptedException while waiting for initialization", e);
     }
   }
 

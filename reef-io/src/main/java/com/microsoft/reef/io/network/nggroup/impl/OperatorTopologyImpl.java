@@ -251,32 +251,32 @@ public class OperatorTopologyImpl implements OperatorTopology {
       if(!msg.hasVersion()) {
         throw new RuntimeException(getQualifiedName() + "Ack Sender can only deal with versioned msgs");
       }
-      final int msgVersion = msg.getVersion();
+      final int srcVersion = msg.getSrcVersion();
       switch(msg.getType()) {
       case UpdateTopology:
         LOG.info(getQualifiedName() + "Sending TopologySetup msg to driver");
         sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.TopologySetup, selfId, this.version, driverId, msgVersion, emptyByte));
+            Type.TopologySetup, selfId, this.version, driverId, srcVersion, emptyByte));
         break;
       case ParentAdd:
         LOG.info(getQualifiedName() + "Sending ParentAdded msg for " + srcId);
         sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.ParentAdded, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
+            Type.ParentAdded, selfId, this.version, srcId, srcVersion, emptyByte), driverId);
         break;
       case ParentDead:
         LOG.info(getQualifiedName() + "Sending ParentRemoved msg for " + srcId);
         sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.ParentRemoved, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
+            Type.ParentRemoved, selfId, this.version, srcId, srcVersion, emptyByte), driverId);
         break;
       case ChildAdd:
         LOG.info(getQualifiedName() + "Sending ChildAdded msg for " + srcId);
         sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.ChildAdded, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
+            Type.ChildAdded, selfId, this.version, srcId, srcVersion, emptyByte), driverId);
         break;
       case ChildDead:
         LOG.info(getQualifiedName() + "Sending ChildRemoved msg for " + srcId);
         sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.ChildRemoved, selfId, this.version, srcId, msgVersion, emptyByte), driverId);
+            Type.ChildRemoved, selfId, this.version, srcId, srcVersion, emptyByte), driverId);
         break;
       default:
         LOG.warning("Received a non control message for acknowledgement");

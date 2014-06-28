@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
@@ -62,18 +61,6 @@ public class FlatTopology implements Topology {
   private TaskNode root;
   private final ConcurrentMap<String, TaskNode> nodes = new ConcurrentHashMap<>();
 
-  private final CountingSemaphore allTasksAdded;
-
-  private final AtomicBoolean initializing = new AtomicBoolean(true);
-
-  private final Object topologyLock = new Object();
-//  private final Object updatingToplogyLock = new Object();
-//
-  private final AtomicBoolean updatingTopology = new AtomicBoolean(false);
-
-
-  private final Object configLock = new Object();
-
   public FlatTopology(
       final EStage<GroupCommMessage> senderStage,
       final Class<? extends Name<String>> groupName,
@@ -84,7 +71,6 @@ public class FlatTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverId = driverId;
-    this.allTasksAdded = new CountingSemaphore(numberOfTasks, getQualifiedName(),topologyLock);
   }
 
   @Override
@@ -107,22 +93,8 @@ public class FlatTopology implements Topology {
       throw new RuntimeException(msg);
     }
 
-    synchronized (configLock) {
-      while(taskNode.isRunning()) {
-        LOG.info(getQualifiedName() + taskId + " is still running. Need to wait for failure");
-        try {
-          configLock.wait();
-        } catch (final InterruptedException e) {
-          throw new RuntimeException("InterruptedException while waiting on configLock", e);
-        }
-      }
-      LOG.info(getQualifiedName() + taskId + " - Will fetch configuration now.");
-    }
-
     final int version;
-    synchronized (topologyLock) {
-      version = getNodeVersion(taskId);
-    }
+    version = getNodeVersion(taskId);
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
     jcb.bindNamedParameter(TaskVersion.class, Integer.toString(version));
@@ -148,7 +120,7 @@ public class FlatTopology implements Topology {
     return jcb.build();
   }
 
-  private int getNodeVersion(final String taskId) {
+  public int getNodeVersion(final String taskId) {
     final TaskNode node = nodes.get(taskId);
     if(node==null) {
       final String msg = getQualifiedName() + taskId + " is not available on the nodes map";
@@ -275,14 +247,7 @@ public class FlatTopology implements Topology {
       throw new RuntimeException(msg);
     }
 
-    synchronized (topologyLock) {
-      taskNode.setFailed();
-      allTasksAdded.increment();
-    }
-
-    synchronized (configLock) {
-      configLock.notifyAll();
-    }
+    taskNode.setFailed();
   }
 
   @Override
@@ -294,180 +259,120 @@ public class FlatTopology implements Topology {
       LOG.warning(msg);
       throw new RuntimeException(msg);
     }
-    /*synchronized (updatingToplogyLock) {
-      while(updatingTopology.get()) {
-        LOG.info(getQualifiedName() + "is updating topology. Will wait for it to finish");
-        try {
-          updatingToplogyLock.wait();
-        } catch (final InterruptedException e) {
-          throw new RuntimeException(
-              "InterruptedException while waiting for updatingTopology lock", e);
-        }
-        LOG.info(getQualifiedName() + "Finished updating topology");
-      }
-    }*/
 
-    synchronized (topologyLock) {
-      LOG.info(getQualifiedName() + "Acquired topologyLock");
-      taskNode.setRunning();
-      allTasksAdded.decrement();
-      LOG.info(getQualifiedName() + "Releasing topologyLock");
-    }
+    taskNode.setRunning();
   }
 
   @Override
   public void processMsg(final GroupCommMessage msg) {
-    synchronized (topologyLock) {
-      LOG.info(getQualifiedName() + "Acquired topologyLock");
-      /*if(initializing.get()) {
-        LOG.info(getQualifiedName() + "waiting for all nodes to run");
-        allTasksAdded.await();
-        initializing.compareAndSet(true, false);
-      }*/
-      LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
-          + msg.getSrcid());
-      if (msg.getType().equals(Type.TopologyChanges)) {
-        final String dstId = msg.getSrcid();
-        final GroupChanges changes = new GroupChangesImpl(false);
-        synchronized (nodes) {
-          LOG.info(getQualifiedName()
-              + "Checking which nodes need to be updated");
-          for (final TaskNode node : nodes.values()) {
-            if (node.isRunning()) {
-              LOG.info(getQualifiedName() + node.taskId() + " is running");
-              if (node.hasChanges()) {
-                LOG.info(getQualifiedName() + node.taskId() + " has changes.");
-                changes.setChanges(true);
-                break;
-              } else {
-                LOG.info(getQualifiedName() + node.taskId()
-                    + " has no changes. Skipping");
-              }
-            } else {
-              LOG.info(getQualifiedName() + node.taskId()
-                  + " is not running. Skipping");
-            }
-          }
-        }
-        final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
-        final int version = getNodeVersion(dstId);
-        LOG.info("Sending version-" + version + " GroupChanges to " + dstId);
-        senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
-            Type.TopologyChanges, driverId, 0, dstId, version,
-            changesCodec.encode(changes)));
-        LOG.info(getQualifiedName() + "Releasing topologyLock");
-        return;
-      }
-      if (msg.getType().equals(Type.UpdateTopology)) {
-//        LOG.info(getQualifiedName() + "Waiting for all tasks to run");
-//        allTasksAdded.await();
-//        LOG.info(getQualifiedName() + "All tasks running");
-        /*if(!updatingTopology.compareAndSet(false, true)) {
-          final String logMsg = getQualifiedName() + "Got Update Topology when I was already updating topology";
-          LOG.warning(logMsg);
-          throw new RuntimeException(logMsg);
-        }*/
-        final String dstId = msg.getSrcid();
-        final int version = getNodeVersion(dstId);
-
+    LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
+        + msg.getSrcid());
+    if (msg.getType().equals(Type.TopologyChanges)) {
+      final String dstId = msg.getSrcid();
+      final GroupChanges changes = new GroupChangesImpl(false);
+      synchronized (nodes) {
         LOG.info(getQualifiedName()
-            + "Creating NodeTopologyUpdateWaitStage to wait on nodes to be updated");
-        //This stage only waits for receiving TopologySetup
-        //Sending UpdateTopology to the tasks is left to NodeStatusImpl as part
-        //of processMsg
-        final EStage<List<TaskNode>> nodeTopologyUpdateWaitStage = new SingleThreadStage<>(
-            "NodeTopologyUpdateWaitStage", new EventHandler<List<TaskNode>>() {
-
-              @Override
-              public void onNext(final List<TaskNode> nodes) {
-                LOG.info(getQualifiedName()
-                    + "NodeTopologyUpdateWaitStage received " + nodes.size()
-                    + " to be updated nodes to waitfor");
-                for (final TaskNode node : nodes) {
-                  LOG.info(getQualifiedName()
-                      + "NodeTopologyUpdateWaitStage waiting for "
-                      + node.taskId() + " to receive TopologySetup");
-                  node.waitForTopologySetupOrFailure();
-                }
-
-                LOG.info(getQualifiedName()
-                    + "NodeTopologyUpdateWaitStage All to be updated nodes "
-                    + "have received TopologySetup. Sending version-" + version
-                    + " TopologyUpdated to " + dstId);
-                senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
-                    Type.TopologyUpdated, driverId, 0, dstId, version,
-                    new byte[0]));
-              }
-            }, nodes.size());
-
-        //This stage waits for sending TopologySetup
-        /*final EStage<List<TaskNode>> nodeTopologySetupWaitStage = new SingleThreadStage<>(
-            "NodeTopologySetupWaitStage", new EventHandler<List<TaskNode>>() {
-
-              @Override
-              public void onNext(final List<TaskNode> nodes) {
-                LOG.info(getQualifiedName()
-                    + "NodeTopologySetupWaitStage received " + nodes.size()
-                    + " nodes to waitfor TopologySetupSent");
-                for (final TaskNode node : nodes) {
-                  LOG.info(getQualifiedName()
-                      + "NodeTopologySetupWaitStage waiting for "
-                      + node.taskId() + " to send TopologySetupSent");
-                  node.waitForUpdatedTopologyOrFailure();
-                }
-
-                LOG.info(getQualifiedName()
-                    + "NodeTopologySetupWaitStage All to be updated nodes "
-                    + "have received TopologySetup. Releasing updatingTopology lock");
-                synchronized (updatingToplogyLock) {
-                  updatingTopology.set(false);
-                  updatingToplogyLock.notifyAll();
-                }
-              }
-            }, nodes.size());*/
-        final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());
-        synchronized (nodes) {
-          LOG.info(getQualifiedName()
-              + "Checking which nodes need to be updated");
-          for (final TaskNode node : nodes.values()) {
-            if (node.isRunning()) {
-              LOG.info(getQualifiedName() + node.taskId() + " is running");
-              if (node.hasChanges() && node.resetTopologySetupSent()) {
-                LOG.info(getQualifiedName() + node.taskId() + " has changes. "
-                    + "Reset the TopologySetupSent flag & add to list");
-                toBeUpdatedNodes.add(node);
-              } else {
-                LOG.info(getQualifiedName() + node.taskId()
-                    + " has no changes. Skipping");
-              }
+            + "Checking which nodes need to be updated");
+        for (final TaskNode node : nodes.values()) {
+          if (node.isRunning()) {
+            LOG.info(getQualifiedName() + node.taskId() + " is running");
+            if (node.hasChanges()) {
+              LOG.info(getQualifiedName() + node.taskId() + " has changes.");
+              changes.setChanges(true);
+              break;
             } else {
               LOG.info(getQualifiedName() + node.taskId()
-                  + " is not running. Skipping");
+                  + " has no changes. Skipping");
             }
+          } else {
+            LOG.info(getQualifiedName() + node.taskId()
+                + " is not running. Skipping");
           }
         }
-        nodeTopologyUpdateWaitStage.onNext(toBeUpdatedNodes);
-//        nodeTopologySetupWaitStage.onNext(toBeUpdatedNodes);
-        for (final TaskNode node : toBeUpdatedNodes) {
-          LOG.info(getQualifiedName() + node.taskId()
-              + " process UpdateTopology msg since you have changes");
-          node.processMsg(msg);
-          //The stage will wait for all nodes to acquire topoLock
-          //and send TopologySetup msg. Then it will send TopologyUpdated
-          //msg. However, any local topology changes are not in effect
-          //till driver sends TopologySetup once statusMap is emptied
-          //The operations in the tasks that have topology changes will
-          //wait for this. However other tasks that do not have any changes
-          //will continue their regular operation
-        }
-        //Handling of UpdateTopology msg done. Return
-        LOG.info(getQualifiedName() + "Releasing topologyLock");
-        return;
       }
-      final String id = msg.getSrcid();
-      nodes.get(id).processMsg(msg);
+      final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
+      final int version = getNodeVersion(dstId);
+      LOG.info("Sending version-" + version + " GroupChanges to " + dstId);
+      senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+          Type.TopologyChanges, driverId, 0, dstId, version,
+          changesCodec.encode(changes)));
       LOG.info(getQualifiedName() + "Releasing topologyLock");
+      return;
     }
+    if (msg.getType().equals(Type.UpdateTopology)) {
+      final String dstId = msg.getSrcid();
+      final int version = getNodeVersion(dstId);
+
+      LOG.info(getQualifiedName()
+          + "Creating NodeTopologyUpdateWaitStage to wait on nodes to be updated");
+      //This stage only waits for receiving TopologySetup
+      //Sending UpdateTopology to the tasks is left to NodeStatusImpl as part
+      //of processMsg
+      final EStage<List<TaskNode>> nodeTopologyUpdateWaitStage = new SingleThreadStage<>(
+          "NodeTopologyUpdateWaitStage", new EventHandler<List<TaskNode>>() {
+
+            @Override
+            public void onNext(final List<TaskNode> nodes) {
+              LOG.info(getQualifiedName()
+                  + "NodeTopologyUpdateWaitStage received " + nodes.size()
+                  + " to be updated nodes to waitfor");
+              for (final TaskNode node : nodes) {
+                LOG.info(getQualifiedName()
+                    + "NodeTopologyUpdateWaitStage waiting for "
+                    + node.taskId() + " to receive TopologySetup");
+                node.waitForTopologySetupOrFailure();
+              }
+
+              LOG.info(getQualifiedName()
+                  + "NodeTopologyUpdateWaitStage All to be updated nodes "
+                  + "have received TopologySetup. Sending version-" + version
+                  + " TopologyUpdated to " + dstId);
+              senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+                  Type.TopologyUpdated, driverId, 0, dstId, version,
+                  new byte[0]));
+            }
+          }, nodes.size());
+
+      final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());
+      synchronized (nodes) {
+        LOG.info(getQualifiedName()
+            + "Checking which nodes need to be updated");
+        for (final TaskNode node : nodes.values()) {
+          if (node.isRunning()) {
+            LOG.info(getQualifiedName() + node.taskId() + " is running");
+            if (node.hasChanges() && node.resetTopologySetupSent()) {
+              LOG.info(getQualifiedName() + node.taskId() + " has changes. "
+                  + "Reset the TopologySetupSent flag & add to list");
+              toBeUpdatedNodes.add(node);
+            } else {
+              LOG.info(getQualifiedName() + node.taskId()
+                  + " has no changes. Skipping");
+            }
+          } else {
+            LOG.info(getQualifiedName() + node.taskId()
+                + " is not running. Skipping");
+          }
+        }
+      }
+      nodeTopologyUpdateWaitStage.onNext(toBeUpdatedNodes);
+      for (final TaskNode node : toBeUpdatedNodes) {
+        LOG.info(getQualifiedName() + node.taskId()
+            + " process UpdateTopology msg since you have changes");
+        node.processMsg(msg);
+        //The stage will wait for all nodes to acquire topoLock
+        //and send TopologySetup msg. Then it will send TopologyUpdated
+        //msg. However, any local topology changes are not in effect
+        //till driver sends TopologySetup once statusMap is emptied
+        //The operations in the tasks that have topology changes will
+        //wait for this. However other tasks that do not have any changes
+        //will continue their regular operation
+      }
+      //Handling of UpdateTopology msg done. Return
+      LOG.info(getQualifiedName() + "Releasing topologyLock");
+      return;
+    }
+    final String id = msg.getSrcid();
+    nodes.get(id).processMsg(msg);
   }
 
   /**
@@ -483,7 +388,6 @@ public class FlatTopology implements Topology {
     if(taskNode==null) {
       final String msg = getQualifiedName() + taskId + " does not exist";
       LOG.warning(msg);
-//      throw new RuntimeException(msg);
       return false;
     }
     return taskNode.isRunning();

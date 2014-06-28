@@ -71,4 +71,10 @@ public interface Topology {
    */
   boolean isRunning(String taskId);
 
+  /**
+   * @param taskId
+   * @return
+   */
+  int getNodeVersion(String taskId);
+
 }

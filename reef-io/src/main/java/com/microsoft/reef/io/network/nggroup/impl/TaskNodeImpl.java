@@ -278,7 +278,7 @@ public class TaskNodeImpl implements TaskNode {
     if(!msg.hasVersion()) {
       throw new RuntimeException(getQualifiedName() + "NodeStatusMsgProcessorStage can only deal with versioned msgs");
     }
-    final int rcvVersion = msg.getVersion();
+    final int rcvVersion = msg.getSrcVersion();
     final int version = this.version.get();
     if(rcvVersion<version) {
       LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage received a ver-" + rcvVersion

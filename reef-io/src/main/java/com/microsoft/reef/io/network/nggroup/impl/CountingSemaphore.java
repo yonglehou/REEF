@@ -55,9 +55,9 @@ public class CountingSemaphore {
       final int retVal = counter.decrementAndGet();
       LOG.info(name + "Decremented counter to " + retVal);
       if (retVal < 0) {
-        LOG.warning("Counter negative. Something fishy");
+        LOG.warning("Counter negative. More workers exist than you expected");
       }
-      if (retVal == 0) {
+      if (retVal <= 0) {
         LOG.info(name
             + "All workers are done with their task. Notifying waiting threads");
         lock.notifyAll();
@@ -77,7 +77,7 @@ public class CountingSemaphore {
   public void await() {
     synchronized (lock) {
       LOG.info(name + "Waiting for workers to be done");
-      while (counter.get() != 0) {
+      while (counter.get() > 0) {
         try {
           lock.wait();
           LOG.info(name + "Notified with counter=" + counter.get());
