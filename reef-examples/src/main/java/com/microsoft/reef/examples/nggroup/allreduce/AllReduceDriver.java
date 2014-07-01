@@ -164,12 +164,12 @@ public class AllReduceDriver {
           ).bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
           .build();
       // Do not add the task back
-      // allCommGroup.addTask(partialTaskConf);
-      // final Configuration taskConf =
-      // groupCommDriver.getTaskConfiguration(partialTaskConf);
-      // LOG.info("Submitting SlaveTask conf");
-      // LOG.info(confSerializer.toString(taskConf));
-      // activeContext.submitTask(taskConf);
+      allCommGroup.addTask(partialTaskConf);
+      final Configuration taskConf =
+        groupCommDriver.getTaskConfiguration(partialTaskConf);
+      LOG.info("Submitting SlaveTask conf");
+      LOG.info(confSerializer.toString(taskConf));
+      activeContext.submitTask(taskConf);
     }
   }
 
@@ -212,10 +212,10 @@ public class AllReduceDriver {
                 TaskConfiguration.CONF
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class).build()
-              ,PoisonedConfiguration.TASK_CONF
-              .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
-               .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-               .build()
+              // ,PoisonedConfiguration.TASK_CONF
+              // .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
+              // .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+              // .build()
               )
               .bindNamedParameter(Dimensions.class,
                 Integer.toString(dimensions)).build();

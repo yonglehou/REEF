@@ -27,6 +27,7 @@ import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
+import com.microsoft.reef.io.network.nggroup.impl.AllReducer;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.annotations.Parameter;
 
@@ -37,7 +38,7 @@ public class SlaveTask implements Task {
   private static final Logger LOG = Logger.getLogger(SlaveTask.class.getName());
 
   private final CommunicationGroupClient communicationGroupClient;
-  private final AllReduce<Vector> modelAllReducer;
+  private final AllReducer<Vector> modelAllReducer;
   private final int dimensions;
 
   @Inject
@@ -46,20 +47,28 @@ public class SlaveTask implements Task {
     this.communicationGroupClient =
       groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     this.modelAllReducer =
-      communicationGroupClient.getAllReducer(ModelAllReducer.class);
+      (AllReducer<Vector>) communicationGroupClient
+        .getAllReducer(ModelAllReducer.class);
     this.dimensions = dimensions;
   }
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    Vector model = new DenseVector(new double[] { 1 });
+    Vector model = new DenseVector(new double[] { 1, 0 });
     Vector newModel = null;
     final long time1 = System.currentTimeMillis();
     final int numIters = 10;
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
+      model.set(1, i);
       newModel = modelAllReducer.apply(model);
-      System.out.println("Iter: " + i + " apply data");
+      if (modelAllReducer.isLastIterationFailed()) {
+        System.out.println("Iter: " + i + " apply data fails.");
+        i = i - modelAllReducer.getNumFailedIterations();
+      } else {
+        System.out.println("Iter: " + i + " apply data succeeds.");
+        i = (int) newModel.get(1);
+      }
       if (newModel != null) {
         StringBuffer sb = new StringBuffer();
         for (int j = 0; j < newModel.size(); j++) {
@@ -70,10 +79,10 @@ public class SlaveTask implements Task {
       } else {
         System.out.println("The result is null.");
       }
-      // if (Math.random() < 0.1) {
-      // System.out.println("Simulated Failure");
-      // throw new RuntimeException("Simulated Failure");
-      // }
+      if (Math.random() < 0.1) {
+        System.out.println("Simulated Failure");
+        throw new RuntimeException("Simulated Failure");
+      }
     }
     final long time2 = System.currentTimeMillis();
     System.out.println("Allreduce vector of dimensions " + dimensions

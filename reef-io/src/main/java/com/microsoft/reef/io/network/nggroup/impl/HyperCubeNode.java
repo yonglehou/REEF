@@ -20,8 +20,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
 
 /**
  * This class describes a node in hyper cube. This class is modified from
@@ -30,57 +28,29 @@ import java.util.logging.Logger;
  * @author zhangbj
  */
 public class HyperCubeNode {
-  private static final Logger LOG = Logger.getLogger(HyperCubeNode.class
-    .getName());
 
   private String taskID;
   private int nodeID;
   /** The list of send/receive operations on the neighbors */
-  private final List<List<int[]>> neighborOpList;
-  /** Status */
-  private final AtomicBoolean isRunning;
-  // The last iteration reported to the driver
-  private int iteration = -1;
+  private final List<List<int[]>> neighborOpList = new ArrayList<List<int[]>>();
 
   public HyperCubeNode(String taskID, int nodeID) {
     this.taskID = taskID;
     this.nodeID = nodeID;
-    this.neighborOpList = new ArrayList<List<int[]>>();
-    this.isRunning = new AtomicBoolean(false);
   }
 
   public String getTaskID() {
-    return this.taskID;
+    return taskID;
   }
 
   public int getNodeID() {
-    return this.nodeID;
+    return nodeID;
   }
 
   public List<List<int[]>> getNeighborOpList() {
     return neighborOpList;
   }
 
-  public void setFailed() {
-    this.isRunning.compareAndSet(true, false);
-  }
-
-  public void setRunning() {
-    this.isRunning.compareAndSet(false, true);
-  }
-
-  public boolean isRunning() {
-    return isRunning.get();
-  }
-
-  public void setIteration(int ite) {
-    this.iteration = ite;
-  }
-
-  public int getIteration() {
-    return iteration;
-  }
-  
   public String toString() {
     StringBuffer sb = new StringBuffer();
     sb.append("{");
@@ -100,12 +70,24 @@ public class HyperCubeNode {
       }
       sb.append("]");
     }
-    sb.append(",");
-    sb.append(isRunning.get());
-    sb.append(",");
-    sb.append(iteration);
     sb.append("}");
     return sb.toString();
+  }
+  
+  public HyperCubeNode clone() {
+    HyperCubeNode node = new HyperCubeNode(taskID, nodeID);
+    int[] op = null;
+    for (int i = 0; i < neighborOpList.size(); i++) {
+      List<int[]> opDimList = new ArrayList<int[]>();
+      for (int j = 0; j < neighborOpList.get(i).size(); j++) {
+        op =
+          new int[] { neighborOpList.get(i).get(j)[0],
+            neighborOpList.get(i).get(j)[1] };
+        opDimList.add(op);
+      }
+      node.getNeighborOpList().add(opDimList);
+    }
+    return node;
   }
 
   public void read(DataInput din) throws IOException {
@@ -123,8 +105,6 @@ public class HyperCubeNode {
       }
       neighborOpList.add(opDimList);
     }
-    isRunning.set(din.readBoolean());
-    iteration = din.readInt();
   }
 
   public void write(DataOutput dout) throws IOException {
@@ -139,7 +119,5 @@ public class HyperCubeNode {
         dout.writeInt(opDimList.get(j)[1]);
       }
     }
-    dout.writeBoolean(isRunning.get());
-    dout.writeInt(iteration);
   }
 }

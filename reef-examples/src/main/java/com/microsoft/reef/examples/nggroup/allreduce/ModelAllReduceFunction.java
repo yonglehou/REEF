@@ -33,9 +33,11 @@ public class ModelAllReduceFunction implements ReduceFunction<Vector> {
   @Override
   public Vector apply(final Iterable<Vector> elements) {
     int count = 0;
-    final Vector model = new DenseVector(new double[] { 0 });
+    final Vector model = new DenseVector(new double[] { 0, 0 });
     for (Vector element : elements) {
-      model.add(element);
+      model.set(0, model.get(0) + element.get(0));
+      model.set(1,
+        model.get(1) < element.get(1) ? element.get(1) : model.get(1));
       count++;
     }
     System.out.println("AllReduce Size: " + count);

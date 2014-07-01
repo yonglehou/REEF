@@ -72,20 +72,20 @@ public class AllReducer<T> implements AllReduce<T>,
   private final HyperCubeTopoClient topoClient;
   // private final CommunicationGroupClient commGroupClient;
   private final AtomicBoolean isInitialized = new AtomicBoolean(false);
-  // Version is used for iteration
-  private AtomicInteger version;
+  private final AtomicInteger iteration;
 
   private final ConcurrentMap<Integer, ConcurrentMap<String, GroupCommMessage>> dataMap =
     new ConcurrentHashMap<>();
   private final BlockingQueue<GroupCommMessage> dataQueue =
     new LinkedBlockingQueue<>();
-  // private final Object lockObject = new Object();
 
   private final String selfID;
   private final String driverID;
   private HyperCubeNode node;
   private ConcurrentMap<Integer, String> opTaskMap;
   private final AtomicBoolean isLastIteFailed = new AtomicBoolean(false);
+  private int numFailedIterations = 0;
+  private final AtomicBoolean isNewTaskAdded = new AtomicBoolean(false);
 
   @Inject
   public AllReducer(
@@ -100,9 +100,9 @@ public class AllReducer<T> implements AllReduce<T>,
     final NetworkService<GroupCommMessage> netService,
     final CommunicationGroupClient commGroupClient) {
     super();
-    this.version = new AtomicInteger(version);
     LOG.info(operName + " has CommGroupHandler-"
       + commGroupNetworkHandler.toString());
+    this.iteration = new AtomicInteger(version);
     this.groupName = Utils.getClass(groupName);
     this.operName = Utils.getClass(operName);
     this.dataCodec = dataCodec;
@@ -124,7 +124,8 @@ public class AllReducer<T> implements AllReduce<T>,
 
   @Override
   public int getVersion() {
-    return version.get();
+    // Use iteration for version
+    return iteration.get();
   }
 
   @Override
@@ -133,6 +134,7 @@ public class AllReducer<T> implements AllReduce<T>,
     // This code won't be invoked repeatedly.
     topoClient.initialize();
     updateTopology();
+    iteration.set(topoClient.getNewIteration());
   }
 
   private void updateTopology() {
@@ -157,13 +159,15 @@ public class AllReducer<T> implements AllReduce<T>,
     // If the msg type is TopologyChange or TopologyUpdated
     // they cannot arrive here
     System.out.println(getQualifiedName() + "Handling " + msg.getType()
-      + " msg from " + msg.getSrcid());
+      + " msg from " + msg.getSrcid() + " with version " + msg.getSrcVersion());
     // Data are put in the queue
     // and wait to be processed in "apply"
     // Topology related messages are processed by topoClient
     if (msg.getType() == Type.AllReduce) {
       dataQueue.add(msg);
     } else if (msg.getType() == Type.SourceDead) {
+      dataQueue.add(msg);
+    } else if (msg.getType() == Type.SourceAdd) {
       dataQueue.add(msg);
     } else {
       topoClient.handle(msg);
@@ -185,18 +189,33 @@ public class AllReducer<T> implements AllReduce<T>,
       // Here we just initialize this operator only
       initialize();
     }
-    int iteration = version.get();
+    System.out.println("Current iteration: " + iteration.get() + " "
+      + ", current topo client iteration: " + topoClient.getNewIteration());
+    int ite = iteration.get();
     boolean isFailed = false;
-    System.out.println("Current version: " + version.get() + " "
-      + topoClient.getVersion());
-    // Update topology if failure happened
-    if (isLastIteFailed.get()) {
-      if (iteration == topoClient.getVersion()) {
+    // Update topology when either condition comes true
+    // We carefully set the conditions to make sure that
+    // a node only response to one of the two.
+    // if (isLastIteFailed.get()) {
+    // if (ite == topoClient.getNewIteration()) {
+    // updateTopology();
+    // isLastIteFailed.set(false);
+    // } else {
+    // isFailed = true;
+    // }
+    // } else if (isNewTaskAdded.get()) {
+    // if (ite == topoClient.getNewIteration()) {
+    // updateTopology();
+    // isNewTaskAdded.set(false);
+    // }
+    // }
+    if (isLastIteFailed.get() || isNewTaskAdded.get()) {
+      if (ite == topoClient.getNewIteration()) {
         updateTopology();
-        isLastIteFailed.set(false);
-      } else {
-        isFailed = true;
       }
+    }
+    if (isNewTaskAdded.get()) {
+      isNewTaskAdded.set(false);
     }
     T reducedValue = aElement;
     List<byte[]> valBytes = new ArrayList<byte[]>();
@@ -204,58 +223,80 @@ public class AllReducer<T> implements AllReduce<T>,
     Map<Integer, Integer> opPerformed = new HashMap<>();
     int exitCode = -1;
     for (int i = 0; i < node.getNeighborOpList().size(); i++) {
-      if (isFailed) {
-        propagateFailure(iteration, selfID, node.getNeighborOpList().get(i),
-          opTaskMap, opPerformed);
-      } else {
-        exitCode =
-          applyInDim(reducedValue, iteration, selfID, driverID, valBytes, node
-            .getNeighborOpList().get(i), opTaskMap, opPerformed);
-        if (exitCode == 0) {
-          vals.add(reducedValue);
-          for (byte[] data : valBytes) {
-            vals.add(dataCodec.decode(data));
-          }
-          reducedValue = reduceFunction.apply(vals);
-          valBytes.clear();
-          vals.clear();
-          opPerformed.clear();
-        } else if (exitCode == 1) {
-          // Ask driver, send source failure message
-          sender.send(Utils.bldVersionedGCM(groupName, operName,
-            Type.SourceDead, selfID, iteration, driverID, iteration,
-            EmptyByteArr));
-          // Get the new topology
-          System.out.println("Waiting for the new topology");
-          topoClient.getTopology();
-          int topoIte = topoClient.getVersion();
-          if (topoIte > iteration) {
-            System.out.println("The current iteration " + iteration
-              + ", the version of topology got from the driver: " + topoIte);
-            // Fail the current iteration
-            // if the new topology is only agreed for the next iteration
-            isFailed = true;
-          } else {
-            System.out.println("Update topology at iteration: " + iteration);
-            // updateTopology();
-            // I doubt if this is correct
-            // because this node may already
-            // carry the data from dead node
-          }
-          // Restart this dimension
-          i--;
-        } else if (exitCode == 2) {
-          isFailed = true;
-          i--;
+      // if (isFailed) {
+      // propagateFailure(ite, selfID, node.getNeighborOpList().get(i),
+      // opTaskMap, opPerformed);
+      // } else {
+      exitCode =
+        applyInDim(reducedValue, ite, selfID, driverID, valBytes, node
+          .getNeighborOpList().get(i), opTaskMap, opPerformed);
+      if (exitCode == 0) {
+        vals.add(reducedValue);
+        for (byte[] data : valBytes) {
+          vals.add(dataCodec.decode(data));
         }
+        reducedValue = reduceFunction.apply(vals);
+        valBytes.clear();
+        vals.clear();
+        opPerformed.clear();
+      } else if (exitCode == 1) {
+        // Ask driver, send source failure message
+        sendMsg(Type.SourceDead, selfID, ite, driverID, EmptyByteArr);
+        // Get the new topology
+        System.out
+          .println("Waiting for the new topology after getting SourceDead.");
+        topoClient.getTopology();
+        int topoIte = topoClient.getNewIteration();
+        System.out.println("The current iteration: " + ite
+          + ", the iteration of topology got from the driver: " + topoIte);
+        // Fail the current iteration
+        // This should match with topoClient.isFailed();
+        isFailed = true;
+        break;
+        // Restart this dimension
+        // i--;
+        // } else if (exitCode == 2) {
+        // Source dead message from the neighbor
+        // isFailed = true;
+        // i--;
+      } else if (exitCode == 3) {
+        // Ask driver, send source add message
+        sendMsg(Type.SourceAdd, selfID, ite, driverID, EmptyByteArr);
+        // Get the new topology
+        System.out
+          .println("Waiting for the new topology after getting SourceAdd");
+        topoClient.getTopology();
+        int topoIte = topoClient.getNewIteration();
+        System.out.println("The current iteration: " + iteration
+          + ", the iteration of topology got from the driver: " + topoIte);
+        // Check if there is failure in the current topology
+        isFailed = topoClient.isFailed();
+        if (isFailed) {
+          break;
+        } else {
+          isNewTaskAdded.set(true);
+        }
+        // Restart this dimension
+        // continue with the ops not performed
+        i--;
       }
+      // }
     }
     if (isFailed) {
       reducedValue = null;
+      // Remove received byte data between this iteration and the new iteration
+      for (int i = iteration.get(); i < topoClient.getNewIteration(); i++) {
+        dataMap.remove(i);
+      }
       isLastIteFailed.set(true);
+      numFailedIterations = iteration.get() - topoClient.getBaseIteration() + 1;
+      iteration.set(topoClient.getNewIteration());
+    } else {
+      dataMap.remove(iteration.get());
+      isLastIteFailed.set(false);
+      numFailedIterations = 0;
+      iteration.incrementAndGet();
     }
-    dataMap.remove(version.get());
-    version.incrementAndGet();
     return reducedValue;
   }
 
@@ -273,9 +314,6 @@ public class AllReducer<T> implements AllReduce<T>,
         taskID = opTaskMap.get(op[0]);
         System.out.println("Apply, Task ID: " + taskID + ", op ID: " + op[1]);
         if (op[1] == 1 || op[1] == 2) {
-          // sender.send(Utils.bldVersionedGCM(groupName, operName,
-          // Type.AllReduce, selfID, iteration, taskID, iteration,
-          // dataCodec.encode(reducedValue)));
           sendMsg(Type.AllReduce, selfID, iteration, taskID,
             dataCodec.encode(reducedValue));
         }
@@ -290,21 +328,26 @@ public class AllReducer<T> implements AllReduce<T>,
               valBytes.add(bytes);
             }
           } else if (msg.getType() == Type.SourceDead) {
-            if (msg.getSrcid().equals(driverID)) {
-              // Source Dead from driver
-              return 1;
-            } else {
-              // Source dead from neighbor
-              return 2;
-            }
+            // if (msg.getSrcid().equals(driverID)) {
+            // Source Dead from driver
+            return 1;
+            // }
+            // else {
+            // Source Dead from neighbor
+            // No source dead from neighbor
+            // every task will be notified by the failure
+            // return 2;
+            // }
+          } else if (msg.getType() == Type.SourceAdd) {
+            // Source add message from the driver
+            return 3;
           }
         }
         // If there is no failure in receiving,
-        // we continue original operations.
+        // we continue the original operations.
+        // For receiving, send an ack message.
         if (op[1] == 0) {
-          // sender
-          // .send(Utils.bldVersionedGCM(groupName, operName, Type.AllReduce,
-          // selfID, iteration, taskID, iteration, EmptyByteArr));
+          // send an ack message to the sender
           sendMsg(Type.AllReduce, selfID, iteration, taskID, EmptyByteArr);
         }
         opPerformed.put(op[0], op[1]);
@@ -314,6 +357,7 @@ public class AllReducer<T> implements AllReduce<T>,
     return 0;
   }
 
+  @SuppressWarnings("unused")
   private void propagateFailure(int iteration, String selfID,
     List<int[]> opDimList, Map<Integer, String> opTaskMap,
     Map<Integer, Integer> opPerformed) throws NetworkException,
@@ -358,8 +402,8 @@ public class AllReducer<T> implements AllReduce<T>,
     }
   }
 
-  private GroupCommMessage receiveMsg(int version, String driverID, String neighborID)
-    throws InterruptedException {
+  private GroupCommMessage receiveMsg(int version, String driverID,
+    String neighborID) throws InterruptedException {
     GroupCommMessage msg = null;
     do {
       msg = getMsgFromMap(version, neighborID);
@@ -418,5 +462,23 @@ public class AllReducer<T> implements AllReduce<T>,
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
       + selfID + " - ";
+  }
+
+  /**
+   * Check if there is failure in the last "apply".
+   * 
+   * @return If the last iteration is failed.
+   */
+  public boolean isLastIterationFailed() {
+    return this.isLastIteFailed.get();
+  }
+
+  /**
+   * Get the number of failed iterations. 0 means no failure.
+   * 
+   * @return
+   */
+  public int getNumFailedIterations() {
+    return this.numFailedIterations;
   }
 }

@@ -58,7 +58,7 @@ public interface AllReduce<T> extends GroupCommOperator{
    * @throws NetworkException
    */
   T apply(T element, List<? extends Identifier> order)
-      throws InterruptedException, NetworkException;
+    throws InterruptedException, NetworkException;
 
   /**
    * Get the {@link ReduceFunction} configured.
