@@ -78,6 +78,14 @@ public class FlatTopology implements Topology {
     this.rootId = rootId;
   }
 
+  /**
+   * @return the rootId
+   */
+  @Override
+  public String getRootId() {
+    return rootId;
+  }
+
   @Override
   public void setOperSpec(final OperatorSpec spec) {
     this.operatorSpec = spec;
@@ -120,6 +128,7 @@ public class FlatTopology implements Topology {
     return jcb.build();
   }
 
+  @Override
   public int getNodeVersion(final String taskId) {
     final TaskNode node = nodes.get(taskId);
     if(node==null) {
@@ -277,7 +286,7 @@ public class FlatTopology implements Topology {
           if (node.isRunning()) {
             LOG.info(getQualifiedName() + node.taskId() + " is running");
             if (node.hasChanges()) {
-              LOG.info(getQualifiedName() + node.taskId() + " has changes.");
+              LOG.info(getQualifiedName() + node.taskId() + " has changes");
               changes.setChanges(true);
               break;
             } else {
@@ -286,7 +295,9 @@ public class FlatTopology implements Topology {
             }
           } else {
             LOG.info(getQualifiedName() + node.taskId()
-                + " is not running. Skipping");
+                + " is not running. So has changes");
+            changes.setChanges(true);
+            break;
           }
         }
       }

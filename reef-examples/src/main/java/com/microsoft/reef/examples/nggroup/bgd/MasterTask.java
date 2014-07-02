@@ -60,7 +60,7 @@ public class MasterTask implements Task {
   private final Reduce.Receiver<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
   private final Broadcast.Sender<Double> minEtaBroadcaster;
   private final int dimensions;
-  private final boolean ignoreAndContinue = false;
+  private final boolean ignoreAndContinue = true;
   private final com.microsoft.reef.examples.nggroup.bgd.StepSizes ts;
   private final double lambda;
   private final int maxIters;

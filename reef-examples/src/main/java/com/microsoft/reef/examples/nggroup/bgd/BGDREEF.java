@@ -60,7 +60,7 @@ public class BGDREEF {
   /**
    * Number of milliseconds to wait for the job to complete.
    */
-  private static final int JOB_TIMEOUT = 10 * 60 * 1000;
+  private static final int JOB_TIMEOUT = 2 * 60 * 1000;
 
   /**
    * Command line parameter = true to run locally, or false to run on YARN.
@@ -142,7 +142,7 @@ public class BGDREEF {
     TextInputFormat.addInputPath(jobConf, new Path(input));
     final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
         .setNumber(1)
-        .setMemory(512)
+        .setMemory(1024)
         .build();
     final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
         .setMemoryMB(1024)
@@ -153,6 +153,7 @@ public class BGDREEF {
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
             .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
+            .set(DriverConfiguration.ON_TASK_RUNNING, BGDDriver.TaskRunningHandler.class)
             .set(DriverConfiguration.ON_TASK_FAILED, BGDDriver.TaskFailedHandler.class)
             .set(DriverConfiguration.ON_TASK_COMPLETED, BGDDriver.TaskCompletedHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, "BGDDriver"))

@@ -16,7 +16,9 @@
 package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -29,6 +31,7 @@ import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.task.CompletedTask;
 import com.microsoft.reef.driver.task.FailedTask;
+import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
@@ -58,6 +61,7 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.poison.PoisonedConfiguration;
+import com.microsoft.reef.runtime.common.driver.DriverStatusManager;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -93,7 +97,9 @@ public class BGDDriver {
 
   private final double lambda;
 
+  private final Map<String, RunningTask> runningTasks = new HashMap<>();
 
+  private final AtomicBoolean jobComplete = new AtomicBoolean(false);
 
   private final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
 
@@ -101,12 +107,15 @@ public class BGDDriver {
 
   private final int iters;
 
+  private final DriverStatusManager driverStatusManager;
+
 
   @Inject
   public BGDDriver(
       final DataLoadingService dataLoadingService,
       final GroupCommDriver groupCommDriver,
       final ConfigurationSerializer confSerializer,
+      final DriverStatusManager driverStatusManager,
       @Parameter(Dimensions.class) final int dimensions,
       @Parameter(Lambda.class) final double lambda,
       @Parameter(Eps.class) final double eps,
@@ -114,12 +123,13 @@ public class BGDDriver {
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
+    this.driverStatusManager = driverStatusManager;
     this.dimensions = dimensions;
     this.lambda = lambda;
     this.eps = eps;
     this.iters = iters;
 
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, dataLoadingService.getNumberOfPartitions() + 1);
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, /*dataLoadingService.getNumberOfPartitions()*/2 + 1);
     LOG.info("Obtained all communication group");
 
     final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
@@ -207,8 +217,43 @@ public class BGDDriver {
           System.out.println(loss);
         }
       }
-      LOG.log(Level.FINEST, "Releasing Context: {0}", task.getId());
-      task.getActiveContext().close();
+      LOG.log(Level.FINEST, "Releasing All Contexts");
+      synchronized (runningTasks) {
+        final RunningTask rTask = runningTasks.remove(task.getId());
+        if(rTask!=null) {
+          task.getActiveContext().close();
+        }
+        if(task.getId().equals("MasterTask")) {
+          jobComplete.set(true);
+          for(final RunningTask runTask : runningTasks.values()) {
+            runTask.getActiveContext().close();
+          }
+          runningTasks.clear();
+          driverStatusManager.onComplete();
+        }
+      }
+
+
+//      task.getActiveContext().close();
+
+    }
+
+  }
+
+  public class TaskRunningHandler implements EventHandler<RunningTask> {
+
+    @Override
+    public void onNext(final RunningTask runningTask) {
+      synchronized (runningTasks) {
+        if(!jobComplete.get()) {
+          LOG.info("Job has not completed yet. Adding to runningTasks");
+          runningTasks.put(runningTask.getId(), runningTask);
+        }
+        else {
+          LOG.info("Job has completed. Not adding to runningTasks. Closing the active context");
+          runningTask.getActiveContext().close();
+        }
+      }
     }
 
   }
@@ -218,6 +263,12 @@ public class BGDDriver {
     @Override
     public void onNext(final ActiveContext activeContext) {
       LOG.info("Got active context-" + activeContext.getId());
+      synchronized (runningTasks) {
+        if (jobComplete.get()) {
+          LOG.info("Job has completed. Not submitting any task. Closing activecontext");
+          activeContext.close();
+        }
+      }
       /**
        * The active context can be either from
        * data loading service or after network
@@ -318,6 +369,20 @@ public class BGDDriver {
     @Override
     public void onNext(final FailedTask failedTask) {
       LOG.info("Got failed Task " + failedTask.getId());
+
+      synchronized (runningTasks) {
+        if (jobComplete.get()) {
+          LOG.info("Job has completed. Not resubmitting. Closing activecontext");
+          final RunningTask rTask = runningTasks.remove(failedTask.getId());
+          if(rTask!=null) {
+            rTask.getActiveContext().close();
+          }
+          return;
+        }
+        else {
+          runningTasks.remove(failedTask.getId());
+        }
+      }
       final ActiveContext activeContext = failedTask.getActiveContext().get();
       final Configuration partialTaskConf = Tang.Factory.getTang()
           .newConfigurationBuilder(

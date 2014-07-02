@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -58,6 +59,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
   private OperatorTopologyStruct baseTopology;
   private OperatorTopologyStruct effectiveTopology;
   private CountDownLatch topologyLockAquired = new CountDownLatch(1);
+  private final AtomicBoolean updatingTopo = new AtomicBoolean(false);
 
 
   private final int version;
@@ -110,6 +112,7 @@ public class OperatorTopologyImpl implements OperatorTopology {
       case UpdateTopology:
         baseTopologyUpdateStage.onNext(msg);
         topologyLockAquired.await();
+        updatingTopo.set(true);
         LOG.info(getQualifiedName() + "topoLockAquired CDL released. Resetting it to new CDL");
         //reset the Count Down Latch for the next update
         topologyLockAquired = new CountDownLatch(1);
@@ -144,6 +147,9 @@ public class OperatorTopologyImpl implements OperatorTopology {
         default:
         synchronized (topologyLock) {
           //Data msg
+          while(updatingTopo.get()) {
+            topologyLock.wait();
+          }
           if (effectiveTopology != null) {
             LOG.info(getQualifiedName()
                 + "Non-null effectiveTopo.addAsData(msg)");
@@ -206,6 +212,8 @@ public class OperatorTopologyImpl implements OperatorTopology {
       copyDeletionDeltas(deletionDeltas);
       LOG.info(getQualifiedName() + "Updating effective topology struct with deletion msgs");
       effectiveTopology.update(deletionDeltas);
+      updatingTopo.set(false);
+      topologyLock.notifyAll();
     }
     LOG.info(getQualifiedName() + "Relinquished topoLock");
   }

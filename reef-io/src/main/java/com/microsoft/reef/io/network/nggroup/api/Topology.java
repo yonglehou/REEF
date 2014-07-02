@@ -77,4 +77,9 @@ public interface Topology {
    */
   int getNodeVersion(String taskId);
 
+  /**
+   * @return
+   */
+  String getRootId();
+
 }
