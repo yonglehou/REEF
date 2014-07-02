@@ -19,8 +19,6 @@ import java.util.ArrayList;
 
 import javax.inject.Inject;
 
-import org.mortbay.log.Log;
-
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
@@ -60,7 +58,7 @@ public class MasterTask implements Task {
   private final Reduce.Receiver<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
   private final Broadcast.Sender<Double> minEtaBroadcaster;
   private final int dimensions;
-  private final boolean ignoreAndContinue = true;
+  private final boolean ignoreAndContinue = false;
   private final com.microsoft.reef.examples.nggroup.bgd.StepSizes ts;
   private final double lambda;
   private final int maxIters;
@@ -182,12 +180,12 @@ public class MasterTask implements Task {
   private boolean chkAndUpdate() {
     final GroupChanges changes = communicationGroupClient.getTopologyChanges();
     if(changes.exist()){
-      Log.info("There exist topology changes. Asking to update Topology");
+      System.out.println("There exist topology changes. Asking to update Topology");
       communicationGroupClient.updateTopology();
       return true;
     }
     else {
-      Log.info("No changes in topology exist. So not updating topology");
+      System.out.println("No changes in topology exist. So not updating topology");
       return false;
     }
   }

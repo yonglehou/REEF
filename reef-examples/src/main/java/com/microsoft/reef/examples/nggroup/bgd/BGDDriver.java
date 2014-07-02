@@ -129,7 +129,7 @@ public class BGDDriver {
     this.eps = eps;
     this.iters = iters;
 
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, /*dataLoadingService.getNumberOfPartitions()*/2 + 1);
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, dataLoadingService.getNumberOfPartitions() + 1);
     LOG.info("Obtained all communication group");
 
     final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;

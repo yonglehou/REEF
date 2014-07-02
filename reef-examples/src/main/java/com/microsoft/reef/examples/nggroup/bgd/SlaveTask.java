@@ -148,6 +148,9 @@ public class SlaveTask implements Task {
    * @return
    */
   private Pair<Vector,Integer> lineSearchEvals() {
+    if(examples.isEmpty()) {
+      loadData();
+    }
     final Vector zed = new DenseVector(examples.size());
     final Vector ee = new DenseVector(examples.size());
     for (int i=0;i<examples.size();i++) {
