@@ -146,22 +146,25 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     }
     operatorSpecs.put(operatorName, spec);
     // Currently only AllReduce uses hyper cube topology
-    final Topology topology = new HyperCubeTopology(senderStage, groupName,
-      operatorName, driverId, numberOfTasks);
+    final Topology topology =
+      new HyperCubeTopology(senderStage, groupName, operatorName, driverId,
+        numberOfTasks);
     // No root to set, use hyper cube topology
     // topology.setRoot(spec.getReceiverId());
     topology.setOperSpec(spec);
     topologies.put(operatorName, topology);
     // Add running task handler
     // commGroupRunningTaskHandler is used by groupCommRunningTaskStage
-    final TopologyRunningTaskHandler topologyRunningTaskHandler = new TopologyRunningTaskHandler(
-      topology);
-    commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
+    // final TopologyRunningTaskHandler topologyRunningTaskHandler = new
+    // TopologyRunningTaskHandler(
+    // topology);
+    // commGroupRunningTaskHandler.addHandler(topologyRunningTaskHandler);
     // Add failed task handler
     // commGroupFailedTaskHandler is used by groupCommFailedTaskStage
-    final TopologyFailedTaskHandler topologyFailedTaskHandler = new TopologyFailedTaskHandler(
-      topology);
-    commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
+    // final TopologyFailedTaskHandler topologyFailedTaskHandler = new
+    // TopologyFailedTaskHandler(
+    // topology);
+    // commGroupFailedTaskHandler.addHandler(topologyFailedTaskHandler);
     // Add failed evaluator handler
     // This handler is not added to any stage?
     // See newCommunicationGroup in GroupCommDriverImpl
@@ -170,10 +173,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     // commGroupFailedEvaluatorHandler.addHandler(topologyFailedEvaluatorHandler);
     // Add topology message handler
     // commGroupMessageHandler is used by groupCommMessageStage
-    final TopologyMessageHandler topologyMessageHandler = new TopologyMessageHandler(
-      topology);
-    commGroupMessageHandler.addTopologyMessageHandler(operatorName,
-      topologyMessageHandler);
+    // final TopologyMessageHandler topologyMessageHandler = new
+    // TopologyMessageHandler(
+    // topology);
+    // commGroupMessageHandler.addTopologyMessageHandler(operatorName,
+    // topologyMessageHandler);
     // Each stage is a single thread pool,
     // take event from the queue and processed by the handler
     return this;

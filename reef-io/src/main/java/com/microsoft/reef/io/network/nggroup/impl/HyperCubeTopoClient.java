@@ -96,11 +96,6 @@ public class HyperCubeTopoClient {
     }
   }
 
-  void initialize() {
-    // Just try to receive the topology
-    getTopology();
-  }
-
   void getTopology() {
     // Wait for the data
     GroupCommMessage msg = null;
@@ -144,6 +139,7 @@ public class HyperCubeTopoClient {
       } else {
         isNewNodeAdded = true;
       }
+      din.close();
     } catch (IOException e) {
       e.printStackTrace();
       return null;

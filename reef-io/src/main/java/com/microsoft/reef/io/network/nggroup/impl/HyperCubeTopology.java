@@ -15,7 +15,9 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -96,7 +98,7 @@ public class HyperCubeTopology implements Topology {
   }
 
   private TopoStruct activeTopo = new TopoStruct();
- 
+
   /**
    * When the number of running tasks arrives at the minimum number required,
    * set the topology as initialized
@@ -106,7 +108,10 @@ public class HyperCubeTopology implements Topology {
   private final int minInitialTasks;
   private final AtomicInteger numRunningInitialTasks = new AtomicInteger(0);
   /** Iteration is used to track the iteration number of allreduce operation */
-  private final AtomicInteger iteration = new AtomicInteger(0);
+  // Because the version id could be used as iteration id for messages
+  // transmitted between tasks and the messages between driver and tasks use
+  // version id 0, we start iteration with 1.
+  private final AtomicInteger iteration = new AtomicInteger(1);
 
   /** This is used to collect all new task ids */
   private final Set<String> newTasks = new HashSet<>();
@@ -142,9 +147,10 @@ public class HyperCubeTopology implements Topology {
 
   @Override
   public Configuration getConfig(final String taskID) {
-    // The topology configuration binds with the sender receiver implementation!
-    // Sync with the current iteration number
-    final int version = iteration.get();
+    // The topology configuration binds with the sender/receiver client
+    // implementation!
+    // Fix the number of version to 0
+    final int version = 0;
     final JavaConfigurationBuilder jcb =
       Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
@@ -560,7 +566,8 @@ public class HyperCubeTopology implements Topology {
     } else {
       // Once the topology is initialized,
       // copy the current active topology to a sand box (maybe there is one, if
-      // sandbox is not null), apply adding and see which neighbor nodes are modified
+      // sandbox is not null), apply adding and see which neighbor nodes are
+      // modified
       if (sandBox == null) {
         System.out.println("Copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
@@ -584,8 +591,9 @@ public class HyperCubeTopology implements Topology {
         if (!failedTaskNeighbors.contains(mTaskID)
           && !newTaskNeighbors.contains(mTaskID) && !newTasks.contains(mTaskID)) {
           System.out.println("New task neighbor: " + mTaskID);
+          // The version number is always 0.
           sendMsg(Utils.bldVersionedGCM(groupName, operName, Type.SourceAdd,
-            driverID, iteration.get(), mTaskID, iteration.get(), EmptyByteArr));
+            driverID, 0, mTaskID, 0, EmptyByteArr));
           newTaskNeighbors.add(mTaskID);
           newTaskNeighbors.add(mTaskID);
           isAdditionSent = true;
@@ -621,10 +629,9 @@ public class HyperCubeTopology implements Topology {
       encodeNodeTopologyToBytes(node, topo.nodeMap, baseIteration,
         newIteration, isFailed);
     // Currently we try to build message directly on the original message
-    // builder. It could be confusing, here we set source version and dest
-    // version to be the same.
-    sendMsg(Utils.bldVersionedGCM(groupName, operName, msgType, driverID,
-      newIteration, node.getTaskID(), newIteration, bytes));
+    // builder. The version number is always 0.
+    sendMsg(Utils.bldVersionedGCM(groupName, operName, msgType, driverID, 0,
+      node.getTaskID(), 0, bytes));
   }
 
   private TopoStruct copyTopology(TopoStruct topo) {
@@ -662,6 +669,8 @@ public class HyperCubeTopology implements Topology {
     dout.writeInt(baseIteration);
     dout.writeInt(newIteration);
     dout.writeBoolean(isFailed);
+    dout.flush();
+    dout.close();
     return bout.toByteArray();
   }
 
@@ -842,7 +851,8 @@ public class HyperCubeTopology implements Topology {
     } else {
       // Once the topology is initialized,
       // copy the current active topology to a sand box (maybe there is one, if
-      // sandbox is not null), apply adding and see which neighbor nodes are modified
+      // sandbox is not null), apply adding and see which neighbor nodes are
+      // modified
       if (sandBox == null) {
         sandBox = copyTopology(activeTopo);
       }
@@ -851,7 +861,7 @@ public class HyperCubeTopology implements Topology {
       System.out.println("Print active Hypercube.");
       printHyperCube(activeTopo);
       System.out.println("Print sandbox Hypercube.");
-      printHyperCube(sandBox); 
+      printHyperCube(sandBox);
       // See if this task is in newTasks.
       // if yes, remove.
       if (newTasks.contains(taskID)) {
@@ -883,8 +893,9 @@ public class HyperCubeTopology implements Topology {
           && !failedTaskNeighbors.contains(mTaskID)) {
           System.out.println("Failed task neighbor: " + mTaskID);
           // Send failure message
+          // The version number is always 0.
           sendMsg(Utils.bldVersionedGCM(groupName, operName, Type.SourceDead,
-            driverID, iteration.get(), mTaskID, iteration.get(), EmptyByteArr));
+            driverID, 0, mTaskID, 0, EmptyByteArr));
           failedTaskNeighbors.add(mTaskID);
           isFailureSent = true;
         }
@@ -903,17 +914,29 @@ public class HyperCubeTopology implements Topology {
     // Invoked by TopologyMessageHandler when message arrives
     // We ignore TopologyChanges and UpdateTopology two messages
     // Assume nodes won't send these two types of messages
-    // For broadcast and reduce operator, master task send these two types of
-    // messages to the driver
+    int iteration = getIterationInBytes(Utils.getData(msg));
     System.out.println(getQualifiedName() + "processing " + msg.getType()
-      + " from " + msg.getSrcid() + " with version " + msg.getSrcVersion());
+      + " from " + msg.getSrcid() + " with iteration " + iteration);
     if (msg.getType().equals(Type.SourceDead)) {
-      taskReports.put(msg.getSrcid(), msg.getSrcVersion());
+      taskReports.put(msg.getSrcid(), iteration);
       processNeighborUpdate();
     } else if (msg.getType().equals(Type.SourceAdd)) {
-      taskReports.put(msg.getSrcid(), msg.getSrcVersion());
+      taskReports.put(msg.getSrcid(), iteration);
       processNeighborUpdate();
     }
+  }
+  
+  private int getIterationInBytes(byte[] bytes) {
+    ByteArrayInputStream bin = new ByteArrayInputStream(bytes);
+    DataInputStream din = new DataInputStream(bin);
+    int iteration = 0;
+    try {
+      iteration = din.readInt();
+      din.close();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return iteration;
   }
 
   private void processNeighborUpdate() {
@@ -1071,5 +1094,20 @@ public class HyperCubeTopology implements Topology {
     // topo.addTask("task-1", 1);
     // topo.addTask("task-2", 2);
     // topo.printHyperCube();
+  }
+
+  @Override
+  public boolean isRunning(String taskId) {
+    // This method is not invoked.
+    System.out.println("Is topology running?");
+    return false;
+  }
+
+  @Override
+  public int getNodeVersion(String taskId) {
+    // This method is used to check if the version of the message
+    // from the sender is matched with the current topology version.
+    // Always uses 0.
+    return 0;
   }
 }
