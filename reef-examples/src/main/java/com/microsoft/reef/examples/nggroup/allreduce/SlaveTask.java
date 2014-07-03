@@ -56,10 +56,14 @@ public class SlaveTask implements Task {
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1, 0 });
     Vector newModel = null;
-    final long time1 = System.currentTimeMillis();
     final int numIters = 10;
+    final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
+      if (Math.random() < 0.1) {
+        System.out.println("Simulated Failure");
+        throw new RuntimeException("Simulated Failure");
+      }
       model.set(1, i);
       newModel = modelAllReducer.apply(model);
       if (modelAllReducer.isLastIterationFailed()) {
@@ -75,13 +79,9 @@ public class SlaveTask implements Task {
           sb.append(newModel.get(j) + ",");
         }
         System.out.println(sb);
-        model = newModel;
+        // model = newModel;
       } else {
         System.out.println("The result is null.");
-      }
-      if (Math.random() < 0.1) {
-        System.out.println("Simulated Failure");
-        throw new RuntimeException("Simulated Failure");
       }
     }
     final long time2 = System.currentTimeMillis();

@@ -57,8 +57,8 @@ public class MasterTask implements Task {
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1, 0 });
     Vector newModel = null;
-    final long time1 = System.currentTimeMillis();
     final int numIters = 10;
+    final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
       model.set(1, i);
@@ -76,7 +76,7 @@ public class MasterTask implements Task {
           sb.append(newModel.get(j) + ",");
         }
         System.out.println(sb);
-        model = newModel;
+        // model = newModel;
       } else {
         System.out.println("The result is null.");
       }

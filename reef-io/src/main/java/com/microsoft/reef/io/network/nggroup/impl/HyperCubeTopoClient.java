@@ -18,9 +18,10 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
@@ -35,51 +36,41 @@ import com.microsoft.tang.annotations.Name;
  * synchronized by AllReducer.
  * 
  */
+
+class NodeTopology {
+  HyperCubeNode node = null;
+  Map<Integer, String> opTaskMap = null;
+  int baseIteration = -1;
+  int newIteration = -1;
+  // The reasons for updating
+  boolean isFailed = false;
+  boolean isNewNodeAdded = false;
+}
+
 public class HyperCubeTopoClient {
 
-  // private static final Logger LOG =
-  // Logger.getLogger(HyperCubeTopoClient.class
-  // .getName());
-  // private static final byte[] EmptyByte = new byte[0];
-
-  private final Class<? extends Name<String>> groupName;
-  private final Class<? extends Name<String>> operName;
-  private final String selfID;
-  // private final String driverID;
-  // private final Sender sender;
+  // private final Class<? extends Name<String>> groupName;
+  // private final Class<? extends Name<String>> operName;
+  // private final String selfID;
 
   private final BlockingQueue<GroupCommMessage> ctrlQueue =
     new LinkedBlockingQueue<>();
-
-  private final NodeTopology nodeTopo;
-  private int baseIteration;
-  private int newIteration;
-  private boolean isFailed;
-  private boolean isNewNodeAdded;
-
-  private class NodeTopology {
-    private HyperCubeNode node;
-    private ConcurrentMap<Integer, String> opTaskMap;
-  }
-
+  private final TreeMap<Integer, NodeTopology> nodeTopoMap = new TreeMap<>();
+  private final int version;
+  
   public HyperCubeTopoClient(final Class<? extends Name<String>> groupName,
     final Class<? extends Name<String>> operName, final String selfId,
     final String driverId, final Sender sender, final int version) {
-    super();
-    this.groupName = groupName;
-    this.operName = operName;
-    this.selfID = selfId;
-    this.baseIteration = version;
-    this.newIteration = version;
-    this.nodeTopo = new NodeTopology();
-    // this.driverID = driverId;
-    // this.sender = sender;
+    // this.groupName = groupName;
+    // this.operName = operName;
+    // this.selfID = selfId;
+    this.version = version;
   }
 
   public void handle(final GroupCommMessage msg) {
     // No topology change or topology updated.
     // Those two types of messages won't come here.
-    System.out.println(getQualifiedName() + "Handling " + msg.getType()
+    System.out.println("Topology client - Handling " + msg.getType()
       + " msg from " + msg.getSrcid());
     try {
       switch (msg.getType()) {
@@ -92,34 +83,48 @@ public class HyperCubeTopoClient {
       }
     } catch (final InterruptedException e) {
       throw new RuntimeException(
-        "InterruptedException while trying to put ctrl msg into delta queue", e);
+        "InterruptedException while trying to put ctrl msg into the queue", e);
     }
   }
 
-  void getTopology() {
+  void waitForNewNodeTopology() {
     // Wait for the data
     GroupCommMessage msg = null;
-    System.out.println(getQualifiedName()
+    System.out.println("Topology client - "
       + "Wait for the topology from the driver.");
-    try {
-      msg = ctrlQueue.take();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }
-    System.out.println(getQualifiedName() + "Got " + msg.getType()
-      + " msg from " + msg.getSrcid());
+    do {
+      try {
+        msg = ctrlQueue.take();
+        // If this msg is mistakenly put into the queue, ignore it.
+        if (msg.getSrcVersion() != version) {
+          msg = null;
+        }
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    } while (msg == null);
+    System.out.println("Topology client - Got " + msg.getType() + " msg from "
+      + msg.getSrcid());
     // Decode the topology data
-    decodeNodeTopologyFromBytes(Utils.getData(msg));
-    // LOG.info(nodeTopo.node.toString());
+    NodeTopology nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
     System.out.println(nodeTopo.node.toString());
+    // If there is an old topology agreed on the same iteration number
+    // replace it.
+    // The control flow in "apply" is sequential, if tasks didn't get topology
+    // update for the current source add/dead message, it won't process the next
+    // one. So there won't be two topologies coming at the same time.
+    // It is also same to the driver, if the driver didn't get a message from
+    // the task for the current source dead/add situation, it won't generate
+    // next message to this task.
+    nodeTopoMap.put(nodeTopo.newIteration, nodeTopo);
   }
 
   private NodeTopology decodeNodeTopologyFromBytes(byte[] bytes) {
     ByteArrayInputStream bin = new ByteArrayInputStream(bytes);
     DataInputStream din = new DataInputStream(bin);
+    NodeTopology nodeTopo = new NodeTopology();
     HyperCubeNode node = new HyperCubeNode("", -1);
-    ConcurrentMap<Integer, String> opTaskMap =
-      new ConcurrentHashMap<Integer, String>();
+    Map<Integer, String> opTaskMap = new HashMap<Integer, String>();
     nodeTopo.node = node;
     nodeTopo.opTaskMap = opTaskMap;
     try {
@@ -128,16 +133,16 @@ public class HyperCubeTopoClient {
       for (int i = 0; i < opTaskMapSize; i++) {
         opTaskMap.put(din.readInt(), din.readUTF());
       }
-      baseIteration = din.readInt();
-      newIteration = din.readInt();
-      isFailed = din.readBoolean();
+      nodeTopo.baseIteration = din.readInt();
+      nodeTopo.newIteration = din.readInt();
+      nodeTopo.isFailed = din.readBoolean();
       // We set the reason for topology update
       // if it is not for failure,
       // must be for the addition of new nodes.
-      if (isFailed) {
-        isNewNodeAdded = false;
+      if (nodeTopo.isFailed) {
+        nodeTopo.isNewNodeAdded = false;
       } else {
-        isNewNodeAdded = true;
+        nodeTopo.isNewNodeAdded = true;
       }
       din.close();
     } catch (IOException e) {
@@ -147,32 +152,11 @@ public class HyperCubeTopoClient {
     return nodeTopo;
   }
 
-  private String getQualifiedName() {
-    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
-      + selfID + " - ";
+  NodeTopology getNodeTopology(int iteration) {
+    return nodeTopoMap.get(iteration);
   }
 
-  HyperCubeNode getNode() {
-    return this.nodeTopo.node;
-  }
-
-  ConcurrentMap<Integer, String> getOpTaskMap() {
-    return this.nodeTopo.opTaskMap;
-  }
-
-  int getNewIteration() {
-    return newIteration;
-  }
-
-  int getBaseIteration() {
-    return baseIteration;
-  }
-
-  boolean isFailed() {
-    return isFailed;
-  }
-
-  boolean isNewNodeAdded() {
-    return isNewNodeAdded;
+  NodeTopology getNewestNodeTopology() {
+    return nodeTopoMap.lastEntry().getValue();
   }
 }
