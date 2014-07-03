@@ -18,8 +18,11 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -154,6 +157,22 @@ public class HyperCubeTopoClient {
 
   NodeTopology getNodeTopology(int iteration) {
     return nodeTopoMap.get(iteration);
+  }
+  
+  void removeOldNodeTopologies(int iteration) {
+    List<Integer> rmKeys = new ArrayList<>();
+    for (Entry<Integer, NodeTopology> entry : nodeTopoMap.entrySet()) {
+      if (entry.getKey() < iteration) {
+        rmKeys.add(entry.getKey());
+      }
+    }
+    StringBuffer sb = new StringBuffer();
+    for (int key : rmKeys) {
+      sb.append(key + " ");
+      nodeTopoMap.remove(key);
+    }
+    System.out.println("Current new topology with iteration " + iteration
+      + ". Remove topologies with iterations: " + sb);
   }
 
   NodeTopology getNewestNodeTopology() {

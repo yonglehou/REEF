@@ -24,7 +24,6 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
-import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.nggroup.impl.AllReducer;

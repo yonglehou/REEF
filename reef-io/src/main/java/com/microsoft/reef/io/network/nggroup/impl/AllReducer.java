@@ -71,7 +71,7 @@ public class AllReducer<T> implements AllReduce<T>,
   private final NetworkService<GroupCommMessage> netService;
   private final Sender sender;
   private final int version;
-  
+
   private final ReduceFunction<T> reduceFunction;
   private final HyperCubeTopoClient topoClient;
   // private final CommunicationGroupClient commGroupClient;
@@ -89,6 +89,7 @@ public class AllReducer<T> implements AllReduce<T>,
   private Map<Integer, String> opTaskMap;
   private final AtomicBoolean isLastIteFailed = new AtomicBoolean(false);
   private int numFailedIterations = 0;
+
   // private final AtomicBoolean isNewTaskAdded = new AtomicBoolean(false);
 
   @Inject
@@ -166,11 +167,13 @@ public class AllReducer<T> implements AllReduce<T>,
     if (msg.getType() == Type.AllReduce) {
       // Messages are put in the queue
       // and wait to be processed in "apply"
+      System.out.println(getQualifiedName() + " Get AllReduce message from "
+        + msg.getSrcid() + " with version " + msg.getSrcVersion());
       dataQueue.add(msg);
     } else {
       if (msg.getSrcVersion() != version) {
         System.out.println(getQualifiedName()
-          + "Current task side node version is " + version
+          + " Current task side node version is " + version
           + ", which is different from the driver side node version "
           + msg.getSrcVersion());
         return;
@@ -202,7 +205,7 @@ public class AllReducer<T> implements AllReduce<T>,
       // Here we just initialize this operator only
       initialize();
     }
-    
+
     int ite = iteration.get();
     System.out.println("Current iteration: " + ite);
     boolean isFailed = false;
@@ -275,7 +278,7 @@ public class AllReducer<T> implements AllReduce<T>,
         isFailed = topoClient.getNewestNodeTopology().isFailed;
         if (isFailed) {
           break;
-        } 
+        }
         // Restart this dimension
         // continue with the ops not performed
         i--;
@@ -283,19 +286,25 @@ public class AllReducer<T> implements AllReduce<T>,
     }
     if (isFailed) {
       reducedValue = null;
-      // Remove received byte data between this iteration and the new iteration
-      for (int i = ite; i < topoClient.getNewestNodeTopology().newIteration; i++) {
-        dataMap.remove(i);
-      }
       isLastIteFailed.set(true);
       numFailedIterations =
-        iteration.get() - topoClient.getNewestNodeTopology().baseIteration + 1;
+        ite - topoClient.getNewestNodeTopology().baseIteration + 1;
+      // Remove received byte data between this iteration and the new iteration
+      // Because in failure state, every task is stopped and updated with new
+      // topology, tasks no longer send messages of failed iterations.
+      StringBuffer sb = new StringBuffer();
+      for (int i = ite; i < topoClient.getNewestNodeTopology().newIteration; i++) {
+        sb.append(i + " ");
+        dataMap.remove(i);
+      }
+      System.out.println("Remove data from iteration " + sb);
       // If failure happens, move to the new iteration assigned by the driver
       iteration.set(topoClient.getNewestNodeTopology().newIteration);
     } else {
-      dataMap.remove(ite);
       isLastIteFailed.set(false);
       numFailedIterations = 0;
+      dataMap.remove(ite);
+      System.out.println("Remove data from iteration " + ite);
       iteration.incrementAndGet();
     }
     return reducedValue;
@@ -307,6 +316,9 @@ public class AllReducer<T> implements AllReduce<T>,
     if (nodeTopo != null) {
       node = nodeTopo.node;
       opTaskMap = nodeTopo.opTaskMap;
+      // If update successful, remove the topologies whose iteration number is
+      // lower than the current one
+      topoClient.removeOldNodeTopologies(iteration);
     }
   }
 
