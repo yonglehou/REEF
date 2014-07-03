@@ -146,6 +146,11 @@ public class HyperCubeTopology implements Topology {
   }
 
   @Override
+  public String getRootId() {
+    return null;
+  }
+
+  @Override
   public void setOperSpec(final OperatorSpec spec) {
     this.operatorSpec = spec;
   }
