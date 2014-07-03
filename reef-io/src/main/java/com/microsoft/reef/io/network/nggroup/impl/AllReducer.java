@@ -129,10 +129,11 @@ public class AllReducer<T> implements AllReduce<T>,
 
   @Override
   public int getVersion() {
-    // Always return 0.
-    // Agreed by client and driver in hypercube topology
-    // and allreduce related code.
-    return 0;
+    // Use a number agreed by client and driver in hypercube topology
+    // and allreduce related code. But because this method only invoked by
+    // getTopologyChanges and UpdateTopology two methods which are not used by
+    // allreduce. No affect.
+    return version;
   }
 
   @Override
