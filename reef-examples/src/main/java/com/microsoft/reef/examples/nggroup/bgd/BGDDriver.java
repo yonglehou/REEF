@@ -49,8 +49,10 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinParts;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -109,6 +111,8 @@ public class BGDDriver {
 
   private final DriverStatusManager driverStatusManager;
 
+  private final boolean rampup;
+
 
   @Inject
   public BGDDriver(
@@ -119,7 +123,9 @@ public class BGDDriver {
       @Parameter(Dimensions.class) final int dimensions,
       @Parameter(Lambda.class) final double lambda,
       @Parameter(Eps.class) final double eps,
-      @Parameter(Iterations.class) final int iters){
+      @Parameter(Iterations.class) final int iters,
+      @Parameter(RampUp.class) final boolean rampup,
+      @Parameter(MinParts.class) final int minParts){
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
@@ -128,8 +134,12 @@ public class BGDDriver {
     this.lambda = lambda;
     this.eps = eps;
     this.iters = iters;
+    this.rampup = rampup;
 
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, dataLoadingService.getNumberOfPartitions() + 1);
+    final int minNumOfPartitions = rampup ? minParts : dataLoadingService.getNumberOfPartitions();
+    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(
+        AllCommunicationGroup.class,
+        minNumOfPartitions + 1);
     LOG.info("Obtained all communication group");
 
     final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
@@ -229,7 +239,7 @@ public class BGDDriver {
             runTask.getActiveContext().close();
           }
           runningTasks.clear();
-          driverStatusManager.onComplete();
+//          driverStatusManager.onComplete();
         }
       }
 
@@ -289,6 +299,7 @@ public class BGDDriver {
                .bindNamedParameter(Lambda.class, Double.toString(lambda))
                .bindNamedParameter(Eps.class, Double.toString(eps))
                .bindNamedParameter(Iterations.class, Integer.toString(iters))
+               .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
                .build();
 
           allCommGroup.addTask(partialTaskConf);
@@ -305,7 +316,7 @@ public class BGDDriver {
                   .set(TaskConfiguration.TASK, SlaveTask.class)
                   .build()
                   ,PoisonedConfiguration.TASK_CONF
-                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
+                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.1")
                   .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
                   .build())
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))

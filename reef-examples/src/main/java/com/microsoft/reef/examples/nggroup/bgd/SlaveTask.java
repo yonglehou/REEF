@@ -99,7 +99,7 @@ public class SlaveTask implements Task {
         break;
 
       case ComputeGradientWithModel:
-        if(Math.random()<0.1) {
+        if(Math.random()<0.01) {
           throw new RuntimeException("Simulated Failure");
         }
         this.model = modelBroadcaster.receive();
@@ -107,7 +107,7 @@ public class SlaveTask implements Task {
         break;
 
       case ComputeGradientWithMinEta:
-        if(Math.random()<0.1) {
+        if(Math.random()<0.01) {
           throw new RuntimeException("Simulated Failure");
         }
         final double minEta = minEtaBroadcaster.receive();
@@ -119,7 +119,7 @@ public class SlaveTask implements Task {
         break;
 
       case DoLineSearch:
-        if(Math.random()<0.1) {
+        if(Math.random()<0.01) {
           throw new RuntimeException("Simulated Failure");
         }
         this.descentDirection = descentDirectionBroadcaster.receive();
@@ -127,7 +127,7 @@ public class SlaveTask implements Task {
         break;
 
       case DoLineSearchWithModel:
-        if(Math.random()<0.1) {
+        if(Math.random()<0.01) {
           throw new RuntimeException("Simulated Failure");
         }
         final Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();

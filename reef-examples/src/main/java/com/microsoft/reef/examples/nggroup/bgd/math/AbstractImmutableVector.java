@@ -1,10 +1,10 @@
 package com.microsoft.reef.examples.nggroup.bgd.math;
 
 
-import com.microsoft.reef.io.Tuple;
-
 import java.util.Formatter;
 import java.util.Locale;
+
+import com.microsoft.reef.io.Tuple;
 
 /**
  * Base class for implementing ImmutableVector
@@ -52,10 +52,16 @@ abstract class AbstractImmutableVector implements ImmutableVector {
   public String toString() {
     final StringBuilder b = new StringBuilder("DenseVector(");
     try (final Formatter formatter = new Formatter(b, Locale.US)) {
-      for (int i = 0; i < this.size() - 1; ++i) {
+      /*for (int i = 0; i < this.size() - 1; ++i) {
         formatter.format("%1.3f, ", this.get(i));
       }
-      formatter.format("%1.3f", this.get(this.size() - 1));
+      formatter.format("%1.3f", this.get(this.size() - 1));*/
+      for (int i = 0; i < Math.min(25, this.size()) - 1; ++i) {
+        formatter.format("%1.3f, ", this.get(i));
+      }
+      if(this.size()>25) {
+        formatter.format("...");
+      }
     }
     b.append(')');
     return b.toString();
@@ -66,7 +72,7 @@ abstract class AbstractImmutableVector implements ImmutableVector {
     double min = get(0);
     int minIdx = 0;
     for (int i = 1; i < this.size(); ++i) {
-      double curVal = get(i);
+      final double curVal = get(i);
       if (curVal < min) {
         min = curVal;
         minIdx = i;

@@ -32,6 +32,7 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer
 import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
 import com.microsoft.reef.io.Tuple;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -58,7 +59,7 @@ public class MasterTask implements Task {
   private final Reduce.Receiver<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
   private final Broadcast.Sender<Double> minEtaBroadcaster;
   private final int dimensions;
-  private final boolean ignoreAndContinue = false;
+  private final boolean ignoreAndContinue;
   private final com.microsoft.reef.examples.nggroup.bgd.StepSizes ts;
   private final double lambda;
   private final int maxIters;
@@ -69,10 +70,13 @@ public class MasterTask implements Task {
       @Parameter(Dimensions.class) final int dimensions,
       @Parameter(Lambda.class) final double lambda,
       @Parameter(Iterations.class) final int maxIters,
+      @Parameter(RampUp.class) final boolean rampup,
       final StepSizes ts){
     this.lambda = lambda;
     this.maxIters = maxIters;
     this.ts = ts;
+    this.dimensions = dimensions;
+    this.ignoreAndContinue = rampup;
     this.communicationGroupClient = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     this.controlMessageBroadcaster = communicationGroupClient.getBroadcastSender(ControlMessageBroadcaster.class);
     this.modelBroadcaster = communicationGroupClient.getBroadcastSender(ModelBroadcaster.class);
@@ -81,7 +85,6 @@ public class MasterTask implements Task {
     this.descentDriectionBroadcaster = communicationGroupClient.getBroadcastSender(DescentDirectionBroadcaster.class);
     this.lineSearchEvaluationsReducer = communicationGroupClient.getReduceReceiver(LineSearchEvaluationsReducer.class);
     this.minEtaBroadcaster = communicationGroupClient.getBroadcastSender(MinEtaBroadcaster.class);
-    this.dimensions = dimensions;
   }
 
   @Override
@@ -91,11 +94,14 @@ public class MasterTask implements Task {
     final Vector model = new DenseVector(dimensions);
     boolean sendModel = true;
     double minEta = 0;
+    long t0,t1,t2;
 
     int iters = 1;
     while(true){
+      t0 = System.currentTimeMillis();
       Pair<Pair<Double,Integer>,Vector> lossAndGradient;
       do{
+        t1 = System.currentTimeMillis();
         if(sendModel) {
           System.out.println("ComputeGradientWithModel");
           controlMessageBroadcaster.send(ControlMessages.ComputeGradientWithModel);
@@ -107,7 +113,11 @@ public class MasterTask implements Task {
           minEtaBroadcaster.send(minEta);
         }
         lossAndGradient = lossAndGradientReducer.reduce();
+        System.out.println("Loss: " + lossAndGradient.first.first + " #ex: " + lossAndGradient.first.second);
+        System.out.println("Gradient: " + lossAndGradient.second + " #ex: " + lossAndGradient.first.second);
 
+        t2 = System.currentTimeMillis();
+        System.out.println("Time for BC + LAGReduce = " + (t2-t1)/1000.0 + " sec");
         if(!chkAndUpdate()) {
           sendModel = false;
           break;
@@ -120,10 +130,11 @@ public class MasterTask implements Task {
         }
       }while(true);
 
+      t1 = System.currentTimeMillis();
       final double loss = regularizeLoss(lossAndGradient.first.first, lossAndGradient.first.second, model);
-      System.out.println("Loss: " + loss);
+      System.out.println("RegLoss: " + loss);
       final Vector gradient = regularizeGrad(lossAndGradient.second, lossAndGradient.first.second, model);
-      System.out.println("Gradient: " + gradient);
+      System.out.println("RegGradient: " + gradient);
       losses.add(loss);
       if(converged(iters, gradient.norm2())){
         System.out.println("Stop");
@@ -133,14 +144,16 @@ public class MasterTask implements Task {
 
       final Vector descentDirection = getDescentDirection(gradient);
       System.out.println("DescentDirection: " + descentDirection);
+      t2 = System.currentTimeMillis();
+      System.out.println("Time for reg, conv & getDesDir = " + (t2-t1)/1000.0 + " sec");
 
       Pair<Vector,Integer> lineSearchEvals;
       do {
+        t1 = System.currentTimeMillis();
         if(sendModel) {
           System.out.println("DoLineSearchWithModel");
           controlMessageBroadcaster.send(ControlMessages.DoLineSearchWithModel);
-          modelAndDescentDirectionBroadcaster.send(new Pair<>(model,
-              descentDirection));
+          modelAndDescentDirectionBroadcaster.send(new Pair<>(model, descentDirection));
         }
         else {
           System.out.println("DoLineSearch");
@@ -148,7 +161,9 @@ public class MasterTask implements Task {
           descentDriectionBroadcaster.send(descentDirection);
         }
         lineSearchEvals = lineSearchEvaluationsReducer.reduce();
-        System.out.println("LineSearchEvals: " + lineSearchEvals.first);
+        System.out.println("LineSearchEvals: " + lineSearchEvals.first + " #ex: " + lineSearchEvals.second);
+        t2 = System.currentTimeMillis();
+        System.out.println("Time for BC + LineSearch = " + (t2-t1)/1000.0 + " sec");
         if (!chkAndUpdate()) {
           sendModel = false;
           break;
@@ -161,12 +176,17 @@ public class MasterTask implements Task {
         }
       } while (true);
 
+      t1 = System.currentTimeMillis();
       minEta = findMinEta(model,descentDirection,lineSearchEvals);
       descentDirection.scale(minEta);
       model.add(descentDirection);
+      t2 = System.currentTimeMillis();
+      System.out.println("Time for findMinEta & Model update = " + (t2-t1)/1000.0 + " sec");
 
       System.out.println("New Model: " + model);
       ++iters;
+      t2 = System.currentTimeMillis();
+      System.out.println("Time for iteration " + iters + ": " + (t2-t0)/1000.0 + " sec");
     }
     for (final Double loss : losses) {
       System.out.println(loss);
@@ -178,10 +198,16 @@ public class MasterTask implements Task {
    * @return
    */
   private boolean chkAndUpdate() {
+    long t1 = System.currentTimeMillis();
     final GroupChanges changes = communicationGroupClient.getTopologyChanges();
+    long t2 = System.currentTimeMillis();
+    System.out.println("Time to get TopologyChanges = " + (t2-t1)/1000.0 + " sec");
     if(changes.exist()){
       System.out.println("There exist topology changes. Asking to update Topology");
+      t1 = System.currentTimeMillis();
       communicationGroupClient.updateTopology();
+      t2 = System.currentTimeMillis();
+      System.out.println("Time to get TopologyUpdated = " + (t2-t1)/1000.0 + " sec");
       return true;
     }
     else {

@@ -56,10 +56,10 @@ import com.microsoft.wake.remote.transport.netty.NettyMessagingTransport;
 public class NameLookupClient implements Stage, NamingLookup {
   private static final Logger LOG = Logger.getLogger(NameLookupClient.class.getName());
 
-  @NamedParameter(doc="When should a retry timeout(msec)?", short_name="retryTimeout", default_value="1000")
+  @NamedParameter(doc="When should a retry timeout(msec)?", short_name="retryTimeout", default_value="100")
   public static class RetryTimeout implements Name<Integer> {}
 
-  @NamedParameter(doc="How many times should I retry?", short_name="retryCount", default_value="30")
+  @NamedParameter(doc="How many times should I retry?", short_name="retryCount", default_value="10")
   public static class RetryCount implements Name<Integer> {}
 
   private final SocketAddress serverSocketAddr;
@@ -137,8 +137,8 @@ public class NameLookupClient implements Stage, NamingLookup {
 
       @Override
       public InetSocketAddress call() throws Exception {
-        int retryCount = NameLookupClient.this.retryCount;
-        final int retryTimeout = NameLookupClient.this.retryTimeout;
+        final int origRetryCount = NameLookupClient.this.retryCount;
+        int retryCount = origRetryCount;
         while(true){
           try {
             return remoteLookup(id);
@@ -146,11 +146,13 @@ public class NameLookupClient implements Stage, NamingLookup {
             if(retryCount<=0) {
               throw e;
             } else{
+              final int retryTimeout = NameLookupClient.this.retryTimeout
+                  * (origRetryCount - retryCount + 1);
               LOG.log(Level.WARNING,
                   "Caught Naming Exception while looking up " + id
                       + " with Name Server. Will retry " + retryCount
                       + " time(s) after waiting for " + retryTimeout + " msec.");
-              Thread.sleep(retryTimeout);
+              Thread.sleep(retryTimeout * retryCount);
               --retryCount;
             }
           }

@@ -32,6 +32,8 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinParts;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -58,11 +60,6 @@ public class BGDREEF {
   private static final String NUM_LOCAL_THREADS = "20";
 
   /**
-   * Number of milliseconds to wait for the job to complete.
-   */
-  private static final int JOB_TIMEOUT = 2 * 60 * 1000;
-
-  /**
    * Command line parameter = true to run locally, or false to run on YARN.
    */
   @NamedParameter(doc = "Whether or not to run on the local runtime", short_name = "local", default_value = "true")
@@ -73,12 +70,29 @@ public class BGDREEF {
   public static final class InputDir implements Name<String> {
   }
 
+  @NamedParameter(short_name = "splits", default_value="5")
+  public static final class NumSplits implements Name<Integer> {
+  }
+
+  @NamedParameter(short_name = "timeout", default_value="2")
+  public static final class Timeout implements Name<Integer> {
+  }
+
+  @NamedParameter(short_name = "memory", default_value="1024")
+  public static final class Memory implements Name<Integer> {
+  }
+
   private static boolean local;
   private static String input;
   private static int dimensions;
   private static double lambda;
   private static double eps;
   private static int iters;
+  private static int numSplits;
+  private static int timeout;
+  private static int memory;
+  private static boolean rampup;
+  private static int minParts;
 
 
   private static Configuration parseCommandLine(final String[] aArgs) {
@@ -91,6 +105,11 @@ public class BGDREEF {
       cl.registerShortNameOfClass(Lambda.class);
       cl.registerShortNameOfClass(Eps.class);
       cl.registerShortNameOfClass(Iterations.class);
+      cl.registerShortNameOfClass(NumSplits.class);
+      cl.registerShortNameOfClass(Timeout.class);
+      cl.registerShortNameOfClass(Memory.class);
+      cl.registerShortNameOfClass(RampUp.class);
+      cl.registerShortNameOfClass(MinParts.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
       final String msg = "Unable to parse command line";
@@ -112,6 +131,11 @@ public class BGDREEF {
     lambda = injector.getNamedInstance(Lambda.class);
     eps = injector.getNamedInstance(Eps.class);
     iters = injector.getNamedInstance(Iterations.class);
+    numSplits = injector.getNamedInstance(NumSplits.class);
+    timeout = injector.getNamedInstance(Timeout.class);
+    memory = injector.getNamedInstance(Memory.class);
+    rampup = injector.getNamedInstance(RampUp.class);
+    minParts = injector.getNamedInstance(MinParts.class);
   }
 
   /**
@@ -142,12 +166,12 @@ public class BGDREEF {
     TextInputFormat.addInputPath(jobConf, new Path(input));
     final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
         .setNumber(1)
-        .setMemory(1024)
+        .setMemory(memory)
         .build();
     final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
-        .setMemoryMB(1024)
+        .setMemoryMB(memory)
         .setJobConf(jobConf)
-        .setNumberOfDesiredSplits(5)
+        .setNumberOfDesiredSplits(numSplits)
         .setComputeRequest(computeRequest)
         .setDriverConfigurationModule(EnvironmentUtils
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
@@ -167,11 +191,13 @@ public class BGDREEF {
         .bindNamedParameter(Lambda.class, Double.toString(lambda))
         .bindNamedParameter(Eps.class, Double.toString(eps))
         .bindNamedParameter(Iterations.class, Integer.toString(iters))
+        .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
+        .bindNamedParameter(MinParts.class, Integer.toString(minParts))
         .build();
 
     LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));
 
-    return DriverLauncher.getLauncher(runtimeConfiguration).run(mergedDriverConfiguration, JOB_TIMEOUT);
+    return DriverLauncher.getLauncher(runtimeConfiguration).run(mergedDriverConfiguration, timeout * 60 * 1000);
   }
 
 
