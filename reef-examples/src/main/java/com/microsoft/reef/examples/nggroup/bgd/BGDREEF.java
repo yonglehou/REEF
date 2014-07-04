@@ -15,25 +15,12 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.TextInputFormat;
-
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.MinParts;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -49,6 +36,13 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.TextInputFormat;
+
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -70,15 +64,15 @@ public class BGDREEF {
   public static final class InputDir implements Name<String> {
   }
 
-  @NamedParameter(short_name = "splits", default_value="5")
+  @NamedParameter(short_name = "splits", default_value = "5")
   public static final class NumSplits implements Name<Integer> {
   }
 
-  @NamedParameter(short_name = "timeout", default_value="2")
+  @NamedParameter(short_name = "timeout", default_value = "2")
   public static final class Timeout implements Name<Integer> {
   }
 
-  @NamedParameter(short_name = "memory", default_value="1024")
+  @NamedParameter(short_name = "memory", default_value = "1024")
   public static final class Memory implements Name<Integer> {
   }
 
@@ -158,9 +152,8 @@ public class BGDREEF {
     return runtimeConfiguration;
   }
 
-  public static LauncherStatus runBGDReef(
-      final Configuration runtimeConfiguration
-  ) throws BindException, InjectionException {
+
+  private static Configuration getDriverConfiguration() {
     final JobConf jobConf = new JobConf();
     jobConf.setInputFormat(TextInputFormat.class);
     TextInputFormat.addInputPath(jobConf, new Path(input));
@@ -194,12 +187,30 @@ public class BGDREEF {
         .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
         .bindNamedParameter(MinParts.class, Integer.toString(minParts))
         .build();
-
-    LOG.info(new AvroConfigurationSerializer().toString(mergedDriverConfiguration));
-
-    return DriverLauncher.getLauncher(runtimeConfiguration).run(mergedDriverConfiguration, timeout * 60 * 1000);
+    return mergedDriverConfiguration;
   }
 
+  public static LauncherStatus runBGDReef(final Configuration runtimeConfiguration, final int jobTimeout)
+      throws BindException, InjectionException {
+    final Configuration driverConfiguration = getDriverConfiguration();
+    LOG.log(Level.FINE, new AvroConfigurationSerializer().toString(driverConfiguration));
+    return DriverLauncher.getLauncher(runtimeConfiguration).run(driverConfiguration, jobTimeout);
+  }
+
+  public static LauncherStatus runBGDReef(final Configuration runtimeConfiguration)
+      throws BindException, InjectionException {
+    final Configuration driverConfiguration = getDriverConfiguration();
+    LOG.log(Level.FINE, new AvroConfigurationSerializer().toString(driverConfiguration));
+    return DriverLauncher.getLauncher(runtimeConfiguration).run(driverConfiguration);
+  }
+
+  public static LauncherStatus runBGDReef(final Configuration runtimeConfiguration, final String[] args)
+      throws InjectionException {
+    final Configuration commandLineConf = parseCommandLine(args);
+    storeCommandLineArgs(commandLineConf);
+    final LauncherStatus state = runBGDReef(runtimeConfiguration);
+    return state;
+  }
 
   /**
    * @param args
@@ -210,7 +221,7 @@ public class BGDREEF {
     final Configuration commandLineConf = parseCommandLine(args);
     storeCommandLineArgs(commandLineConf);
     final Configuration runtimeConfiguration = getRunTimeConfiguration();
-    final LauncherStatus state = runBGDReef(runtimeConfiguration);
+    final LauncherStatus state = runBGDReef(runtimeConfiguration, timeout * 60 * 1000);
     LOG.log(Level.INFO, "REEF job completed: {0}", state);
   }
 }
