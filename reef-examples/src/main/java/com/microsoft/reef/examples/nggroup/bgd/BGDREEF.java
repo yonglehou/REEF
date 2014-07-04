@@ -15,12 +15,25 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.TextInputFormat;
+
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.MinParts;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -36,13 +49,6 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.TextInputFormat;
-
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
@@ -163,7 +169,8 @@ public class BGDREEF {
         .build();
     final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
         .setMemoryMB(memory)
-        .setJobConf(jobConf)
+        .setInputFormatClass(TextInputFormat.class)
+        .setInputPath(input)
         .setNumberOfDesiredSplits(numSplits)
         .setComputeRequest(computeRequest)
         .setDriverConfigurationModule(EnvironmentUtils
