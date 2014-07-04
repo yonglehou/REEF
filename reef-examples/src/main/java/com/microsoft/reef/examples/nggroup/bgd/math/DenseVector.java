@@ -112,5 +112,11 @@ public class DenseVector extends AbstractVector implements Serializable {
     return new DenseVector(values);
   }
 
+  public static DenseVector copy(final DenseVector other) {
+    final double[] values = new double[other.size()];
+    System.arraycopy(other.values, 0, values, 0, other.values.length);
+    return new DenseVector(values);
+  }
+
 
 }

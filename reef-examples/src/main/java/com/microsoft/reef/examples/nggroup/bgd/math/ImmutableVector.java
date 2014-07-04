@@ -44,6 +44,13 @@ public interface ImmutableVector {
   public double norm2();
 
   /**
+   * Computes the square of the L2 norm of this Vector.
+   *
+   * @return the square of the L2 norm of this Vector.
+   */
+  public double norm2Sqr();
+
+  /**
    * Computes the min of all entries in the Vector
    *
    * @return the min of all entries in this Vector

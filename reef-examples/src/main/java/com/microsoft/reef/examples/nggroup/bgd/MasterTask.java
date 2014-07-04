@@ -234,7 +234,11 @@ public class MasterTask implements Task {
    * @return
    */
   private double regularizeLoss(final double loss, final int numEx, final Vector model) {
-    return loss/numEx + ((lambda/2) * Math.pow(model.norm2(), 2.0));
+    return regularizeLoss(loss, numEx, model.norm2Sqr());
+  }
+
+  private double regularizeLoss(final double loss, final int numEx, final double modelNormSqr) {
+    return loss/numEx + ((lambda/2) * modelNormSqr);
   }
 
   /**
@@ -250,12 +254,14 @@ public class MasterTask implements Task {
    * @return
    */
   private double findMinEta(final Vector model, final Vector descentDir, final Pair<Vector,Integer> lineSearchEvals) {
+    final double wNormSqr = model.norm2Sqr();
+    final double dNormSqr = descentDir.norm2Sqr();
+    final double wDotd = model.dot(descentDir);
     final double[] t = ts.getT();
     int i = 0;
-    for (final double d : t) {
-      final Vector newModel = DenseVector.copy(model);
-      newModel.multAdd(d, descentDir);
-      final double loss = regularizeLoss(lineSearchEvals.first.get(i), lineSearchEvals.second, newModel);
+    for (final double eta : t) {
+      final double modelNormSqr = wNormSqr + (eta*eta) * dNormSqr + 2 * eta * wDotd;
+      final double loss = regularizeLoss(lineSearchEvals.first.get(i), lineSearchEvals.second, modelNormSqr );
       lineSearchEvals.first.set(i, loss);
       ++i;
     }

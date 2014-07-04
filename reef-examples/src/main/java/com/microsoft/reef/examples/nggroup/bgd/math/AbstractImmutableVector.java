@@ -40,11 +40,12 @@ abstract class AbstractImmutableVector implements ImmutableVector {
 
   @Override
   public double norm2() {
-    double result = 0.0;
-    for (int i = 0; i < this.size(); ++i) {
-      result += Math.pow(this.get(i), 2.0);
-    }
-    return Math.sqrt(result);
+    return Math.sqrt(dot((Vector) this));
+  }
+
+  @Override
+  public double norm2Sqr() {
+    return dot((Vector) this);
   }
 
   @SuppressWarnings("boxing")
