@@ -164,6 +164,9 @@ public class AllReducer<T> implements AllReduce<T>,
     // This method can be invoked simultaneously with apply method
     // If the msg type is TopologyChange or TopologyUpdated
     // they cannot arrive here.
+    // There is no version checking when sending message between tasks
+    // If the message types are not the two mentioned above, they are processed
+    // here directly.
     if (msg.getType() == Type.AllReduce) {
       // Messages are put in the queue
       // and wait to be processed in "apply"
@@ -422,7 +425,7 @@ public class AllReducer<T> implements AllReduce<T>,
     byte[] bytes) {
     try {
       sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfID,
-        version, taskID, version, bytes));
+        version, taskID, 0, bytes));
     } catch (NetworkException e) {
       e.printStackTrace();
     }
@@ -496,6 +499,13 @@ public class AllReducer<T> implements AllReduce<T>,
     throws InterruptedException, NetworkException {
     // Disable this method as what ReduceReceiver does.
     throw new UnsupportedOperationException();
+  }
+  
+  public List<T> apply(List<T> element) throws InterruptedException,
+    NetworkException {
+    // See if we can apply large message data
+    // We need to change the interface to make chunking automatic.
+    return element;
   }
 
   private String getQualifiedName() {

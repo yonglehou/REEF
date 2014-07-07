@@ -136,7 +136,8 @@ public class HyperCubeTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverID = driverID;
-    this.minInitialTasks = numberOfTasks / 2 + 1;
+    // this.minInitialTasks = numberOfTasks / 2 + 1;
+    this.minInitialTasks = numberOfTasks;
   }
 
   @Override
