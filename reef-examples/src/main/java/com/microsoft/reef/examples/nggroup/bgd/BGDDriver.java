@@ -181,7 +181,7 @@ public class BGDDriver {
     LOG.log(Level.INFO, "Added operators to allCommGroup");
   }
 
-  public final class TaskCompletedHandler implements EventHandler<CompletedTask> {
+  final class TaskCompletedHandler implements EventHandler<CompletedTask> {
 
     @Override
     public void onNext(final CompletedTask task) {
@@ -222,7 +222,7 @@ public class BGDDriver {
 
   }
 
-  public class TaskRunningHandler implements EventHandler<RunningTask> {
+  final class TaskRunningHandler implements EventHandler<RunningTask> {
 
     @Override
     public void onNext(final RunningTask runningTask) {
@@ -239,7 +239,7 @@ public class BGDDriver {
 
   }
 
-  public class ContextActiveHandler implements EventHandler<ActiveContext> {
+  final class ContextActiveHandler implements EventHandler<ActiveContext> {
 
     @Override
     public void onNext(final ActiveContext activeContext) {
@@ -344,7 +344,7 @@ public class BGDDriver {
     }
   }
 
-  class TaskFailedHandler implements EventHandler<FailedTask> {
+  final class TaskFailedHandler implements EventHandler<FailedTask> {
 
     @Override
     public void onNext(final FailedTask failedTask) {
