@@ -17,7 +17,6 @@ package com.microsoft.reef.examples.nggroup.bgd;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
-import com.microsoft.reef.driver.context.ClosedContext;
 import com.microsoft.reef.driver.task.CompletedTask;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
@@ -129,13 +128,7 @@ public class BGDDriver {
         minNumOfPartitions + 1);
     LOG.info("Obtained all communication group");
 
-    final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>();
-    final Codec<Vector> modelCodec = new SerializableCodec<>();
-    final Codec<Pair<Double, Vector>> lossAndGradientCodec = new SerializableCodec<>();
-    final Codec<Pair<Vector, Vector>> modelAndDesDirCodec = new SerializableCodec<>();
-    final Codec<Vector> desDirCodec = new SerializableCodec<>();
-    final Codec<Vector> lineSearchCodec = new SerializableCodec<>();
-    final Codec<Double> minEtaCodec = new SerializableCodec<>();
+
     final ReduceFunction<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReduceFunction = new LossAndGradientReduceFunction();
     final ReduceFunction<Pair<Vector, Integer>> lineSearchReduceFunction = new LineSearchReduceFunction();
     allCommGroup
@@ -143,66 +136,52 @@ public class BGDDriver {
             BroadcastOperatorSpec
                 .newBuilder()
                 .setSenderId("MasterTask")
-                .setDataCodecClass(controlMsgCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .build())
         .addBroadcast(ModelBroadcaster.class,
             BroadcastOperatorSpec
                 .newBuilder()
                 .setSenderId("MasterTask")
-                .setDataCodecClass(modelCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .build())
         .addReduce(LossAndGradientReducer.class,
             ReduceOperatorSpec
                 .newBuilder()
                 .setReceiverId("MasterTask")
-                .setDataCodecClass(lossAndGradientCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
                 .build())
         .addBroadcast(ModelAndDescentDirectionBroadcaster.class,
             BroadcastOperatorSpec
                 .newBuilder()
                 .setSenderId("MasterTask")
-                .setDataCodecClass(modelAndDesDirCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .build())
         .addBroadcast(DescentDirectionBroadcaster.class,
             BroadcastOperatorSpec
                 .newBuilder()
                 .setSenderId("MasterTask")
-                .setDataCodecClass(desDirCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .build())
         .addReduce(LineSearchEvaluationsReducer.class,
             ReduceOperatorSpec
                 .newBuilder()
                 .setReceiverId("MasterTask")
-                .setDataCodecClass(lineSearchCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .setReduceFunctionClass(lineSearchReduceFunction.getClass())
                 .build())
         .addBroadcast(MinEtaBroadcaster.class,
             BroadcastOperatorSpec
                 .newBuilder()
                 .setSenderId("MasterTask")
-                .setDataCodecClass(minEtaCodec.getClass())
+                .setDataCodecClass(SerializableCodec.class)
                 .build())
         .finalise();
 
     LOG.log(Level.INFO, "Added operators to allCommGroup");
   }
 
-  public class ContextCloseHandler implements EventHandler<ClosedContext> {
-
-    @Override
-    public void onNext(final ClosedContext closedContext) {
-      LOG.info("Got closed context-" + closedContext.getId());
-      final ActiveContext parentContext = closedContext.getParentContext();
-      if (parentContext != null) {
-        LOG.info("Closing parent context-" + parentContext.getId());
-        parentContext.close();
-      }
-    }
-
-  }
-
-  public class TaskCompletedHandler implements EventHandler<CompletedTask> {
+  public final class TaskCompletedHandler implements EventHandler<CompletedTask> {
 
     @Override
     public void onNext(final CompletedTask task) {
