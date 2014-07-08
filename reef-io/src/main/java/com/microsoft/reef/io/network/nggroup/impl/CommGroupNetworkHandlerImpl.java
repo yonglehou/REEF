@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,23 +15,22 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.wake.EventHandler;
+
+import javax.inject.Inject;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
-import javax.inject.Inject;
-
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
-import com.microsoft.tang.annotations.Name;
-import com.microsoft.wake.EventHandler;
-
 /**
  *
  */
-public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler{
+public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler {
 
   private static final Logger LOG = Logger.getLogger(CommGroupNetworkHandlerImpl.class.getName());
 
@@ -39,12 +38,13 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
   private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyNotifications = new ConcurrentHashMap<>();
 
   @Inject
-  public CommGroupNetworkHandlerImpl() {  }
+  public CommGroupNetworkHandlerImpl() {
+  }
 
 
   @Override
   public void register(final Class<? extends Name<String>> operName,
-      final EventHandler<GroupCommMessage> operHandler) {
+                       final EventHandler<GroupCommMessage> operHandler) {
     operHandlers.put(operName, operHandler);
   }
 
@@ -58,15 +58,13 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
   public void onNext(final GroupCommMessage msg) {
     final Class<? extends Name<String>> operName = Utils.getClass(msg
         .getOperatorname());
-    if(msg.getType()==Type.TopologyUpdated) {
+    if (msg.getType() == Type.TopologyUpdated) {
       LOG.info("Got TopologyUpdate msg for " + operName + ". Adding to respective queue");
       topologyNotifications.get(operName).add(msg);
-    }
-    else if(msg.getType()==Type.TopologyChanges) {
+    } else if (msg.getType() == Type.TopologyChanges) {
       LOG.info("Got TopologyChanges msg for " + operName + ". Adding to respective queue");
       topologyNotifications.get(operName).add(msg);
-    }
-    else {
+    } else {
       operHandlers.get(operName).onNext(msg);
     }
   }

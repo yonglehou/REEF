@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,25 +15,12 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.TextInputFormat;
-
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.MinParts;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.RampUp;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
 import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -49,11 +36,19 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.TextInputFormat;
+
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
- *
+ * @deprecated use BGDYarn, BGDLocal and BGDCLient instead.
  */
 @ClientSide
+@Deprecated
 public class BGDREEF {
   private static final Logger LOG = Logger.getLogger(BGDREEF.class.getName());
 
@@ -64,22 +59,6 @@ public class BGDREEF {
    */
   @NamedParameter(doc = "Whether or not to run on the local runtime", short_name = "local", default_value = "true")
   public static final class Local implements Name<Boolean> {
-  }
-
-  @NamedParameter(short_name = "input")
-  public static final class InputDir implements Name<String> {
-  }
-
-  @NamedParameter(short_name = "splits", default_value = "5")
-  public static final class NumSplits implements Name<Integer> {
-  }
-
-  @NamedParameter(short_name = "timeout", default_value = "2")
-  public static final class Timeout implements Name<Integer> {
-  }
-
-  @NamedParameter(short_name = "memory", default_value = "1024")
-  public static final class Memory implements Name<Integer> {
   }
 
   private static boolean local;
@@ -100,15 +79,15 @@ public class BGDREEF {
     try {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
-      cl.registerShortNameOfClass(BGDREEF.InputDir.class);
-      cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(InputDir.class);
+      cl.registerShortNameOfClass(ModelDimensions.class);
       cl.registerShortNameOfClass(Lambda.class);
       cl.registerShortNameOfClass(Eps.class);
       cl.registerShortNameOfClass(Iterations.class);
       cl.registerShortNameOfClass(NumSplits.class);
       cl.registerShortNameOfClass(Timeout.class);
-      cl.registerShortNameOfClass(Memory.class);
-      cl.registerShortNameOfClass(RampUp.class);
+      cl.registerShortNameOfClass(EvaluatorMemory.class);
+      cl.registerShortNameOfClass(EnableRampup.class);
       cl.registerShortNameOfClass(MinParts.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
@@ -126,15 +105,15 @@ public class BGDREEF {
       throws InjectionException, BindException {
     final Injector injector = Tang.Factory.getTang().newInjector(commandLineConf);
     local = injector.getNamedInstance(Local.class);
-    input = injector.getNamedInstance(BGDREEF.InputDir.class);
-    dimensions = injector.getNamedInstance(Dimensions.class);
+    input = injector.getNamedInstance(InputDir.class);
+    dimensions = injector.getNamedInstance(ModelDimensions.class);
     lambda = injector.getNamedInstance(Lambda.class);
     eps = injector.getNamedInstance(Eps.class);
     iters = injector.getNamedInstance(Iterations.class);
     numSplits = injector.getNamedInstance(NumSplits.class);
     timeout = injector.getNamedInstance(Timeout.class);
-    memory = injector.getNamedInstance(Memory.class);
-    rampup = injector.getNamedInstance(RampUp.class);
+    memory = injector.getNamedInstance(EvaluatorMemory.class);
+    rampup = injector.getNamedInstance(EnableRampup.class);
     minParts = injector.getNamedInstance(MinParts.class);
   }
 
@@ -176,7 +155,6 @@ public class BGDREEF {
         .setDriverConfigurationModule(EnvironmentUtils
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
-            .set(DriverConfiguration.ON_CONTEXT_CLOSED, BGDDriver.ContextCloseHandler.class)
             .set(DriverConfiguration.ON_TASK_RUNNING, BGDDriver.TaskRunningHandler.class)
             .set(DriverConfiguration.ON_TASK_FAILED, BGDDriver.TaskFailedHandler.class)
             .set(DriverConfiguration.ON_TASK_COMPLETED, BGDDriver.TaskCompletedHandler.class)
@@ -187,11 +165,11 @@ public class BGDREEF {
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
         .newConfigurationBuilder(groupCommServConfiguration, dataLoadConfiguration)
-        .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
         .bindNamedParameter(Lambda.class, Double.toString(lambda))
         .bindNamedParameter(Eps.class, Double.toString(eps))
         .bindNamedParameter(Iterations.class, Integer.toString(iters))
-        .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
+        .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
         .bindNamedParameter(MinParts.class, Integer.toString(minParts))
         .build();
     return mergedDriverConfiguration;

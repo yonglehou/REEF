@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,10 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.tests.context.failure;
-
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
@@ -35,6 +31,10 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.CommandLine;
 
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public final class FailureREEF {
 
   public static final int NUM_LOCAL_THREADS = 16;
@@ -45,12 +45,12 @@ public final class FailureREEF {
    * Command line parameter = true to run locally, or false to run on YARN.
    */
   @NamedParameter(doc = "Whether or not to run on the local runtime",
-                  short_name = "local", default_value = "true")
+      short_name = "local", default_value = "true")
   public static final class Local implements Name<Boolean> {
   }
 
   @NamedParameter(doc = "Number of minutes before timeout",
-                  short_name = "timeout", default_value = "2")
+      short_name = "timeout", default_value = "2")
   public static final class TimeOut implements Name<Integer> {
   }
 
@@ -71,7 +71,7 @@ public final class FailureREEF {
 
   /**
    * @return (immutable) TANG Configuration object.
-   * @throws BindException if configuration injector fails.
+   * @throws BindException      if configuration injector fails.
    * @throws InjectionException if the Local.class parameter is not injected.
    */
   private static Configuration getRunTimeConfiguration(final boolean isLocal) throws BindException {

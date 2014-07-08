@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -55,6 +55,7 @@ public class Utils {
     return GCMBuilder.build();
   }
 */
+
   /**
    * @param groupName
    * @param operName
@@ -75,7 +76,7 @@ public class Utils {
       final byte[]... data) {
     final GroupCommMessage.Builder GCMBuilder = GroupCommMessage.newBuilder();
     GCMBuilder.setGroupname(groupName.getName());
-    if(operName!=null) {
+    if (operName != null) {
       GCMBuilder.setOperatorname(operName.getName());
     }
     GCMBuilder.setType(msgType);
@@ -93,7 +94,7 @@ public class Utils {
     return GCMBuilder.build();
   }
 
-  public static Class<? extends Name<String>> getClass(final String className){
+  public static Class<? extends Name<String>> getClass(final String className) {
     try {
       return (Class<? extends Name<String>>) Class.forName(className);
     } catch (final ClassNotFoundException e) {
@@ -102,7 +103,7 @@ public class Utils {
   }
 
   public static String simpleName(final Class<?> className) {
-    if(className!=null) {
+    if (className != null) {
       return className.getSimpleName();
     } else {
       return "NULL";
@@ -114,6 +115,6 @@ public class Utils {
   }
 
   public static byte[] getData(final GroupCommMessage gcm) {
-    return (gcm.getMsgsCount()==1) ? gcm.getMsgs(0).getData().toByteArray() : null;
+    return (gcm.getMsgsCount() == 1) ? gcm.getMsgs(0).getData().toByteArray() : null;
   }
 }

@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.examples.nggroup.broadcast;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
@@ -33,9 +26,9 @@ import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.ControlMessageBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelReceiveAckReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
@@ -56,6 +49,12 @@ import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.time.event.StartTime;
+
+import javax.inject.Inject;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -92,8 +91,8 @@ public class BroadcastDriver {
       final EvaluatorRequestor requestor,
       final GroupCommDriver groupCommDriver,
       final ConfigurationSerializer confSerializer,
-      @Parameter(Dimensions.class) final int dimensions,
-      @Parameter(NumberOfReceivers.class) final int numberOfReceivers){
+      @Parameter(ModelDimensions.class) final int dimensions,
+      @Parameter(NumberOfReceivers.class) final int numberOfReceivers) {
     this.requestor = requestor;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
@@ -104,32 +103,32 @@ public class BroadcastDriver {
     this.allCommGroup = this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class, numberOfReceivers + 1);
     LOG.info("Obtained all communication group");
 
-    final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>() ;
+    final Codec<ControlMessages> controlMsgCodec = new SerializableCodec<>();
     final Codec<Vector> modelCodec = new SerializableCodec<>();
     final Codec<Boolean> modelReceiveAckCodec = new SerializableCodec<>();
 
     allCommGroup
-      .addBroadcast(ControlMessageBroadcaster.class,
-          BroadcastOperatorSpec
-            .newBuilder()
-            .setSenderId("MasterTask")
-            .setDataCodecClass(controlMsgCodec.getClass())
-            .build())
-      .addBroadcast(ModelBroadcaster.class,
-          BroadcastOperatorSpec
-            .newBuilder()
-            .setSenderId("MasterTask")
-            .setDataCodecClass(modelCodec.getClass())
-            .build())
-      .addReduce(ModelReceiveAckReducer.class,
-          ReduceOperatorSpec
-            .newBuilder()
-            .setReceiverId("MasterTask")
-            .setDataCodecClass(modelReceiveAckCodec.getClass())
-            .setReduceFunctionClass(ModelReceiveAckReduceFunction.class)
-            .build()
-            )
-      .finalise();
+        .addBroadcast(ControlMessageBroadcaster.class,
+            BroadcastOperatorSpec
+                .newBuilder()
+                .setSenderId("MasterTask")
+                .setDataCodecClass(controlMsgCodec.getClass())
+                .build())
+        .addBroadcast(ModelBroadcaster.class,
+            BroadcastOperatorSpec
+                .newBuilder()
+                .setSenderId("MasterTask")
+                .setDataCodecClass(modelCodec.getClass())
+                .build())
+        .addReduce(ModelReceiveAckReducer.class,
+            ReduceOperatorSpec
+                .newBuilder()
+                .setReceiverId("MasterTask")
+                .setDataCodecClass(modelReceiveAckCodec.getClass())
+                .setReduceFunctionClass(ModelReceiveAckReduceFunction.class)
+                .build()
+        )
+        .finalise();
 
     LOG.info("Added operators to allCommGroup");
   }
@@ -177,15 +176,15 @@ public class BroadcastDriver {
       final Configuration partialTaskConf = Tang.Factory.getTang()
           .newConfigurationBuilder(
               TaskConfiguration.CONF
-              .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
-              .set(TaskConfiguration.TASK, SlaveTask.class)
-              .build(),
+                  .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
+                  .set(TaskConfiguration.TASK, SlaveTask.class)
+                  .build(),
               PoisonedConfiguration.TASK_CONF
-              .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
-              .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-              .build()
-              )
-          .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
+                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+                  .build()
+          )
+          .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
           .build();
       //Do not add the task back
       //allCommGroup.addTask(partialTaskConf);
@@ -211,36 +210,35 @@ public class BroadcastDriver {
        * configured by one of the communication
        * groups
        */
-      if(groupCommDriver.configured(activeContext)){
-        if(activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()){
+      if (groupCommDriver.configured(activeContext)) {
+        if (activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()) {
           final Configuration partialTaskConf = Tang.Factory.getTang()
               .newConfigurationBuilder(
                   TaskConfiguration.CONF
-                  .set(TaskConfiguration.IDENTIFIER, "MasterTask")
-                  .set(TaskConfiguration.TASK, MasterTask.class)
-                  .build())
-               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
-               .build();
+                      .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+                      .set(TaskConfiguration.TASK, MasterTask.class)
+                      .build())
+              .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
+              .build();
 
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting MasterTask conf");
           LOG.info(confSerializer.toString(taskConf));
           activeContext.submitTask(taskConf);
-        }
-        else{
+        } else {
           final Configuration partialTaskConf = Tang.Factory.getTang()
               .newConfigurationBuilder(
                   TaskConfiguration.CONF
-                  .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
-                  .set(TaskConfiguration.TASK, SlaveTask.class)
-                  .build()
-                  ,PoisonedConfiguration.TASK_CONF
-                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
-                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-                  .build()
-                  )
-              .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+                      .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
+                      .set(TaskConfiguration.TASK, SlaveTask.class)
+                      .build()
+                  , PoisonedConfiguration.TASK_CONF
+                      .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
+                      .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+                      .build()
+              )
+              .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
               .build();
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
@@ -248,11 +246,10 @@ public class BroadcastDriver {
           LOG.info(confSerializer.toString(taskConf));
           activeContext.submitTask(taskConf);
         }
-      }
-      else{
+      } else {
         final Configuration contextConf = groupCommDriver.getContextConf();
         final String contextId = contextId(contextConf);
-        if(storeMasterId.compareAndSet(false, true)){
+        if (storeMasterId.compareAndSet(false, true)) {
           groupCommConfiguredMasterId = contextId;
         }
         LOG.info("Submitting GCContext conf");
@@ -270,10 +267,10 @@ public class BroadcastDriver {
      * @return
      */
     private String contextId(final Configuration contextConf) {
-      try{
+      try {
         final Injector injector = Tang.Factory.getTang().newInjector(contextConf);
         return injector.getNamedInstance(ContextIdentifier.class);
-      }catch(final InjectionException e){
+      } catch (final InjectionException e) {
         throw new RuntimeException("Unable to inject context identifier from context conf", e);
       }
     }
@@ -301,7 +298,7 @@ public class BroadcastDriver {
     public void onNext(final ClosedContext closedContext) {
       LOG.info("Got closed context-" + closedContext.getId());
       final ActiveContext parentContext = closedContext.getParentContext();
-      if(parentContext!=null){
+      if (parentContext != null) {
         LOG.info("Closing parent context-" + parentContext.getId());
         parentContext.close();
       }

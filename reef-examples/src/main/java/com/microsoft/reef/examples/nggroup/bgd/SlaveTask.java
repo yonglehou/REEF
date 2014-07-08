@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,27 +15,13 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.inject.Inject;
-
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-
 import com.microsoft.reef.examples.nggroup.bgd.data.Example;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.*;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.DescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.MinEtaBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelBroadcaster;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -43,6 +29,12 @@ import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+
+import javax.inject.Inject;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -51,10 +43,10 @@ public class SlaveTask implements Task {
   private final CommunicationGroupClient communicationGroup;
   private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
   private final Broadcast.Receiver<Vector> modelBroadcaster;
-  private final Reduce.Sender<Pair<Pair<Double,Integer>, Vector>> lossAndGradientReducer;
-  private final Broadcast.Receiver<Pair<Vector,Vector>> modelAndDescentDirectionBroadcaster;
+  private final Reduce.Sender<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReducer;
+  private final Broadcast.Receiver<Pair<Vector, Vector>> modelAndDescentDirectionBroadcaster;
   private final Broadcast.Receiver<Vector> descentDirectionBroadcaster;
-  private final Reduce.Sender<Pair<Vector,Integer>> lineSearchEvaluationsReducer;
+  private final Reduce.Sender<Pair<Vector, Integer>> lineSearchEvaluationsReducer;
   private final Broadcast.Receiver<Double> minEtaBroadcaster;
   private final GroupCommClient groupCommClient;
   private final List<Example> examples = new ArrayList<>();
@@ -72,7 +64,7 @@ public class SlaveTask implements Task {
       final DataSet<LongWritable, Text> dataSet,
       final Parser<String> parser,
       final LossFunction lossFunction,
-      final StepSizes ts){
+      final StepSizes ts) {
     this.groupCommClient = groupCommClient;
     this.dataSet = dataSet;
     this.parser = parser;
@@ -91,50 +83,50 @@ public class SlaveTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     boolean stop = false;
-    while(!stop){
+    while (!stop) {
       final ControlMessages controlMessage = controlMessageBroadcaster.receive();
-      switch(controlMessage){
-      case Stop:
-        stop = true;
-        break;
+      switch (controlMessage) {
+        case Stop:
+          stop = true;
+          break;
 
-      case ComputeGradientWithModel:
-        if(Math.random()<0.01) {
-          throw new RuntimeException("Simulated Failure");
-        }
-        this.model = modelBroadcaster.receive();
-        lossAndGradientReducer.send(computeLossAndGradient());
-        break;
+        case ComputeGradientWithModel:
+          if (Math.random() < 0.01) {
+            throw new RuntimeException("Simulated Failure");
+          }
+          this.model = modelBroadcaster.receive();
+          lossAndGradientReducer.send(computeLossAndGradient());
+          break;
 
-      case ComputeGradientWithMinEta:
-        if(Math.random()<0.01) {
-          throw new RuntimeException("Simulated Failure");
-        }
-        final double minEta = minEtaBroadcaster.receive();
-        assert(descentDirection!=null);
-        this.descentDirection.scale(minEta);
-        assert(model!=null);
-        this.model.add(descentDirection);
-        lossAndGradientReducer.send(computeLossAndGradient());
-        break;
+        case ComputeGradientWithMinEta:
+          if (Math.random() < 0.01) {
+            throw new RuntimeException("Simulated Failure");
+          }
+          final double minEta = minEtaBroadcaster.receive();
+          assert (descentDirection != null);
+          this.descentDirection.scale(minEta);
+          assert (model != null);
+          this.model.add(descentDirection);
+          lossAndGradientReducer.send(computeLossAndGradient());
+          break;
 
-      case DoLineSearch:
-        if(Math.random()<0.01) {
-          throw new RuntimeException("Simulated Failure");
-        }
-        this.descentDirection = descentDirectionBroadcaster.receive();
-        lineSearchEvaluationsReducer.send(lineSearchEvals());
-        break;
+        case DoLineSearch:
+          if (Math.random() < 0.01) {
+            throw new RuntimeException("Simulated Failure");
+          }
+          this.descentDirection = descentDirectionBroadcaster.receive();
+          lineSearchEvaluationsReducer.send(lineSearchEvals());
+          break;
 
-      case DoLineSearchWithModel:
-        if(Math.random()<0.01) {
-          throw new RuntimeException("Simulated Failure");
-        }
-        final Pair<Vector,Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
-        this.model = modelAndDescentDir.first;
-        this.descentDirection = modelAndDescentDir.second;
-        lineSearchEvaluationsReducer.send(lineSearchEvals());
-        break;
+        case DoLineSearchWithModel:
+          if (Math.random() < 0.01) {
+            throw new RuntimeException("Simulated Failure");
+          }
+          final Pair<Vector, Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
+          this.model = modelAndDescentDir.first;
+          this.descentDirection = modelAndDescentDir.second;
+          lineSearchEvaluationsReducer.send(lineSearchEvals());
+          break;
 
         default:
           break;
@@ -147,13 +139,13 @@ public class SlaveTask implements Task {
    * @param modelAndDescentDir
    * @return
    */
-  private Pair<Vector,Integer> lineSearchEvals() {
-    if(examples.isEmpty()) {
+  private Pair<Vector, Integer> lineSearchEvals() {
+    if (examples.isEmpty()) {
       loadData();
     }
     final Vector zed = new DenseVector(examples.size());
     final Vector ee = new DenseVector(examples.size());
-    for (int i=0;i<examples.size();i++) {
+    for (int i = 0; i < examples.size(); i++) {
       final Example example = examples.get(i);
       double f = example.predict(model);
       zed.set(i, f);
@@ -166,22 +158,22 @@ public class SlaveTask implements Task {
     int i = 0;
     for (final double d : t) {
       double loss = 0;
-      for (int j=0;j<examples.size();j++) {
+      for (int j = 0; j < examples.size(); j++) {
         final Example example = examples.get(j);
         final double val = zed.get(j) + d * ee.get(j);
         loss += this.lossFunction.computeLoss(example.getLabel(), val);
       }
       evaluations.set(i++, loss);
     }
-    return new Pair<>(evaluations,examples.size());
+    return new Pair<>(evaluations, examples.size());
   }
 
   /**
    * @param model
    * @return
    */
-  private Pair<Pair<Double,Integer>, Vector> computeLossAndGradient() {
-    if(examples.isEmpty()) {
+  private Pair<Pair<Double, Integer>, Vector> computeLossAndGradient() {
+    if (examples.isEmpty()) {
       loadData();
     }
     final Vector gradient = new DenseVector(model.size());
@@ -193,7 +185,7 @@ public class SlaveTask implements Task {
       example.addGradient(gradient, g);
       loss += this.lossFunction.computeLoss(example.getLabel(), f);
     }
-    return new Pair<>(new Pair<>(loss,examples.size()),gradient);
+    return new Pair<>(new Pair<>(loss, examples.size()), gradient);
   }
 
   /**

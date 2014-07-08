@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import javax.inject.Inject;
-
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.tang.annotations.Parameter;
+
+import javax.inject.Inject;
 
 /**
  * Simple epsilon-based. implementation of a ConvergenceMonitor.
@@ -51,7 +51,7 @@ public final class ConvergenceMonitorImpl implements ConvergenceMonitor {
     } else {
       this.delta = Math.abs(this.lastLoss - newLoss);
     }
-    if(iteration%5==0) {
+    if (iteration % 5 == 0) {
       this.lastLoss = newLoss;
     }
     this.iteration += 1;

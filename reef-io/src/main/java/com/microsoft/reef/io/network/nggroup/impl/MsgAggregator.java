@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,19 +15,19 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.logging.Logger;
-
 import com.microsoft.reef.io.network.group.impl.GCMCodec;
 import com.microsoft.reef.io.network.nggroup.impl.config.parameters.AnyOper;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.logging.Logger;
 
 /**
  *
@@ -57,13 +57,12 @@ public class MsgAggregator implements EventHandler<GroupCommMessage> {
   @Override
   public void onNext(final GroupCommMessage msg) {
     // TODO Auto-generated method stub
-    if(msg.getType().equals(Type.TopologyUpdated)) {
+    if (msg.getType().equals(Type.TopologyUpdated)) {
       topoUpdatedMsgs.add(msg);
-      if(topoUpdatedMsgs.size()==numTopologies) {
+      if (topoUpdatedMsgs.size() == numTopologies) {
         aggregateNSend(topoUpdatedMsgs);
       }
-    }
-    else {
+    } else {
       addedMsgs.add(msg);
     }
   }
@@ -76,26 +75,26 @@ public class MsgAggregator implements EventHandler<GroupCommMessage> {
    *
    */
   private void aggregateNSend(final ConcurrentLinkedQueue<GroupCommMessage> msgQue) {
-    if(msgQue.isEmpty()) {
+    if (msgQue.isEmpty()) {
       return;
     }
     final Map<String, Integer> dstVersions = new HashMap<>();
     final Map<String, List<GroupCommMessage>> perTaskMsgMap = new HashMap<>();
 
-    for(final GroupCommMessage msg : msgQue) {
+    for (final GroupCommMessage msg : msgQue) {
       final String dstId = msg.getDestid();
       final int dstVersion = msg.getVersion();
-      if(!dstVersions.containsKey(dstId)) {
+      if (!dstVersions.containsKey(dstId)) {
         dstVersions.put(dstId, dstVersion);
       } else {
         final int storedVersion = dstVersions.get(dstId);
-        if(storedVersion!=dstVersion) {
+        if (storedVersion != dstVersion) {
           LOG.warning("Found a dst with 2 versions: " + storedVersion + "," + dstVersion);
         }
-          throw new RuntimeException("Version mismatch while aggregating msgs.");
+        throw new RuntimeException("Version mismatch while aggregating msgs.");
       }
       final List<GroupCommMessage> msgs;
-      if(!perTaskMsgMap.containsKey(dstId)) {
+      if (!perTaskMsgMap.containsKey(dstId)) {
         msgs = new ArrayList<>();
         perTaskMsgMap.put(dstId, msgs);
       } else {
@@ -107,11 +106,11 @@ public class MsgAggregator implements EventHandler<GroupCommMessage> {
     final GCMCodec codec = new GCMCodec();
     final GroupCommMessage gcm = msgQue.peek();
     final Type msgType = getMsgType(gcm);
-    for(final Map.Entry<String, List<GroupCommMessage>> mapEntry : perTaskMsgMap.entrySet()) {
+    for (final Map.Entry<String, List<GroupCommMessage>> mapEntry : perTaskMsgMap.entrySet()) {
       final String dstId = mapEntry.getKey();
       final List<GroupCommMessage> msgsLst = mapEntry.getValue();
       final byte[][] encodedMsgs = new byte[msgsLst.size()][];
-      int i=0;
+      int i = 0;
       for (final GroupCommMessage msg : msgsLst) {
         encodedMsgs[i++] = codec.encode(msg);
       }
@@ -124,27 +123,27 @@ public class MsgAggregator implements EventHandler<GroupCommMessage> {
 
   private Type getMsgType(final GroupCommMessage gcm) {
     Type msgType;
-    switch(gcm.getType()) {
-    case ParentAdd:
-    case ChildAdd:
-      msgType = Type.SourceAdd;
-      break;
-    case ParentDead:
-    case ChildDead:
-      msgType = Type.SourceDead;
-      break;
-    case TopologyChanges:
-      msgType = Type.TopologyChanges;
-      break;
-    case TopologyUpdated:
-      msgType = Type.TopologyUpdated;
-      break;
-    case TopologySetup:
-      msgType = Type.TopologySetup;
-      break;
-    case UpdateTopology:
-      msgType = Type.UpdateTopology;
-      break;
+    switch (gcm.getType()) {
+      case ParentAdd:
+      case ChildAdd:
+        msgType = Type.SourceAdd;
+        break;
+      case ParentDead:
+      case ChildDead:
+        msgType = Type.SourceDead;
+        break;
+      case TopologyChanges:
+        msgType = Type.TopologyChanges;
+        break;
+      case TopologyUpdated:
+        msgType = Type.TopologyUpdated;
+        break;
+      case TopologySetup:
+        msgType = Type.TopologySetup;
+        break;
+      case UpdateTopology:
+        msgType = Type.UpdateTopology;
+        break;
       default:
         final String msg = "Unknown msg type in MsgAggregator";
         LOG.warning(msg);

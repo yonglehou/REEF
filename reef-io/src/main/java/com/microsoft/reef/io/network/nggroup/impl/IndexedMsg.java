@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,11 +32,9 @@ public class IndexedMsg {
   }
 
 
-
   public Class<? extends Name<String>> getOperName() {
     return operName;
   }
-
 
 
   public GroupCommMessage getMsg() {
@@ -44,17 +42,16 @@ public class IndexedMsg {
   }
 
 
-
   @Override
   public boolean equals(final Object obj) {
-    if(this==obj) {
+    if (this == obj) {
       return true;
     }
-    if(!(obj instanceof IndexedMsg)) {
+    if (!(obj instanceof IndexedMsg)) {
       return false;
     }
     final IndexedMsg that = (IndexedMsg) obj;
-    if(this.operName==that.operName) {
+    if (this.operName == that.operName) {
       return true;
     }
     return false;

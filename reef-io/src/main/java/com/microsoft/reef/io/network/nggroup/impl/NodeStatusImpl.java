@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,17 +15,17 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
-
 import com.microsoft.reef.io.network.nggroup.api.TaskNode;
 import com.microsoft.reef.io.network.nggroup.api.TaskNodeStatus;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EStage;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 /**
  *
@@ -48,7 +48,6 @@ public class NodeStatusImpl implements TaskNodeStatus {
   private final TaskNode node;
 
 
-
   public NodeStatusImpl(
       final EStage<GroupCommMessage> senderStage,
       final Class<? extends Name<String>> groupName,
@@ -56,32 +55,32 @@ public class NodeStatusImpl implements TaskNodeStatus {
       final String taskId,
       final String driverId,
       final TaskNode node) {
-        this.senderStage = senderStage;
-        this.groupName = groupName;
-        this.operName = operName;
-        this.taskId = taskId;
-        this.driverId = driverId;
-        this.node = node;
+    this.senderStage = senderStage;
+    this.groupName = groupName;
+    this.operName = operName;
+    this.taskId = taskId;
+    this.driverId = driverId;
+    this.node = node;
   }
 
   private boolean isDeadMsg(final Type msgAcked) {
-    return msgAcked==Type.ParentDead || msgAcked==Type.ChildDead;
+    return msgAcked == Type.ParentDead || msgAcked == Type.ChildDead;
   }
 
   private boolean isAddMsg(final Type msgAcked) {
-    return msgAcked==Type.ParentAdd || msgAcked==Type.ChildAdd;
+    return msgAcked == Type.ParentAdd || msgAcked == Type.ChildAdd;
   }
 
   private Type getAckedMsg(final Type msgType) {
-    switch(msgType) {
-    case ParentAdded:
-      return Type.ParentAdd;
-    case ChildAdded:
-      return Type.ChildAdd;
-    case ParentRemoved:
-      return Type.ParentDead;
-    case ChildRemoved:
-      return Type.ChildDead;
+    switch (msgType) {
+      case ParentAdded:
+        return Type.ParentAdd;
+      case ChildAdded:
+        return Type.ChildAdd;
+      case ParentRemoved:
+        return Type.ParentDead;
+      case ChildRemoved:
+        return Type.ChildDead;
       default:
         return msgType;
     }
@@ -90,11 +89,10 @@ public class NodeStatusImpl implements TaskNodeStatus {
   private void chkAndSendTopoSetup(
       final Type msgDealt) {
     LOG.info(getQualifiedName() + "Checking if I am ready to send TopoSetup msg");
-    if(statusMap.isEmpty()) {
+    if (statusMap.isEmpty()) {
       LOG.info(getQualifiedName() + "Empty status map.");
       node.chkAndSendTopSetup();
-    }
-    else {
+    } else {
       LOG.info(getQualifiedName() + "Status map non-empty" + statusMap);
     }
   }
@@ -153,7 +151,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
   @Override
   public void setFailed(final String taskId) {
     activeNeighbors.remove(taskId);
-     neighborStatus.remove(taskId);
+    neighborStatus.remove(taskId);
   }
 
   @Override
@@ -163,67 +161,63 @@ public class NodeStatusImpl implements TaskNodeStatus {
     final Type msgType = gcm.getType();
     final Type msgAcked = getAckedMsg(msgType);
     final String sourceId = gcm.getDestid();
-    switch(msgType) {
-    case UpdateTopology:
+    switch (msgType) {
+      case UpdateTopology:
       /*//UpdateTopology might be queued up
       //but the task might have died. If so,
       //do not send this msg
       if(!node.isRunning()) {
         break;
       }*/
-      //Send to taskId because srcId is usually always MasterTask
-      LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Sending UpdateTopology msg to " + taskId);
-      senderStage.onNext(Utils.bldVersionedGCM(groupName,
-          operName, Type.UpdateTopology,
-          driverId, 0, taskId, node.getVersion(), new byte[0]));
-      break;
-    case TopologySetup:
-      synchronized (topoUpdateStageLock) {
-        topoSetupRcvd.set(true);
-        topoUpdateStageLock.notifyAll();
-      }
-      break;
-    case ParentAdded:
-    case ChildAdded:
-    case ParentRemoved:
-    case ChildRemoved:
-      if(statusMap.containsKey(msgAcked)) {
-        if(statusMap.contains(msgAcked, sourceId)) {
-          LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Removing " + sourceId +
-              " from sources expecting ACK");
-          statusMap.remove(msgAcked, sourceId);
+        //Send to taskId because srcId is usually always MasterTask
+        LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Sending UpdateTopology msg to " + taskId);
+        senderStage.onNext(Utils.bldVersionedGCM(groupName,
+            operName, Type.UpdateTopology,
+            driverId, 0, taskId, node.getVersion(), new byte[0]));
+        break;
+      case TopologySetup:
+        synchronized (topoUpdateStageLock) {
+          topoSetupRcvd.set(true);
+          topoUpdateStageLock.notifyAll();
+        }
+        break;
+      case ParentAdded:
+      case ChildAdded:
+      case ParentRemoved:
+      case ChildRemoved:
+        if (statusMap.containsKey(msgAcked)) {
+          if (statusMap.contains(msgAcked, sourceId)) {
+            LOG.info(getQualifiedName() + "NodeStatusMsgProcessorStage Removing " + sourceId +
+                " from sources expecting ACK");
+            statusMap.remove(msgAcked, sourceId);
 
-          if(isAddMsg(msgAcked)) {
-            neighborStatus.add(sourceId);
-          }
-          else if(isDeadMsg(msgAcked)) {
-            neighborStatus.remove(sourceId);
-          }
-          if(statusMap.notContains(sourceId)) {
-            if(neighborStatus.get(sourceId)>0) {
-              activeNeighbors.add(sourceId);
-              node.chkAndSendTopSetup(sourceId);
+            if (isAddMsg(msgAcked)) {
+              neighborStatus.add(sourceId);
+            } else if (isDeadMsg(msgAcked)) {
+              neighborStatus.remove(sourceId);
             }
-            else {
-              LOG.info(getQualifiedName() + sourceId + " is not a neighbor anymore");
+            if (statusMap.notContains(sourceId)) {
+              if (neighborStatus.get(sourceId) > 0) {
+                activeNeighbors.add(sourceId);
+                node.chkAndSendTopSetup(sourceId);
+              } else {
+                LOG.info(getQualifiedName() + sourceId + " is not a neighbor anymore");
+              }
+            } else {
+              LOG.info(getQualifiedName() + "Not done processing " + sourceId + " acks yet. So it is still inactive");
             }
+            chkAndSendTopoSetup(msgAcked);
+          } else {
+            LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got " + msgType +
+                " from a source(" + sourceId + ") to whom ChildAdd was not sent. " +
+                "Perhaps reset during failure. If context not indicative use ***CAUTION***");
           }
-          else {
-            LOG.info(getQualifiedName() + "Not done processing " + sourceId + " acks yet. So it is still inactive");
-          }
-          chkAndSendTopoSetup(msgAcked);
         } else {
-          LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage Got " + msgType +
-              " from a source(" + sourceId + ") to whom ChildAdd was not sent. " +
+          LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no " + msgAcked +
+              " msgs sent in the previous update cycle. " +
               "Perhaps reset during failure. If context not indicative use ***CAUTION***");
         }
-      }
-      else {
-        LOG.warning(getQualifiedName() + "NodeStatusMsgProcessorStage There were no " + msgAcked +
-            " msgs sent in the previous update cycle. " +
-            "Perhaps reset during failure. If context not indicative use ***CAUTION***");
-      }
-      break;
+        break;
 
       default:
         LOG.warning(getQualifiedName() + "Non-ctrl msg " + gcm.getType() + " for " + gcm.getDestid() +
@@ -248,12 +242,12 @@ public class NodeStatusImpl implements TaskNodeStatus {
   @Override
   public void waitForTopologySetup() {
     synchronized (topoUpdateStageLock) {
-      while(!topoSetupRcvd.get() && node.isRunning()) {
+      while (!topoSetupRcvd.get() && node.isRunning()) {
         try {
           topoUpdateStageLock.wait();
         } catch (final InterruptedException e) {
           throw new RuntimeException("InterruptedException in NodeTopologyUpdateWaitStage " +
-          		"while waiting for receiving TopologySetup", e);
+              "while waiting for receiving TopologySetup", e);
         }
       }
       topoSetupRcvd.set(false);
@@ -263,7 +257,7 @@ public class NodeStatusImpl implements TaskNodeStatus {
   @Override
   public void waitForUpdatedTopologyOrFailure() {
     synchronized (topoSetupSentLock) {
-      while(node.isRunning() && !node.wasTopologySetupSent()) {
+      while (node.isRunning() && !node.wasTopologySetupSent()) {
         try {
           topoSetupSentLock.wait();
         } catch (final InterruptedException e) {

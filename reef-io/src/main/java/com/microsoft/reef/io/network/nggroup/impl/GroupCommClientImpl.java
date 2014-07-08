@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,16 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.io.network.impl.NetworkService;
@@ -40,13 +30,22 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 
+import javax.inject.Inject;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.logging.Logger;
+
 /**
  *
  */
-public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggroup.api.GroupCommClient{
+public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggroup.api.GroupCommClient {
   private static final Logger LOG = Logger.getLogger(GroupCommClientImpl.class.getName());
 
-  private final Map<Class<? extends Name<String>>,CommunicationGroupClient> communicationGroups;
+  private final Map<Class<? extends Name<String>>, CommunicationGroupClient> communicationGroups;
 
   @Inject
   public GroupCommClientImpl(
@@ -55,11 +54,11 @@ public class GroupCommClientImpl implements com.microsoft.reef.io.network.nggrou
       final GroupCommNetworkHandler groupCommNetworkHandler,
       final NetworkService<GroupCommMessage> netService,
       final ConfigurationSerializer configSerializer
-      ){
+  ) {
     this.communicationGroups = new HashMap<>();
     LOG.info("GroupCommHandler-" + groupCommNetworkHandler.toString());
     for (final String groupConfigStr : groupConfigs) {
-      try{
+      try {
         final Configuration groupConfig = configSerializer.fromString(groupConfigStr);
 
         final Injector injector = Tang.Factory.getTang().newInjector(groupConfig);

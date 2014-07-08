@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,11 +15,11 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.impl.ThreadPoolStage;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
@@ -42,7 +42,7 @@ public class TPSTest {
         stage.onNext(arg0);
       }
     }, 5);
-    for(int i=0;i<1000000;i++) {
+    for (int i = 0; i < 1000000; i++) {
       feederStage.onNext(i);
     }
     Thread.sleep(5 * 1000);

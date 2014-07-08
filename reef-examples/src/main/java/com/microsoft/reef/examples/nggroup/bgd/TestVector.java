@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,22 +34,22 @@ public class TestVector {
    * @return
    */
   public static double regularizeLoss(final double loss, final int numEx, final Vector model) {
-    return loss/numEx + ((lambda/2) * model.norm2Sqr());
+    return loss / numEx + ((lambda / 2) * model.norm2Sqr());
   }
 
   public static double regularizeLoss(final double loss, final int numEx, final double modelNormSqr) {
-    return loss/numEx + ((lambda/2) * modelNormSqr);
+    return loss / numEx + ((lambda / 2) * modelNormSqr);
   }
 
-  public static double findMinEtaEff(final Vector model, final Vector descentDir, final Pair<Vector,Integer> lineSearchEvals) {
+  public static double findMinEtaEff(final Vector model, final Vector descentDir, final Pair<Vector, Integer> lineSearchEvals) {
     final double wNormSqr = model.norm2Sqr();
     final double dNormSqr = descentDir.norm2Sqr();
     final double wDotd = model.dot(descentDir);
     final double[] t = ts.getT();
     int i = 0;
     for (final double eta : t) {
-      final double modelNormSqr = wNormSqr + (eta*eta) * dNormSqr + 2 * eta * wDotd;
-      final double loss = regularizeLoss(lineSearchEvals.first.get(i), lineSearchEvals.second, modelNormSqr );
+      final double modelNormSqr = wNormSqr + (eta * eta) * dNormSqr + 2 * eta * wDotd;
+      final double loss = regularizeLoss(lineSearchEvals.first.get(i), lineSearchEvals.second, modelNormSqr);
       lineSearchEvals.first.set(i, loss);
       ++i;
     }
@@ -61,7 +61,7 @@ public class TestVector {
     return minT;
   }
 
-  public static double findMinEta(final Vector model, final Vector descentDir, final Pair<Vector,Integer> lineSearchEvals) {
+  public static double findMinEta(final Vector model, final Vector descentDir, final Pair<Vector, Integer> lineSearchEvals) {
     final double[] t = ts.getT();
     int i = 0;
     for (final double d : t) {
@@ -85,28 +85,28 @@ public class TestVector {
   public static void main(final String[] args) {
     final double[] modelValues = new double[3000000];
     final double[] ddValues = new double[3000000];
-    for(int i=0;i<modelValues.length;i++) {
+    for (int i = 0; i < modelValues.length; i++) {
       modelValues[i] = Math.random();
       ddValues[i] = Math.random();
     }
 
     final double[] lineSearchValues = new double[ts.getGridSize()];
-    for(int i=0;i<lineSearchValues.length;i++) {
+    for (int i = 0; i < lineSearchValues.length; i++) {
       lineSearchValues[i] = Math.random();
     }
     final Vector model = new DenseVector(modelValues);
     final Vector dd = new DenseVector(ddValues);
     final Vector lineSearchEvals = new DenseVector(lineSearchValues);
 
-    try (Timer timer = new Timer("FindMinEta")){
-      findMinEtaEff(model,dd,new Pair<>(lineSearchEvals,1000000));
+    try (Timer timer = new Timer("FindMinEta")) {
+      findMinEtaEff(model, dd, new Pair<>(lineSearchEvals, 1000000));
     }
-    try (Timer timer = new Timer("FindMinEta")){
-      findMinEta(model,dd,new Pair<>(lineSearchEvals,1000000));
+    try (Timer timer = new Timer("FindMinEta")) {
+      findMinEta(model, dd, new Pair<>(lineSearchEvals, 1000000));
     }
   }
 
-  public static class Timer implements AutoCloseable{
+  public static class Timer implements AutoCloseable {
 
     private final String description;
     private final long t1;
@@ -119,7 +119,7 @@ public class TestVector {
     @Override
     public void close() {
       final long t2 = System.currentTimeMillis();
-      System.out.println(description + " took " + (t2-t1)/1000.0 + " sec");
+      System.out.println(description + " took " + (t2 - t1) / 1000.0 + " sec");
     }
 
   }

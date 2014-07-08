@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -60,20 +60,20 @@ public class MsgKey {
 
   @Override
   public boolean equals(final Object obj) {
-    if(this==obj) {
+    if (this == obj) {
       return true;
     }
-    if(!(obj instanceof MsgKey)) {
+    if (!(obj instanceof MsgKey)) {
       return false;
     }
     final MsgKey that = (MsgKey) obj;
-    if(!this.src.equals(that.src)) {
+    if (!this.src.equals(that.src)) {
       return false;
     }
-    if(!this.dst.equals(that.dst)) {
+    if (!this.dst.equals(that.dst)) {
       return false;
     }
-    if(!this.msgType.equals(that.msgType)) {
+    if (!this.msgType.equals(that.msgType)) {
       return false;
     }
     return true;

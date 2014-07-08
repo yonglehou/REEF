@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,7 +26,7 @@ class CountingMap<L> {
   }
 
   public int get(final L value) {
-    if(!containsKey(value)) {
+    if (!containsKey(value)) {
       return 0;
     }
     return map.get(value);
@@ -46,15 +46,14 @@ class CountingMap<L> {
   }
 
   public boolean remove(final L value) {
-    if(!map.containsKey(value)) {
+    if (!map.containsKey(value)) {
       return false;
     }
     int cnt = map.get(value);
     --cnt;
-    if(cnt==0) {
+    if (cnt == 0) {
       map.remove(value);
-    }
-    else {
+    } else {
       map.put(value, cnt);
     }
     return true;

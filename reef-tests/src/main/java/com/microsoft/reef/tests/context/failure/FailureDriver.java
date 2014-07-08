@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,11 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.tests.context.failure;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
@@ -32,6 +27,10 @@ import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.time.event.StartTime;
+
+import javax.inject.Inject;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @Unit
 public class FailureDriver {
@@ -87,15 +86,14 @@ public class FailureDriver {
     public void onNext(final ActiveContext activeContext) {
       final String ctxId = activeContext.getId();
       LOG.log(Level.FINE, "Got active context: {0}.", ctxId);
-      if(ctxId.startsWith("Root")) {
+      if (ctxId.startsWith("Root")) {
         activeContext.submitContext(
             Tang.Factory.getTang().newConfigurationBuilder(
                 ContextConfiguration.CONF
                     .set(ContextConfiguration.IDENTIFIER, "First-" + ctxId)
                     .build()
-               ).build());
-      }
-      else if(ctxId.startsWith("First")) {
+            ).build());
+      } else if (ctxId.startsWith("First")) {
         activeContext.submitContext(
             Tang.Factory.getTang().newConfigurationBuilder(
                 ContextConfiguration.CONF
@@ -106,8 +104,7 @@ public class FailureDriver {
                     .set(PoisonedConfiguration.CRASH_TIMEOUT, "4")
                     .build())
                 .build());
-      }
-      else {
+      } else {
         activeContext.submitTask(
             TaskConfiguration.CONF
                 .set(TaskConfiguration.IDENTIFIER, "EmptyTask-" + ctxId)

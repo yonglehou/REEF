@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,18 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.io.IOException;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
@@ -56,10 +44,17 @@ import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.impl.ThreadPoolStage;
 
+import javax.inject.Inject;
+import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+
 /**
  *
  */
-public class CommunicationGroupClientImpl implements com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient{
+public class CommunicationGroupClientImpl implements com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient {
   private static final Logger LOG = Logger.getLogger(CommunicationGroupClientImpl.class.getName());
 
   private final GroupCommNetworkHandler groupCommNetworkHandler;
@@ -77,14 +72,14 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
 
   @Inject
   public CommunicationGroupClientImpl(
-        @Parameter(CommunicationGroupName.class) final String groupName,
-        @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
-        @Parameter(DriverIdentifier.class) final String driverId,
-        final GroupCommNetworkHandler groupCommNetworkHandler,
-        @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
-        final ConfigurationSerializer configSerializer,
-        final NetworkService<GroupCommMessage> netService
-      ){
+      @Parameter(CommunicationGroupName.class) final String groupName,
+      @Parameter(TaskConfigurationOptions.Identifier.class) final String taskId,
+      @Parameter(DriverIdentifier.class) final String driverId,
+      final GroupCommNetworkHandler groupCommNetworkHandler,
+      @Parameter(SerializedOperConfigs.class) final Set<String> operatorConfigs,
+      final ConfigurationSerializer configSerializer,
+      final NetworkService<GroupCommMessage> netService
+  ) {
     this.taskId = taskId;
     this.driverId = driverId;
     LOG.info(groupName + " has GroupCommHandler-"
@@ -96,7 +91,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
 
       @Override
       public int compare(final Class<? extends Name<String>> o1,
-          final Class<? extends Name<String>> o2) {
+                         final Class<? extends Name<String>> o2) {
         final String s1 = o1.getSimpleName();
         final String s2 = o2.getSimpleName();
         return s1.compareTo(s2);
@@ -132,49 +127,49 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   @Override
   public Broadcast.Sender getBroadcastSender(final Class<? extends Name<String>> operatorName) {
     final GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Broadcast.Sender)) {
+    if (!(op instanceof Broadcast.Sender)) {
       throw new RuntimeException("Configured operator is not a broadcast sender");
     }
     commGroupNetworkHandler.addTopologyElement(operatorName);
-    return (Broadcast.Sender)op;
+    return (Broadcast.Sender) op;
   }
 
   @Override
   public Reduce.Receiver getReduceReceiver(final Class<? extends Name<String>> operatorName) {
     final GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Reduce.Receiver)) {
+    if (!(op instanceof Reduce.Receiver)) {
       throw new RuntimeException("Configured operator is not a reduce receiver");
     }
     commGroupNetworkHandler.addTopologyElement(operatorName);
-    return (Reduce.Receiver)op;
+    return (Reduce.Receiver) op;
   }
 
   @Override
   public Broadcast.Receiver getBroadcastReceiver(
       final Class<? extends Name<String>> operatorName) {
     final GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Broadcast.Receiver)) {
+    if (!(op instanceof Broadcast.Receiver)) {
       throw new RuntimeException("Configured operator is not a broadcast receiver");
     }
     commGroupNetworkHandler.addTopologyElement(operatorName);
-    return (Broadcast.Receiver)op;
+    return (Broadcast.Receiver) op;
   }
 
   @Override
   public Reduce.Sender getReduceSender(
       final Class<? extends Name<String>> operatorName) {
     final GroupCommOperator op = operators.get(operatorName);
-    if(!(op instanceof Reduce.Sender)) {
+    if (!(op instanceof Reduce.Sender)) {
       throw new RuntimeException("Configured operator is not a reduce sender");
     }
     commGroupNetworkHandler.addTopologyElement(operatorName);
-    return (Reduce.Sender)op;
+    return (Reduce.Sender) op;
   }
 
 
   @Override
   public void initialize() {
-    if(!init.compareAndSet(false, true)) {
+    if (!init.compareAndSet(false, true)) {
       LOG.info("CommGroup-" + groupName + " has been initialized");
       return;
     }
@@ -189,7 +184,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
             initLatch.countDown();
           }
         }, operators.size());
-    for(final GroupCommOperator op : operators.values()) {
+    for (final GroupCommOperator op : operators.values()) {
       initStage.onNext(op);
     }
     try {
@@ -214,7 +209,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     }
     final Codec<GroupChanges> changesCodec = new GroupChangesCodec();
     final Map<Class<? extends Name<String>>, GroupChanges> retVal = new HashMap<>();
-    for(final GroupCommOperator op : operators.values()) {
+    for (final GroupCommOperator op : operators.values()) {
       final Class<? extends Name<String>> operName = op.getOperName();
       final byte[] changes = commGroupNetworkHandler.waitForTopologyChanges(operName);
       retVal.put(operName, changesCodec.decode(changes));
@@ -229,8 +224,8 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   private GroupChanges mergeGroupChanges(
       final Map<Class<? extends Name<String>>, GroupChanges> perOpChanges) {
     final GroupChanges changes = new GroupChangesImpl(false);
-    for(final GroupChanges change : perOpChanges.values()) {
-      if(change.exist()) {
+    for (final GroupChanges change : perOpChanges.values()) {
+      if (change.exist()) {
         changes.setChanges(true);
         break;
       }
@@ -240,7 +235,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
 
   @Override
   public void updateTopology() {
-    for(final GroupCommOperator op : operators.values()) {
+    for (final GroupCommOperator op : operators.values()) {
       final Class<? extends Name<String>> operName = op.getOperName();
       LOG.info("Sending UpdateTopology msg to driver" + driverId);
       try {
@@ -250,7 +245,7 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
         throw new RuntimeException("NetworkException while sending UpdateTopology", e);
       }
     }
-    for(final GroupCommOperator op : operators.values()) {
+    for (final GroupCommOperator op : operators.values()) {
       final Class<? extends Name<String>> operName = op.getOperName();
       while (true) {
         final GroupCommMessage msg = commGroupNetworkHandler

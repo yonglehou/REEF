@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.logging.Logger;
 
 import com.microsoft.reef.io.network.group.operators.GroupCommOperator;
 import com.microsoft.reef.io.network.nggroup.api.GroupChanges;
@@ -42,6 +35,13 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.impl.SingleThreadStage;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Logger;
 
 /**
  *
@@ -95,7 +95,7 @@ public class FlatTopology implements Topology {
   public Configuration getConfig(final String taskId) {
     LOG.info(getQualifiedName() + "Getting config for task " + taskId);
     final TaskNode taskNode = nodes.get(taskId);
-    if(taskNode==null) {
+    if (taskNode == null) {
       final String msg = getQualifiedName() + taskId + " does not exist";
       LOG.warning(msg);
       throw new RuntimeException(msg);
@@ -106,22 +106,20 @@ public class FlatTopology implements Topology {
     final JavaConfigurationBuilder jcb = Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
     jcb.bindNamedParameter(TaskVersion.class, Integer.toString(version));
-    if(operatorSpec instanceof BroadcastOperatorSpec){
+    if (operatorSpec instanceof BroadcastOperatorSpec) {
       final BroadcastOperatorSpec broadcastOperatorSpec = (BroadcastOperatorSpec) operatorSpec;
-      if(taskId.equals(broadcastOperatorSpec.getSenderId())){
+      if (taskId.equals(broadcastOperatorSpec.getSenderId())) {
         jcb.bindImplementation(GroupCommOperator.class, BroadcastSender.class);
-      }
-      else{
+      } else {
         jcb.bindImplementation(GroupCommOperator.class, BroadcastReceiver.class);
       }
     }
-    if(operatorSpec instanceof ReduceOperatorSpec){
+    if (operatorSpec instanceof ReduceOperatorSpec) {
       final ReduceOperatorSpec reduceOperatorSpec = (ReduceOperatorSpec) operatorSpec;
       jcb.bindNamedParameter(ReduceFunctionParam.class, reduceOperatorSpec.getRedFuncClass());
-      if(taskId.equals(reduceOperatorSpec.getReceiverId())){
+      if (taskId.equals(reduceOperatorSpec.getReceiverId())) {
         jcb.bindImplementation(GroupCommOperator.class, ReduceReceiver.class);
-      }
-      else{
+      } else {
         jcb.bindImplementation(GroupCommOperator.class, ReduceSender.class);
       }
     }
@@ -131,7 +129,7 @@ public class FlatTopology implements Topology {
   @Override
   public int getNodeVersion(final String taskId) {
     final TaskNode node = nodes.get(taskId);
-    if(node==null) {
+    if (node == null) {
       final String msg = getQualifiedName() + taskId + " is not available on the nodes map";
       LOG.warning(msg);
       throw new RuntimeException(msg);
@@ -142,28 +140,26 @@ public class FlatTopology implements Topology {
 
   @Override
   public void removeTask(final String taskId) {
-    if(!nodes.containsKey(taskId)) {
+    if (!nodes.containsKey(taskId)) {
       LOG.warning("Trying to remove a non-existent node in the task graph");
       return;
     }
-    if(taskId.equals(rootId)) {
+    if (taskId.equals(rootId)) {
       unsetRootNode(taskId);
-    }
-    else {
+    } else {
       removeChild(taskId);
     }
   }
 
   @Override
   public void addTask(final String taskId) {
-    if(nodes.containsKey(taskId)) {
+    if (nodes.containsKey(taskId)) {
       LOG.warning("Got a request to add a task that is already in the graph");
       LOG.warning("We need to block this request till the delete finishes");
     }
-    if(taskId.equals(rootId)) {
+    if (taskId.equals(rootId)) {
       setRootNode(taskId);
-    }
-    else {
+    } else {
       addChild(taskId);
     }
   }
@@ -204,7 +200,7 @@ public class FlatTopology implements Topology {
     }
   }
 
-  private void setRootNode(final String rootId){
+  private void setRootNode(final String rootId) {
     synchronized (nodes) {
       LOG.info(getQualifiedName() + "Setting " + rootId + " as root");
       final TaskNode node = new TaskNodeImpl(senderStage, groupName, operName, rootId, driverId);
@@ -250,7 +246,7 @@ public class FlatTopology implements Topology {
   public void setFailed(final String id) {
     LOG.info(getQualifiedName() + "Task-" + id + " failed");
     final TaskNode taskNode = nodes.get(id);
-    if(taskNode==null) {
+    if (taskNode == null) {
       final String msg = getQualifiedName() + id + " does not exist";
       LOG.warning(msg);
       throw new RuntimeException(msg);
@@ -263,7 +259,7 @@ public class FlatTopology implements Topology {
   public void setRunning(final String id) {
     LOG.info(getQualifiedName() + "Task-" + id + " is running");
     final TaskNode taskNode = nodes.get(id);
-    if(taskNode==null) {
+    if (taskNode == null) {
       final String msg = getQualifiedName() + id + " does not exist";
       LOG.warning(msg);
       throw new RuntimeException(msg);
@@ -322,27 +318,27 @@ public class FlatTopology implements Topology {
       final EStage<List<TaskNode>> nodeTopologyUpdateWaitStage = new SingleThreadStage<>(
           "NodeTopologyUpdateWaitStage", new EventHandler<List<TaskNode>>() {
 
-            @Override
-            public void onNext(final List<TaskNode> nodes) {
-              LOG.info(getQualifiedName()
-                  + "NodeTopologyUpdateWaitStage received " + nodes.size()
-                  + " to be updated nodes to waitfor");
-              for (final TaskNode node : nodes) {
-                LOG.info(getQualifiedName()
-                    + "NodeTopologyUpdateWaitStage waiting for "
-                    + node.taskId() + " to receive TopologySetup");
-                node.waitForTopologySetupOrFailure();
-              }
+        @Override
+        public void onNext(final List<TaskNode> nodes) {
+          LOG.info(getQualifiedName()
+              + "NodeTopologyUpdateWaitStage received " + nodes.size()
+              + " to be updated nodes to waitfor");
+          for (final TaskNode node : nodes) {
+            LOG.info(getQualifiedName()
+                + "NodeTopologyUpdateWaitStage waiting for "
+                + node.taskId() + " to receive TopologySetup");
+            node.waitForTopologySetupOrFailure();
+          }
 
-              LOG.info(getQualifiedName()
-                  + "NodeTopologyUpdateWaitStage All to be updated nodes "
-                  + "have received TopologySetup. Sending version-" + version
-                  + " TopologyUpdated to " + dstId);
-              senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
-                  Type.TopologyUpdated, driverId, 0, dstId, version,
-                  new byte[0]));
-            }
-          }, nodes.size());
+          LOG.info(getQualifiedName()
+              + "NodeTopologyUpdateWaitStage All to be updated nodes "
+              + "have received TopologySetup. Sending version-" + version
+              + " TopologyUpdated to " + dstId);
+          senderStage.onNext(Utils.bldVersionedGCM(groupName, operName,
+              Type.TopologyUpdated, driverId, 0, dstId, version,
+              new byte[0]));
+        }
+      }, nodes.size());
 
       final List<TaskNode> toBeUpdatedNodes = new ArrayList<>(nodes.size());
       synchronized (nodes) {
@@ -396,7 +392,7 @@ public class FlatTopology implements Topology {
   @Override
   public boolean isRunning(final String taskId) {
     final TaskNode taskNode = nodes.get(taskId);
-    if(taskNode==null) {
+    if (taskNode == null) {
       final String msg = getQualifiedName() + taskId + " does not exist";
       LOG.warning(msg);
       return false;

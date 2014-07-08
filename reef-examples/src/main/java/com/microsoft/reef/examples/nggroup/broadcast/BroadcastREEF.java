@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,15 +15,11 @@
  */
 package com.microsoft.reef.examples.nggroup.broadcast;
 
-import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -39,6 +35,10 @@ import com.microsoft.tang.exceptions.BindException;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.AvroConfigurationSerializer;
 import com.microsoft.tang.formats.CommandLine;
+
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -74,7 +74,7 @@ public class BroadcastREEF {
     try {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
-      cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(ModelDimensions.class);
       cl.registerShortNameOfClass(NumberOfReceivers.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
@@ -92,7 +92,7 @@ public class BroadcastREEF {
       throws InjectionException, BindException {
     final Injector injector = Tang.Factory.getTang().newInjector(commandLineConf);
     local = injector.getNamedInstance(Local.class);
-    dimensions = injector.getNamedInstance(Dimensions.class);
+    dimensions = injector.getNamedInstance(ModelDimensions.class);
     numberOfReceivers = injector.getNamedInstance(NumberOfReceivers.class);
   }
 
@@ -134,7 +134,7 @@ public class BroadcastREEF {
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
         .newConfigurationBuilder(groupCommServConfiguration, driverConfiguration)
-        .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
         .bindNamedParameter(NumberOfReceivers.class, Integer.toString(numberOfReceivers))
         .build();
 

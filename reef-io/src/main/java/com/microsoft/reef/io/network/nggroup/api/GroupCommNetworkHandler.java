@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,13 +23,13 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EventHandler;
 
 /**
- * 
+ *
  */
-@DefaultImplementation(value=GroupCommNetworkHandlerImpl.class)
+@DefaultImplementation(value = GroupCommNetworkHandlerImpl.class)
 public interface GroupCommNetworkHandler extends EventHandler<Message<GroupCommMessage>> {
 
   /**
-   * @param groupName 
+   * @param groupName
    * @param commGroupNetworkHandler
    */
   void register(Class<? extends Name<String>> groupName, EventHandler<GroupCommMessage> commGroupNetworkHandler);
