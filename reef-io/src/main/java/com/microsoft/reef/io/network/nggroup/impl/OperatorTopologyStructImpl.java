@@ -40,6 +40,16 @@ import com.microsoft.tang.annotations.Name;
  */
 public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
 
+  /**
+   *
+   */
+  private static final int SMALL_MSG_LENGTH = 1 << 13;
+
+  /**
+   *
+   */
+  private static final byte[] EMPTY_BYTE = new byte[0];
+
   private static final Logger LOG = Logger.getLogger(OperatorTopologyStructImpl.class.getName());
 
   private final Class<? extends Name<String>> groupName;
@@ -52,7 +62,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   private NodeStruct parent;
   private final List<NodeStruct> children = new ArrayList<>();
 
-  private final BlockingQueue<NodeStruct> childrenWithData = new LinkedBlockingQueue<>();
+  private final BlockingQueue<NodeStruct> nodesWithData = new LinkedBlockingQueue<>();
   private final Set<String> childrenToRcvFrom = new HashSet<>();
 
   private final ConcurrentMap<String, Set<Integer>> deadMsgs = new ConcurrentHashMap<>();
@@ -131,14 +141,15 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     if(node==null) {
       LOG.warning("Unable to find node " + srcId + " to send " + msg.getType() + " to");
     } else {
-      node.addData(msg);
-      LOG.info(getQualifiedName() + "Added data msg to node " + srcId);
       try {
-        childrenWithData.put(node);
+        nodesWithData.put(node);
+        LOG.info(getQualifiedName() + "Added node " + srcId + "to nodesWithData queue");
       } catch (final InterruptedException e) {
         throw new RuntimeException(
             "InterruptedException while adding to childrenWithData queue", e);
       }
+      node.addData(msg);
+      LOG.info(getQualifiedName() + "Added data msg to node " + srcId);
     }
   }
 
@@ -153,64 +164,93 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     return findChild(srcId);
   }
 
+  private void sendToNode(final byte[] data, final Type msgType,
+      final NodeStruct node) {
+    final String nodeId = node.getId();
+    try {
+      final byte[] tmpVal;
+      if (data.length > SMALL_MSG_LENGTH) {
+        LOG.info(getQualifiedName() + "Msg too big. Sending readiness to send " + msgType
+            + " msg to " + nodeId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
+            version, nodeId, node.getVersion(), EMPTY_BYTE));
+        tmpVal = receiveFromNode(node);
+        LOG.info(getQualifiedName() + "Got readiness to accept " + msgType + " msg from " + nodeId);
+      }
+      else {
+        tmpVal = EMPTY_BYTE;
+      }
+      if(tmpVal==null) {
+        return;
+      }
+      else {
+        LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + nodeId);
+        sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
+            version, nodeId, node.getVersion(), data));
+      }
+    } catch (final NetworkException e) {
+      throw new RuntimeException("NetworkException while sending "
+          + msgType + " data from " + selfId + " to " + nodeId, e);
+    }
+  }
+
+  /**
+   * @param childNode
+   * @return
+   */
+  private byte[] receiveFromNode(final NodeStruct node) {
+    LOG.info(getQualifiedName() + "Waiting to receive from node: " + node.getId());
+    final byte[] retVal = node.getData();
+    if(retVal==null) {
+      LOG.warning(getQualifiedName() + "Node " + node.getId() + " has died");
+    }
+    return retVal;
+  }
+
+
   @Override
   public void sendToParent(final byte[] data, final Type msgType) {
     if(parent==null) {
       LOG.warning(getQualifiedName() + "Perhaps parent has died or has not been configured");
       return;
     }
-    final String parentId = parent.getId();
-    try {
-      LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + parentId);
-      sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
-          version, parentId, parent.getVersion(), data));
-    } catch (final NetworkException e) {
-      throw new RuntimeException("NetworkException while sending " + msgType + " data from " + selfId + " to " + parentId, e);
-    }
+    sendToNode(data, msgType, parent);
   }
 
   @Override
   public void sendToChildren(final byte[] data, final Type msgType) {
-    for (final NodeStruct childNode : children) {
-      final String child = childNode.getId();
-      try {
-        LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + child);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
-            version, child, childNode.getVersion(), data));
-      } catch (final NetworkException e) {
-        throw new RuntimeException("NetworkException while sending "
-            + msgType + " data from " + selfId + " to " + child, e);
-      }
+    for (final NodeStruct child : children) {
+      sendToNode(data, msgType, child);
     }
   }
+
 
   @Override
   public byte[] recvFromParent() {
-    if(parent==null) {
-      LOG.warning("Perhaps parent has died or has not been configured");
-      return null;
+    LOG.info(getQualifiedName() + "Waiting for " + parent.getId() + " to send data");
+    try {
+      nodesWithData.take();
+    } catch (final InterruptedException e) {
+      throw new RuntimeException(
+          "InterruptedException while waiting to take data from nodesWithData queue",
+          e);
     }
-    LOG.info(getQualifiedName() + "Waiting to receive from " + parent.getId());
-    return parent.getData();
-  }
-
-  @Override
-  public List<byte[]> recvFromChildren() {
-    final List<byte[]> retLst = new ArrayList<byte[]>(children.size());
-
-    for (final NodeStruct child : children) {
-      LOG.info(getQualifiedName() + "Waiting to receive from child: " + child.getId());
-      final byte[] retVal = child.getData();
-      if(retVal!=null) {
-        retLst.add(retVal);
-      }
-      else {
-        LOG.warning("Child " + child.getId() + " has died");
-      }
+    byte[] retVal = receiveFromNode(parent);
+    if (retVal!=null && retVal.length==0) {
+      LOG.info(getQualifiedName() + "Got msg that parent " + parent.getId()
+          + " has large data and is ready to send data. Sending Ack to receive data");
+      sendToNode(EMPTY_BYTE, Type.Broadcast, parent);
+      retVal = receiveFromNode(parent);
+      final boolean removed = nodesWithData.remove(parent);
+      LOG.info(getQualifiedName() + "Removed(" + removed + ") parent "
+          + parent.getId() + " from nodesWithData queue");
     }
-    return retLst;
+    if(!nodesWithData.isEmpty()) {
+      LOG.warning("There are still some nodes with data left: " + nodesWithData);
+      nodesWithData.clear();
+    }
+    return retVal;
   }
-
 
   @Override
   public <T> T recvFromChildren(final ReduceFunction<T> redFunc, final Codec<T> dataCodec) {
@@ -220,17 +260,25 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     }
 
     while(!childrenToRcvFrom.isEmpty()) {
+      LOG.info(getQualifiedName() + "Waiting for some child to send data");
       NodeStruct child;
       try {
-        child = childrenWithData.take();
+        child = nodesWithData.take();
       } catch (final InterruptedException e) {
         throw new RuntimeException(
-            "InterruptedException while waiting to take data from childrenWithData queue",
+            "InterruptedException while waiting to take data from nodesWithData queue",
             e);
       }
-      childrenToRcvFrom.remove(child.getId());
-      LOG.info(getQualifiedName() + "Processing data received from child: " + child.getId());
-      final byte[] retVal = child.getData();
+      byte[] retVal = receiveFromNode(child);
+      if(retVal!=null && retVal.length==0) {
+        LOG.info(getQualifiedName() + "Got msg that child " + child.getId()
+            + " has large data and is ready to send data. Sending Ack to receive data");
+        sendToNode(EMPTY_BYTE, Type.Reduce, child);
+        retVal = receiveFromNode(child);
+        final boolean removed = nodesWithData.remove(child);
+        LOG.info(getQualifiedName() + "Removed(" + removed + ") child "
+            + child.getId() + " from nodesWithData queue");
+      }
       if(retVal!=null) {
         retLst.add(dataCodec.decode(retVal));
         if(retLst.size()==2) {
@@ -239,15 +287,26 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
           retLst.add(redVal);
         }
       }
-      else {
-        LOG.warning("Child " + child.getId() + " has died");
-      }
+      childrenToRcvFrom.remove(child.getId());
     }
-    if(!childrenWithData.isEmpty()) {
-      LOG.warning("There are still some children with data left: " + childrenWithData);
-      childrenWithData.clear();
+    if(!nodesWithData.isEmpty()) {
+      LOG.warning("There are still some nodes with data left: " + nodesWithData);
+      nodesWithData.clear();
     }
     return retLst.isEmpty() ? null : retLst.get(0);
+  }
+
+  @Override
+  public List<byte[]> recvFromChildren() {
+    final List<byte[]> retLst = new ArrayList<byte[]>(children.size());
+
+    for (final NodeStruct child : children) {
+      final byte[] retVal = receiveFromNode(child);
+      if(retVal!=null) {
+        retLst.add(retVal);
+      }
+    }
+    return retLst;
   }
 
   private boolean removedDeadMsg(final String msgSrcId, final int msgSrcVersion) {

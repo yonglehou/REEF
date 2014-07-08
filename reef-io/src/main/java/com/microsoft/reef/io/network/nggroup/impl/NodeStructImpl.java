@@ -80,7 +80,16 @@ public abstract class NodeStructImpl implements NodeStruct {
 
   @Override
   public String toString() {
-    return id;
+    return id + ":ver(" + version + ")";
+  }
+
+  @Override
+  public boolean equals(final Object obj) {
+    if(!(obj instanceof NodeStructImpl)) {
+      return false;
+    }
+    final NodeStructImpl that = (NodeStructImpl) obj;
+    return this.id.equals(that.id) && this.version==that.version;
   }
 
   public abstract boolean checkDead(final GroupCommMessage gcm);
