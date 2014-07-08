@@ -17,8 +17,10 @@ package com.microsoft.reef.io.network.nggroup.api;
 
 import java.util.List;
 
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 
 /**
  *
@@ -67,5 +69,13 @@ public interface OperatorTopology {
    *
    */
   void initialize();
+
+
+  /**
+   * @param redFunc
+   * @param dataCodec
+   * @return
+   */
+  <T> T recvFromChildren(ReduceFunction<T> redFunc, Codec<T> dataCodec);
 
 }

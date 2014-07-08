@@ -15,7 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -128,7 +127,7 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
     LOG.log(Level.INFO, "I am Reduce receiver root " + topology.getSelfId() + " for oper: " + operName + " in group "+ groupName);
     LOG.info("Waiting for children");
     //Wait for children to send
-    final List<byte[]> valBytes = topology.recvFromChildren();
+    /*final List<byte[]> valBytes = topology.recvFromChildren();
 
 
     final List<T> vals = new ArrayList<T>(valBytes.size());
@@ -137,7 +136,8 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
     }
 
     //Reduce the received values
-    final T redVal = reduceFunction.apply(vals);
+    final T redVal = reduceFunction.apply(vals);*/
+    final T redVal = topology.recvFromChildren(reduceFunction, dataCodec);
     LOG.log(Level.INFO, "Local Reduced value: " + redVal);
     return redVal;
   }

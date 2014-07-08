@@ -36,8 +36,8 @@ import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.SVMLightParser;
-import com.microsoft.reef.examples.nggroup.bgd.loss.LogisticLossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
+import com.microsoft.reef.examples.nggroup.bgd.loss.WeightedLogisticLossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ControlMessageBroadcaster;
@@ -229,15 +229,22 @@ public class BGDDriver {
       }
       LOG.log(Level.FINEST, "Releasing All Contexts");
       synchronized (runningTasks) {
+        LOG.info("Acquired lock on runningTasks. Removing " + task.getId());
         final RunningTask rTask = runningTasks.remove(task.getId());
         if(rTask!=null) {
+          LOG.info("Closing active context");
           task.getActiveContext().close();
+        }
+        else {
+          LOG.info("Master must have closed my activ context");
         }
         if(task.getId().equals("MasterTask")) {
           jobComplete.set(true);
+          LOG.info("I am Master. Job complete. Closing other running tasks: " + runningTasks.values());
           for(final RunningTask runTask : runningTasks.values()) {
             runTask.getActiveContext().close();
           }
+          LOG.info("Clearing runningTasks");
           runningTasks.clear();
 //          driverStatusManager.onComplete();
         }
@@ -321,7 +328,7 @@ public class BGDDriver {
                   .build())
               .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
               .bindImplementation(Parser.class, SVMLightParser.class)
-              .bindImplementation(LossFunction.class, LogisticLossFunction.class)
+              .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
               .build();
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
@@ -407,7 +414,7 @@ public class BGDDriver {
               .build())
           .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
           .bindImplementation(Parser.class, SVMLightParser.class)
-          .bindImplementation(LossFunction.class, LogisticLossFunction.class)
+          .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
           .build();
       //Do not add the task back
       //allCommGroup.addTask(partialTaskConf);

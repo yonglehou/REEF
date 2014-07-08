@@ -27,10 +27,12 @@ import java.util.logging.Logger;
 import javax.inject.Inject;
 
 import com.microsoft.reef.exception.evaluator.NetworkException;
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopology;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopologyStruct;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
@@ -195,6 +197,13 @@ public class OperatorTopologyImpl implements OperatorTopology {
     refreshEffectiveTopology();
     assert(effectiveTopology!=null);
     return effectiveTopology.recvFromChildren();
+  }
+
+  @Override
+  public <T> T recvFromChildren(final ReduceFunction<T> redFunc, final Codec<T> dataCodec) {
+    refreshEffectiveTopology();
+    assert(effectiveTopology!=null);
+    return effectiveTopology.recvFromChildren(redFunc, dataCodec);
   }
 
   private void refreshEffectiveTopology() {

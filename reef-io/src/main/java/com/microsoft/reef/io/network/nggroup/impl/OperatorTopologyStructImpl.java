@@ -20,15 +20,19 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 
 import com.microsoft.reef.exception.evaluator.NetworkException;
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.NodeStruct;
 import com.microsoft.reef.io.network.nggroup.api.OperatorTopologyStruct;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 
 /**
@@ -47,6 +51,9 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   private boolean changes = true;
   private NodeStruct parent;
   private final List<NodeStruct> children = new ArrayList<>();
+
+  private final BlockingQueue<NodeStruct> childrenWithData = new LinkedBlockingQueue<>();
+  private final Set<String> childrenToRcvFrom = new HashSet<>();
 
   private final ConcurrentMap<String, Set<Integer>> deadMsgs = new ConcurrentHashMap<>();
 
@@ -126,6 +133,12 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     } else {
       node.addData(msg);
       LOG.info(getQualifiedName() + "Added data msg to node " + srcId);
+      try {
+        childrenWithData.put(node);
+      } catch (final InterruptedException e) {
+        throw new RuntimeException(
+            "InterruptedException while adding to childrenWithData queue", e);
+      }
     }
   }
 
@@ -196,6 +209,45 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       }
     }
     return retLst;
+  }
+
+
+  @Override
+  public <T> T recvFromChildren(final ReduceFunction<T> redFunc, final Codec<T> dataCodec) {
+    final List<T> retLst = new ArrayList<>(2);
+    for (final NodeStruct child : children) {
+      childrenToRcvFrom.add(child.getId());
+    }
+
+    while(!childrenToRcvFrom.isEmpty()) {
+      NodeStruct child;
+      try {
+        child = childrenWithData.take();
+      } catch (final InterruptedException e) {
+        throw new RuntimeException(
+            "InterruptedException while waiting to take data from childrenWithData queue",
+            e);
+      }
+      childrenToRcvFrom.remove(child.getId());
+      LOG.info(getQualifiedName() + "Processing data received from child: " + child.getId());
+      final byte[] retVal = child.getData();
+      if(retVal!=null) {
+        retLst.add(dataCodec.decode(retVal));
+        if(retLst.size()==2) {
+          final T redVal = redFunc.apply(retLst);
+          retLst.clear();
+          retLst.add(redVal);
+        }
+      }
+      else {
+        LOG.warning("Child " + child.getId() + " has died");
+      }
+    }
+    if(!childrenWithData.isEmpty()) {
+      LOG.warning("There are still some children with data left: " + childrenWithData);
+      childrenWithData.clear();
+    }
+    return retLst.isEmpty() ? null : retLst.get(0);
   }
 
   private boolean removedDeadMsg(final String msgSrcId, final int msgSrcVersion) {

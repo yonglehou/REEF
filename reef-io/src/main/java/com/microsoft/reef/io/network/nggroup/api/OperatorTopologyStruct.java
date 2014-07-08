@@ -19,9 +19,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
+import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.impl.Sender;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 
 /**
@@ -110,6 +112,13 @@ public interface OperatorTopologyStruct {
    * @return
    */
   Collection<? extends NodeStruct> getChildren();
+
+  /**
+   * @param redFunc
+   * @param dataCodec
+   * @return
+   */
+  <T> T recvFromChildren(ReduceFunction<T> redFunc, Codec<T> dataCodec);
 
 
 
