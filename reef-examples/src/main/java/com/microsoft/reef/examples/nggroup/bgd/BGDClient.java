@@ -1,3 +1,18 @@
+/**
+ * Copyright (C) 2014 Microsoft Corporation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.microsoft.reef.examples.nggroup.bgd;
 
 import com.microsoft.reef.client.DriverConfiguration;
@@ -35,13 +50,13 @@ public class BGDClient {
 
   @Inject
   public BGDClient(final @Parameter(InputDir.class) String input,
-                   final @Parameter(Dimensions.class) int dimensions,
+                   final @Parameter(ModelDimensions.class) int dimensions,
                    final @Parameter(Lambda.class) double lambda,
                    final @Parameter(Eps.class) double eps,
                    final @Parameter(Iterations.class) int iters,
                    final @Parameter(NumSplits.class) int numSplits,
                    final @Parameter(EvaluatorMemory.class) int memory,
-                   final @Parameter(RampUp.class) boolean rampup,
+                   final @Parameter(EnableRampup.class) boolean rampup,
                    final @Parameter(MinParts.class) int minParts) {
     this.input = input;
     this.dimensions = dimensions;
@@ -109,11 +124,11 @@ public class BGDClient {
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
         .newConfigurationBuilder(groupCommServConfiguration, dataLoadConfiguration)
-        .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
         .bindNamedParameter(Lambda.class, Double.toString(lambda))
         .bindNamedParameter(Eps.class, Double.toString(eps))
         .bindNamedParameter(Iterations.class, Integer.toString(iters))
-        .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
+        .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
         .bindNamedParameter(MinParts.class, Integer.toString(minParts))
         .build();
     return mergedDriverConfiguration;
@@ -123,14 +138,14 @@ public class BGDClient {
     final JavaConfigurationBuilder configurationBuilder = Tang.Factory.getTang().newConfigurationBuilder();
     final CommandLine commandLine = new CommandLine(configurationBuilder);
     commandLine.registerShortNameOfClass(InputDir.class);
-    commandLine.registerShortNameOfClass(Dimensions.class);
+    commandLine.registerShortNameOfClass(ModelDimensions.class);
     commandLine.registerShortNameOfClass(Lambda.class);
     commandLine.registerShortNameOfClass(Eps.class);
     commandLine.registerShortNameOfClass(Iterations.class);
     commandLine.registerShortNameOfClass(NumSplits.class);
     commandLine.registerShortNameOfClass(Timeout.class);
     commandLine.registerShortNameOfClass(EvaluatorMemory.class);
-    commandLine.registerShortNameOfClass(RampUp.class);
+    commandLine.registerShortNameOfClass(EnableRampup.class);
     commandLine.registerShortNameOfClass(MinParts.class);
     commandLine.processCommandLine(args);
     return Tang.Factory.getTang().newInjector(configurationBuilder.build()).getInstance(BGDClient.class);

@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -80,14 +80,14 @@ public class BGDREEF {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
       cl.registerShortNameOfClass(InputDir.class);
-      cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(ModelDimensions.class);
       cl.registerShortNameOfClass(Lambda.class);
       cl.registerShortNameOfClass(Eps.class);
       cl.registerShortNameOfClass(Iterations.class);
       cl.registerShortNameOfClass(NumSplits.class);
       cl.registerShortNameOfClass(Timeout.class);
       cl.registerShortNameOfClass(EvaluatorMemory.class);
-      cl.registerShortNameOfClass(RampUp.class);
+      cl.registerShortNameOfClass(EnableRampup.class);
       cl.registerShortNameOfClass(MinParts.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
@@ -106,14 +106,14 @@ public class BGDREEF {
     final Injector injector = Tang.Factory.getTang().newInjector(commandLineConf);
     local = injector.getNamedInstance(Local.class);
     input = injector.getNamedInstance(InputDir.class);
-    dimensions = injector.getNamedInstance(Dimensions.class);
+    dimensions = injector.getNamedInstance(ModelDimensions.class);
     lambda = injector.getNamedInstance(Lambda.class);
     eps = injector.getNamedInstance(Eps.class);
     iters = injector.getNamedInstance(Iterations.class);
     numSplits = injector.getNamedInstance(NumSplits.class);
     timeout = injector.getNamedInstance(Timeout.class);
     memory = injector.getNamedInstance(EvaluatorMemory.class);
-    rampup = injector.getNamedInstance(RampUp.class);
+    rampup = injector.getNamedInstance(EnableRampup.class);
     minParts = injector.getNamedInstance(MinParts.class);
   }
 
@@ -166,11 +166,11 @@ public class BGDREEF {
 
     final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
         .newConfigurationBuilder(groupCommServConfiguration, dataLoadConfiguration)
-        .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
         .bindNamedParameter(Lambda.class, Double.toString(lambda))
         .bindNamedParameter(Eps.class, Double.toString(eps))
         .bindNamedParameter(Iterations.class, Integer.toString(iters))
-        .bindNamedParameter(RampUp.class, Boolean.toString(rampup))
+        .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
         .bindNamedParameter(MinParts.class, Integer.toString(minParts))
         .build();
     return mergedDriverConfiguration;

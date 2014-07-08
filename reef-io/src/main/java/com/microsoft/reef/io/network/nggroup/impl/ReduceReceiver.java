@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
@@ -41,6 +34,12 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.Identifier;
+
+import javax.inject.Inject;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -88,7 +87,7 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
     this.netService = netService;
     this.sender = new Sender(this.netService);
     this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender, version);
-    this.commGroupNetworkHandler.register(this.operName,this);
+    this.commGroupNetworkHandler.register(this.operName, this);
     this.commGroupClient = commGroupClient;
   }
 
@@ -119,12 +118,12 @@ public class ReduceReceiver<T> implements Reduce.Receiver<T>, EventHandler<Group
 
   @Override
   public T reduce() throws InterruptedException, NetworkException {
-    if(init.compareAndSet(false, true)) {
+    if (init.compareAndSet(false, true)) {
       commGroupClient.initialize();
     }
     // TODO Auto-generated method stub
     //I am root.
-    LOG.log(Level.INFO, "I am Reduce receiver root " + topology.getSelfId() + " for oper: " + operName + " in group "+ groupName);
+    LOG.log(Level.INFO, "I am Reduce receiver root " + topology.getSelfId() + " for oper: " + operName + " in group " + groupName);
     LOG.info("Waiting for children");
     //Wait for children to send
     /*final List<byte[]> valBytes = topology.recvFromChildren();

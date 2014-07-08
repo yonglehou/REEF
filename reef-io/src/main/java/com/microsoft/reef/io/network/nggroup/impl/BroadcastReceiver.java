@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
@@ -39,6 +33,11 @@ import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
+
+import javax.inject.Inject;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -73,7 +72,7 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
       final CommGroupNetworkHandler commGroupNetworkHandler,
       final NetworkService<GroupCommMessage> netService,
       final CommunicationGroupClient commGroupClient
-      ) {
+  ) {
     super();
     this.version = version;
     LOG.info(operName + " has CommGroupHandler-" + commGroupNetworkHandler.toString());
@@ -84,7 +83,7 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
     this.netService = netService;
     this.sender = new Sender(this.netService);
     this.topology = new OperatorTopologyImpl(this.groupName, this.operName, selfId, driverId, sender, version);
-    this.commGroupNetworkHandler.register(this.operName,this);
+    this.commGroupNetworkHandler.register(this.operName, this);
     this.commGroupClient = commGroupClient;
   }
 
@@ -115,7 +114,7 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
 
   @Override
   public T receive() throws NetworkException, InterruptedException {
-    if(init.compareAndSet(false, true)) {
+    if (init.compareAndSet(false, true)) {
       commGroupClient.initialize();
     }
     //I am an intermediate node or leaf.
@@ -125,7 +124,7 @@ public class BroadcastReceiver<T> implements Broadcast.Receiver<T>, EventHandler
     LOG.log(Level.INFO, "Waiting for parent");
     final byte[] data = topology.recvFromParent();
     //TODO: Should receive the identity element instead of null
-    if(data==null) {
+    if (data == null) {
       LOG.warning("Received null. Perhaps one of my ancestors is dead.");
       retVal = null;
     } else {

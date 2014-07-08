@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.EvaluatorDispatcherThreads;
@@ -30,6 +28,8 @@ import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.wake.EventHandler;
+
+import javax.inject.Inject;
 
 /**
  *
@@ -53,7 +53,7 @@ public class GroupCommService {
     return jcb.build();
   }
 
-  public class FailedEvaluatorHandler implements EventHandler<FailedEvaluator>{
+  public class FailedEvaluatorHandler implements EventHandler<FailedEvaluator> {
 
     @Override
     public void onNext(final FailedEvaluator failedEvaluator) {
@@ -63,7 +63,7 @@ public class GroupCommService {
   }
 
 
-  public class RunningTaskHandler implements EventHandler<RunningTask>{
+  public class RunningTaskHandler implements EventHandler<RunningTask> {
 
     @Override
     public void onNext(final RunningTask runningTask) {
@@ -72,7 +72,7 @@ public class GroupCommService {
 
   }
 
-  public class FailedTaskHandler implements EventHandler<FailedTask>{
+  public class FailedTaskHandler implements EventHandler<FailedTask> {
 
     @Override
     public void onNext(final FailedTask failedTask) {

@@ -13,15 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.broadcast.parameters;
+package com.microsoft.reef.examples.nggroup.bgd.operatornames;
 
 import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.NamedParameter;
 
 /**
- *
+ * Used to identify the broadcast operator for control flow messages.
  */
-@NamedParameter(doc = "Prob(failure)", default_value = "0.1")
-public class FailureProbability implements Name<Double> {
-
+@NamedParameter()
+public final class ControlMessageBroadcaster implements Name<String> {
 }

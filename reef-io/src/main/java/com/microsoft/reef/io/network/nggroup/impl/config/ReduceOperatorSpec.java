@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,21 +21,25 @@ import com.microsoft.reef.io.serialization.Codec;
 
 
 /**
- * 
+ *
  */
-public class ReduceOperatorSpec implements OperatorSpec{
+public class ReduceOperatorSpec implements OperatorSpec {
   private final String receiverId;
-  
-  /** Codec to be used to serialize data */
+
+  /**
+   * Codec to be used to serialize data
+   */
   private final Class<? extends Codec> dataCodecClass;
-  
-  /** The reduce function to be used for operations that do reduction */
+
+  /**
+   * The reduce function to be used for operations that do reduction
+   */
   public final Class<? extends ReduceFunction> redFuncClass;
-  
-  
+
+
   public ReduceOperatorSpec(String receiverId,
-      Class<? extends Codec> dataCodecClass,
-      Class<? extends ReduceFunction> redFuncClass) {
+                            Class<? extends Codec> dataCodecClass,
+                            Class<? extends ReduceFunction> redFuncClass) {
     super();
     this.receiverId = receiverId;
     this.dataCodecClass = dataCodecClass;
@@ -45,7 +49,7 @@ public class ReduceOperatorSpec implements OperatorSpec{
   public String getReceiverId() {
     return receiverId;
   }
-  
+
   /**
    * @return the redFuncClass
    */
@@ -58,16 +62,18 @@ public class ReduceOperatorSpec implements OperatorSpec{
     return dataCodecClass;
   }
 
-  public static Builder newBuilder(){
+  public static Builder newBuilder() {
     return new ReduceOperatorSpec.Builder();
   }
-  
-  public static class Builder implements com.microsoft.reef.util.Builder<ReduceOperatorSpec>{
+
+  public static class Builder implements com.microsoft.reef.util.Builder<ReduceOperatorSpec> {
     private String receiverId;
-    
-    /** Codec to be used to serialize data */
+
+    /**
+     * Codec to be used to serialize data
+     */
     private Class<? extends Codec> dataCodecClass;
-    
+
     public Class<? extends ReduceFunction> redFuncClass;
 
 
@@ -75,17 +81,17 @@ public class ReduceOperatorSpec implements OperatorSpec{
       this.receiverId = receiverId;
       return this;
     }
-  
+
     public Builder setDataCodecClass(Class<? extends Codec> codecClazz) {
       this.dataCodecClass = codecClazz;
       return this;
     }
-    
-    public Builder setReduceFunctionClass(Class<? extends ReduceFunction> redFuncClass){
+
+    public Builder setReduceFunctionClass(Class<? extends ReduceFunction> redFuncClass) {
       this.redFuncClass = redFuncClass;
       return this;
     }
-  
+
     @Override
     public ReduceOperatorSpec build() {
       return new ReduceOperatorSpec(receiverId, dataCodecClass, redFuncClass);

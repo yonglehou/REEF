@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,15 +14,6 @@
  * limitations under the License.
  */
 package com.microsoft.reef.io.network.nggroup.impl;
-
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
 
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.ContextConfiguration;
@@ -35,12 +26,7 @@ import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.Connection;
 import com.microsoft.reef.io.network.Message;
 import com.microsoft.reef.io.network.group.impl.GCMCodec;
-import com.microsoft.reef.io.network.impl.BindNSToTask;
-import com.microsoft.reef.io.network.impl.MessagingTransportFactory;
-import com.microsoft.reef.io.network.impl.NetworkService;
-import com.microsoft.reef.io.network.impl.NetworkServiceClosingHandler;
-import com.microsoft.reef.io.network.impl.NetworkServiceParameters;
-import com.microsoft.reef.io.network.impl.UnbindNSFromTask;
+import com.microsoft.reef.io.network.impl.*;
 import com.microsoft.reef.io.network.naming.NameServer;
 import com.microsoft.reef.io.network.naming.NameServerParameters;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -63,6 +49,14 @@ import com.microsoft.wake.impl.SingleThreadStage;
 import com.microsoft.wake.impl.SyncStage;
 import com.microsoft.wake.impl.ThreadPoolStage;
 import com.microsoft.wake.remote.NetUtils;
+
+import javax.inject.Inject;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -104,7 +98,7 @@ public class GroupCommDriverImpl implements GroupCommDriver {
 
   @Inject
   public GroupCommDriverImpl(final ConfigurationSerializer confSerializer,
-      @Parameter(DriverIdentifier.class) final String driverId){
+                             @Parameter(DriverIdentifier.class) final String driverId) {
     this.driverId = driverId;
     this.nameServiceAddr = NetUtils.getLocalAddress();
     this.nameServicePort = nameService.getPort();
@@ -125,16 +119,15 @@ public class GroupCommDriverImpl implements GroupCommDriver {
           @Override
           public void onNext(final Message<GroupCommMessage> msg) {
             final Iterator<GroupCommMessage> gcmIterator = msg.getData().iterator();
-            if(gcmIterator.hasNext()) {
+            if (gcmIterator.hasNext()) {
               final GroupCommMessage gcm = gcmIterator.next();
-              if(gcmIterator.hasNext()) {
+              if (gcmIterator.hasNext()) {
                 throw new RuntimeException("Expecting exactly one GCM object inside Message but found more");
               }
               /*final Class<? extends Name<String>> groupName = Utils.getClass(gcm.getGroupname());
               commGroupDrivers.get(groupName).handle(gcm);*/
               groupCommMessageStage.onNext(gcm);
-            }
-            else {
+            } else {
               throw new RuntimeException("Expecting exactly one GCM object inside Message but found none");
             }
           }
@@ -173,15 +166,15 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     final BroadcastingEventHandler<GroupCommMessage> commGroupMessageHandler = new BroadcastingEventHandler<>();
     final CommunicationGroupDriver commGroupDriver = new
         CommunicationGroupDriverImpl(
-            groupName,
-            confSerializer,
-            senderStage,
-            commGroupRunningTaskHandler,
-            commGroupFailedTaskHandler,
-            commGroupFailedEvaluatorHandler,
-            commGroupMessageHandler,
-            driverId,
-            numberOfTasks);
+        groupName,
+        confSerializer,
+        senderStage,
+        commGroupRunningTaskHandler,
+        commGroupFailedTaskHandler,
+        commGroupFailedEvaluatorHandler,
+        commGroupMessageHandler,
+        driverId,
+        numberOfTasks);
     commGroupDrivers.put(groupName, commGroupDriver);
     groupCommRunningTaskHandler.addHandler(commGroupRunningTaskHandler);
     groupCommFailedTaskHandler.addHandler(commGroupFailedTaskHandler);
@@ -206,18 +199,18 @@ public class GroupCommDriverImpl implements GroupCommDriver {
     final Configuration serviceConfiguration = ServiceConfiguration.CONF
         .set(ServiceConfiguration.SERVICES, NetworkService.class)
         .set(ServiceConfiguration.SERVICES, GroupCommNetworkHandlerImpl.class)
-        .set(ServiceConfiguration.ON_CONTEXT_STOP,NetworkServiceClosingHandler.class)
+        .set(ServiceConfiguration.ON_CONTEXT_STOP, NetworkServiceClosingHandler.class)
         .set(ServiceConfiguration.ON_TASK_STARTED, BindNSToTask.class)
         .set(ServiceConfiguration.ON_TASK_STOP, UnbindNSFromTask.class)
         .build();
     return tang.newConfigurationBuilder(serviceConfiguration)
-      .bindNamedParameter(NetworkServiceParameters.NetworkServiceCodec.class, GCMCodec.class)
-      .bindNamedParameter(NetworkServiceParameters.NetworkServiceHandler.class, GroupCommNetworkHandlerImpl.class)
-      .bindNamedParameter(NetworkServiceParameters.NetworkServiceExceptionHandler.class, ExceptionHandler.class)
-      .bindNamedParameter(NameServerParameters.NameServerAddr.class, nameServiceAddr)
-      .bindNamedParameter(NameServerParameters.NameServerPort.class, Integer.toString(nameServicePort))
-      .bindNamedParameter(NetworkServiceParameters.NetworkServicePort.class, "0")
-      .build();
+        .bindNamedParameter(NetworkServiceParameters.NetworkServiceCodec.class, GCMCodec.class)
+        .bindNamedParameter(NetworkServiceParameters.NetworkServiceHandler.class, GroupCommNetworkHandlerImpl.class)
+        .bindNamedParameter(NetworkServiceParameters.NetworkServiceExceptionHandler.class, ExceptionHandler.class)
+        .bindNamedParameter(NameServerParameters.NameServerAddr.class, nameServiceAddr)
+        .bindNamedParameter(NameServerParameters.NameServerPort.class, Integer.toString(nameServicePort))
+        .bindNamedParameter(NetworkServiceParameters.NetworkServicePort.class, "0")
+        .build();
   }
 
   @Override

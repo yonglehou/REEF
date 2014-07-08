@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,17 +15,6 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.logging.Logger;
-
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.NodeStruct;
@@ -34,6 +23,13 @@ import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommM
 import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.tang.annotations.Name;
+
+import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.logging.Logger;
 
 /**
  *
@@ -60,8 +56,8 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   private int version;
 
   public OperatorTopologyStructImpl(final Class<? extends Name<String>> groupName,
-      final Class<? extends Name<String>> operName, final String selfId, final String driverId,
-      final Sender sender, final int version) {
+                                    final Class<? extends Name<String>> operName, final String selfId, final String driverId,
+                                    final Sender sender, final int version) {
     super();
     this.groupName = groupName;
     this.operName = operName;
@@ -128,7 +124,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     final String srcId = msg.getSrcid();
     LOG.info(getQualifiedName() + "Adding " + msg.getType() + " into the data queue");
     final NodeStruct node = findNode(srcId);
-    if(node==null) {
+    if (node == null) {
       LOG.warning("Unable to find node " + srcId + " to send " + msg.getType() + " to");
     } else {
       node.addData(msg);
@@ -147,7 +143,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    * @return
    */
   private NodeStruct findNode(final String srcId) {
-    if(parent!=null && parent.getId().equals(srcId)) {
+    if (parent != null && parent.getId().equals(srcId)) {
       return parent;
     }
     return findChild(srcId);
@@ -155,7 +151,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
 
   @Override
   public void sendToParent(final byte[] data, final Type msgType) {
-    if(parent==null) {
+    if (parent == null) {
       LOG.warning(getQualifiedName() + "Perhaps parent has died or has not been configured");
       return;
     }
@@ -186,7 +182,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
 
   @Override
   public byte[] recvFromParent() {
-    if(parent==null) {
+    if (parent == null) {
       LOG.warning("Perhaps parent has died or has not been configured");
       return null;
     }
@@ -201,10 +197,9 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     for (final NodeStruct child : children) {
       LOG.info(getQualifiedName() + "Waiting to receive from child: " + child.getId());
       final byte[] retVal = child.getData();
-      if(retVal!=null) {
+      if (retVal != null) {
         retLst.add(retVal);
-      }
-      else {
+      } else {
         LOG.warning("Child " + child.getId() + " has died");
       }
     }
@@ -219,7 +214,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       childrenToRcvFrom.add(child.getId());
     }
 
-    while(!childrenToRcvFrom.isEmpty()) {
+    while (!childrenToRcvFrom.isEmpty()) {
       NodeStruct child;
       try {
         child = childrenWithData.take();
@@ -231,19 +226,18 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       childrenToRcvFrom.remove(child.getId());
       LOG.info(getQualifiedName() + "Processing data received from child: " + child.getId());
       final byte[] retVal = child.getData();
-      if(retVal!=null) {
+      if (retVal != null) {
         retLst.add(dataCodec.decode(retVal));
-        if(retLst.size()==2) {
+        if (retLst.size() == 2) {
           final T redVal = redFunc.apply(retLst);
           retLst.clear();
           retLst.add(redVal);
         }
-      }
-      else {
+      } else {
         LOG.warning("Child " + child.getId() + " has died");
       }
     }
-    if(!childrenWithData.isEmpty()) {
+    if (!childrenWithData.isEmpty()) {
       LOG.warning("There are still some children with data left: " + childrenWithData);
       childrenWithData.clear();
     }
@@ -252,21 +246,19 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
 
   private boolean removedDeadMsg(final String msgSrcId, final int msgSrcVersion) {
     final Set<Integer> msgVersions = deadMsgs.get(msgSrcId);
-    if(msgVersions!=null) {
+    if (msgVersions != null) {
       LOG.warning(getQualifiedName() + "Found dead msgs " +
           msgVersions + " waiting for add");
-      if(msgVersions.remove(msgSrcVersion)) {
+      if (msgVersions.remove(msgSrcVersion)) {
         LOG.warning(getQualifiedName()
             + "Found dead msg with same version as srcVer-" + msgSrcVersion);
         return true;
-      }
-      else {
+      } else {
         LOG.warning(getQualifiedName()
             + "No dead msg with same version as srcVer-"
             + msgSrcVersion);
       }
-    }
-    else {
+    } else {
       LOG.warning(getQualifiedName()
           + "No dead msgs waiting for add.");
     }
@@ -279,14 +271,14 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   }
 
   private boolean addedToDeadMsgs(final NodeStruct node, final String msgSrcId, final int msgSrcVersion) {
-    if(node==null) {
+    if (node == null) {
       LOG.warning(getQualifiedName()
           + "Got dead msg when no node existed. OOS Queing up for add to handle");
       addToDeadMsgs(msgSrcId, msgSrcVersion);
       return true;
     }
     final int nodeVersion = node.getVersion();
-    if(msgSrcVersion>nodeVersion) {
+    if (msgSrcVersion > nodeVersion) {
       LOG.warning(getQualifiedName() + "Got an OOS dead msg. " +
           "Has HIGHER ver-" + msgSrcVersion + " than node ver-" + nodeVersion +
           ". Queing up for add to handle");
@@ -301,135 +293,125 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    */
   @Override
   public void update(final GroupCommMessage msg) {
-    if(!msg.hasSrcVersion()) {
+    if (!msg.hasSrcVersion()) {
       throw new RuntimeException(getQualifiedName()
           + "can only deal with msgs that have src version set");
     }
     final String srcId = msg.getSrcid();
     final int srcVersion = msg.getSrcVersion();
     LOG.info(getQualifiedName() + "Updating " + msg.getType() + " msg from " + srcId);
-    LOG.info(getQualifiedName() + "Before update: parent=" + ((parent!=null) ? parent.getId() : "NULL"));
+    LOG.info(getQualifiedName() + "Before update: parent=" + ((parent != null) ? parent.getId() : "NULL"));
     LOG.info(getQualifiedName() + "Before update: children=" + children);
-    switch(msg.getType()) {
-    case ParentAdd:
-      if(!removedDeadMsg(srcId, srcVersion)) {
-        if(parent!=null) {
-          LOG.warning(getQualifiedName() + "Parent already exists");
+    switch (msg.getType()) {
+      case ParentAdd:
+        if (!removedDeadMsg(srcId, srcVersion)) {
+          if (parent != null) {
+            LOG.warning(getQualifiedName() + "Parent already exists");
+            final int parentVersion = parent.getVersion();
+            if (srcVersion < parentVersion) {
+              LOG.warning(getQualifiedName() + "Got an OOS parent add msg. " +
+                  "Has LOWER ver-" + srcVersion + " than parent ver-" + parentVersion +
+                  ". Discarding");
+              break;
+            }
+            if (srcVersion > parentVersion) {
+              LOG.warning(getQualifiedName() + "Got an OOS parent add msg. " +
+                  "Has HIGHER ver-" + srcVersion + " than parent ver-" + parentVersion
+                  + ". Bumping up version number");
+              parent.setVersion(srcVersion);
+              break;
+            } else {
+              final String logMsg = getQualifiedName() + "Got two parent add msgs of same version-" + srcVersion;
+              LOG.warning(logMsg);
+              throw new RuntimeException(logMsg);
+            }
+          } else {
+            LOG.info(getQualifiedName() + "Creating new parent node for " + srcId);
+            parent = new ParentNodeStruct(srcId, srcVersion);
+          }
+        } else {
+          LOG.warning(getQualifiedName()
+              + "Removed dead msg. Not adding parent");
+        }
+        break;
+      case ParentDead:
+        if (!addedToDeadMsgs(parent, srcId, srcVersion)) {
           final int parentVersion = parent.getVersion();
-          if(srcVersion<parentVersion) {
-            LOG.warning(getQualifiedName() + "Got an OOS parent add msg. " +
+          if (srcVersion < parentVersion) {
+            LOG.warning(getQualifiedName() + "Got an OOS parent dead msg. " +
                 "Has LOWER ver-" + srcVersion + " than parent ver-" + parentVersion +
                 ". Discarding");
             break;
+          } else {
+            LOG.info(getQualifiedName()
+                + "Got a parent dead msg. " +
+                "Has SAME ver-" + srcVersion + " as parent ver-" + parentVersion +
+                "Setting parent node to null");
           }
-          if(srcVersion>parentVersion) {
-            LOG.warning(getQualifiedName() + "Got an OOS parent add msg. " +
-                "Has HIGHER ver-" + srcVersion + " than parent ver-" + parentVersion
-                + ". Bumping up version number");
-            parent.setVersion(srcVersion);
-            break;
+        } else {
+          LOG.warning(getQualifiedName()
+              + "Added to dead msgs. Setting parent to null since ParentAdd might not turn up");
+        }
+        parent = null;
+        break;
+      case ChildAdd:
+        if (!removedDeadMsg(srcId, srcVersion)) {
+          final NodeStruct toBeAddedchild = findChild(srcId);
+          if (toBeAddedchild != null) {
+            LOG.warning(getQualifiedName() + "Child already exists");
+            final int childVersion = toBeAddedchild.getVersion();
+            if (srcVersion < childVersion) {
+              LOG.warning(getQualifiedName() + "Got an OOS child add msg. " +
+                  "Has LOWER ver-" + srcVersion + " than child ver-" + childVersion +
+                  ". Discarding");
+              break;
+            }
+            if (srcVersion > childVersion) {
+              LOG.warning(getQualifiedName() + "Got an OOS child add msg. " +
+                  "Has HIGHER ver-" + srcVersion + " than child ver-" + childVersion
+                  + ". Bumping up version number");
+              toBeAddedchild.setVersion(srcVersion);
+              break;
+            } else {
+              final String logMsg = getQualifiedName() + "Got two child add msgs of same version-" + srcVersion;
+              LOG.warning(logMsg);
+              throw new RuntimeException(logMsg);
+            }
+          } else {
+            LOG.info(getQualifiedName() + "Creating new child node for " + srcId);
+            children.add(new ChildNodeStruct(srcId, srcVersion));
           }
-          else {
-            final String logMsg = getQualifiedName() + "Got two parent add msgs of same version-" + srcVersion;
-            LOG.warning(logMsg);
-            throw new RuntimeException(logMsg);
-          }
+        } else {
+          LOG.warning(getQualifiedName()
+              + "Removed dead msg. Not adding child");
         }
-        else {
-          LOG.info(getQualifiedName() + "Creating new parent node for " + srcId);
-          parent = new ParentNodeStruct(srcId,srcVersion);
-        }
-      }
-      else {
-        LOG.warning(getQualifiedName()
-            + "Removed dead msg. Not adding parent");
-      }
-      break;
-    case ParentDead:
-      if(!addedToDeadMsgs(parent, srcId, srcVersion)) {
-        final int parentVersion = parent.getVersion();
-        if(srcVersion<parentVersion) {
-          LOG.warning(getQualifiedName() + "Got an OOS parent dead msg. " +
-              "Has LOWER ver-" + srcVersion + " than parent ver-" + parentVersion +
-              ". Discarding");
-          break;
-        }
-        else {
-          LOG.info(getQualifiedName()
-              + "Got a parent dead msg. " +
-              "Has SAME ver-" + srcVersion + " as parent ver-" + parentVersion +
-              "Setting parent node to null");
-        }
-      }
-      else {
-        LOG.warning(getQualifiedName()
-            + "Added to dead msgs. Setting parent to null since ParentAdd might not turn up");
-      }
-      parent = null;
-      break;
-    case ChildAdd:
-      if(!removedDeadMsg(srcId, srcVersion)) {
-        final NodeStruct toBeAddedchild = findChild(srcId);
-        if(toBeAddedchild!=null) {
-          LOG.warning(getQualifiedName() + "Child already exists");
-          final int childVersion = toBeAddedchild.getVersion();
-          if(srcVersion<childVersion) {
-            LOG.warning(getQualifiedName() + "Got an OOS child add msg. " +
+        break;
+      case ChildDead:
+        final NodeStruct toBeRemovedchild = findChild(srcId);
+        if (!addedToDeadMsgs(toBeRemovedchild, srcId, srcVersion)) {
+          final int childVersion = toBeRemovedchild.getVersion();
+          if (srcVersion < childVersion) {
+            LOG.warning(getQualifiedName() + "Got an OOS child dead msg. " +
                 "Has LOWER ver-" + srcVersion + " than child ver-" + childVersion +
                 ". Discarding");
             break;
+          } else {
+            LOG.info(getQualifiedName()
+                + "Got a child dead msg. " +
+                "Has SAME ver-" + srcVersion + " as child ver-" + childVersion +
+                "Removing child node");
           }
-          if(srcVersion>childVersion) {
-            LOG.warning(getQualifiedName() + "Got an OOS child add msg. " +
-                "Has HIGHER ver-" + srcVersion + " than child ver-" + childVersion
-                + ". Bumping up version number");
-            toBeAddedchild.setVersion(srcVersion);
-            break;
-          }
-          else {
-            final String logMsg = getQualifiedName() + "Got two child add msgs of same version-" + srcVersion;
-            LOG.warning(logMsg);
-            throw new RuntimeException(logMsg);
-          }
+        } else {
+          LOG.warning(getQualifiedName()
+              + "Added to dead msgs. Removing child node since ChildAdd might not turn up");
         }
-        else {
-          LOG.info(getQualifiedName() + "Creating new child node for " + srcId);
-          children.add(new ChildNodeStruct(srcId, srcVersion));
-        }
-      }
-      else {
-        LOG.warning(getQualifiedName()
-            + "Removed dead msg. Not adding child");
-      }
-      break;
-    case ChildDead:
-      final NodeStruct toBeRemovedchild = findChild(srcId);
-      if(!addedToDeadMsgs(toBeRemovedchild, srcId, srcVersion)) {
-        final int childVersion = toBeRemovedchild.getVersion();
-        if(srcVersion<childVersion) {
-          LOG.warning(getQualifiedName() + "Got an OOS child dead msg. " +
-              "Has LOWER ver-" + srcVersion + " than child ver-" + childVersion +
-              ". Discarding");
-          break;
-        }
-        else {
-          LOG.info(getQualifiedName()
-              + "Got a child dead msg. " +
-              "Has SAME ver-" + srcVersion + " as child ver-" + childVersion +
-              "Removing child node");
-        }
-      }
-      else {
-        LOG.warning(getQualifiedName()
-            + "Added to dead msgs. Removing child node since ChildAdd might not turn up");
-      }
-      children.remove(toBeRemovedchild);
-      break;
-    default:
-      LOG.warning("Received a non control message in update");
-      throw new RuntimeException("Received a non control message in update");
+        children.remove(toBeRemovedchild);
+        break;
+      default:
+        LOG.warning("Received a non control message in update");
+        throw new RuntimeException("Received a non control message in update");
     }
-    LOG.info(getQualifiedName() + "After update: parent=" + ((parent!=null) ? parent.getId() : "NULL"));
+    LOG.info(getQualifiedName() + "After update: parent=" + ((parent != null) ? parent.getId() : "NULL"));
     LOG.info(getQualifiedName() + "After update: children=" + children);
   }
 
@@ -439,8 +421,8 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
    * @return
    */
   private NodeStruct findChild(final String srcId) {
-    for(final NodeStruct node : children) {
-      if(node.getId().equals(srcId)) {
+    for (final NodeStruct node : children) {
+      if (node.getId().equals(srcId)) {
         return node;
       }
     }

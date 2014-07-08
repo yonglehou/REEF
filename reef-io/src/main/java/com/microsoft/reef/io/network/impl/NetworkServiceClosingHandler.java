@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,19 +15,19 @@
  */
 package com.microsoft.reef.io.network.impl;
 
-import javax.inject.Inject;
-
 import com.microsoft.reef.evaluator.context.events.ContextStop;
 import com.microsoft.wake.EventHandler;
 
+import javax.inject.Inject;
+
 /**
- * 
+ *
  */
 public class NetworkServiceClosingHandler implements EventHandler<ContextStop> {
   private final NetworkService<?> networkService;
-  
+
   @Inject
-  public NetworkServiceClosingHandler(final NetworkService<?> networkService){
+  public NetworkServiceClosingHandler(final NetworkService<?> networkService) {
     this.networkService = networkService;
   }
 

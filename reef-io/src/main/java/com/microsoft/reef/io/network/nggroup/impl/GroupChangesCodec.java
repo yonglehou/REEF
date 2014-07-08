@@ -1,11 +1,11 @@
-/*
- * Copyright 2013 Microsoft.
+/**
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *         http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,13 +25,13 @@ public class GroupChangesCodec implements Codec<GroupChanges> {
 
   @Override
   public GroupChanges decode(final byte[] changeBytes) {
-    return new GroupChangesImpl((changeBytes[0]==1) ? true : false);
+    return new GroupChangesImpl((changeBytes[0] == 1) ? true : false);
   }
 
   @Override
   public byte[] encode(final GroupChanges changes) {
     final byte[] retVal = new byte[1];
-    if(changes.exist()) {
+    if (changes.exist()) {
       retVal[0] = 1;
     }
     return retVal;
@@ -51,7 +51,7 @@ public class GroupChangesCodec implements Codec<GroupChanges> {
     final boolean c1 = changes.exist();
     final boolean c2 = changes1.exist();
 
-    if(c1!=c2) {
+    if (c1 != c2) {
       System.out.println("Something is wrong");
     } else {
       System.out.println("Codec is fine");
