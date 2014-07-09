@@ -286,7 +286,7 @@ public class BGDDriver {
                       .set(TaskConfiguration.TASK, SlaveTask.class)
                       .build()
                   , PoisonedConfiguration.TASK_CONF
-                      .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.1")
+                      .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.01")
                       .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
                       .build())
               .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))

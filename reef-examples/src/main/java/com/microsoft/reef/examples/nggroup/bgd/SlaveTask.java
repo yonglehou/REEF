@@ -15,6 +15,14 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.inject.Inject;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+
 import com.microsoft.reef.examples.nggroup.bgd.data.Example;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
@@ -29,17 +37,15 @@ import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.task.Task;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-
-import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  *
  */
 public class SlaveTask implements Task {
+  /**
+   *
+   */
+  private static final double FAILURE_PROB = 0.001;
   private final CommunicationGroupClient communicationGroup;
   private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
   private final Broadcast.Receiver<Vector> modelBroadcaster;
@@ -91,7 +97,7 @@ public class SlaveTask implements Task {
           break;
 
         case ComputeGradientWithModel:
-          if (Math.random() < 0.01) {
+          if (Math.random() < FAILURE_PROB) {
             throw new RuntimeException("Simulated Failure");
           }
           this.model = modelBroadcaster.receive();
@@ -99,7 +105,7 @@ public class SlaveTask implements Task {
           break;
 
         case ComputeGradientWithMinEta:
-          if (Math.random() < 0.01) {
+          if (Math.random() < FAILURE_PROB) {
             throw new RuntimeException("Simulated Failure");
           }
           final double minEta = minEtaBroadcaster.receive();
@@ -111,7 +117,7 @@ public class SlaveTask implements Task {
           break;
 
         case DoLineSearch:
-          if (Math.random() < 0.01) {
+          if (Math.random() < FAILURE_PROB) {
             throw new RuntimeException("Simulated Failure");
           }
           this.descentDirection = descentDirectionBroadcaster.receive();
@@ -119,7 +125,7 @@ public class SlaveTask implements Task {
           break;
 
         case DoLineSearchWithModel:
-          if (Math.random() < 0.01) {
+          if (Math.random() < FAILURE_PROB) {
             throw new RuntimeException("Simulated Failure");
           }
           final Pair<Vector, Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
