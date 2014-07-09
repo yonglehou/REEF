@@ -61,10 +61,10 @@ public class SlaveTask implements Task {
     final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
-      // if (Math.random() < 0.1) {
-      // System.out.println("Simulated Failure");
-      // throw new RuntimeException("Simulated Failure");
-      // }
+      if (Math.random() < 0.1) {
+        System.out.println("Simulated Failure");
+        throw new RuntimeException("Simulated Failure");
+      }
       model.set(1, i);
       newModel = modelAllReducer.apply(model);
       if (modelAllReducer.isLastIterationFailed()) {

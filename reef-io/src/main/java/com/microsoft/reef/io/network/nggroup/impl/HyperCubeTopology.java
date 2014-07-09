@@ -441,13 +441,29 @@ public class HyperCubeTopology implements Topology {
             } else if (nOpDimList.get(0)[0] != neighborOp[0]
               && nOpDimList.get(0)[1] == 2) {
               // If this neighbor already has a pair
-              // Change neighbor's neighbor to send only
-              modifiedNeighbors.add(nOpDimList.get(0)[0]);
+              // get neighbor's original paired neighbor
+              int nnNodeID = nOpDimList.get(0)[0];
+              modifiedNeighbors.add(nnNodeID);
               List<int[]> nnOpDimList =
-                nodeMap.get(nOpDimList.get(0)[0]).getNeighborOpList().get(i);
-              nnOpDimList.get(0)[1] = 1;
-              // Add "receive" on the neighbor
-              nOpDimList.add(new int[] { nOpDimList.get(0)[0], 0 });
+                nodeMap.get(nnNodeID).getNeighborOpList().get(i);
+              if (nnOpDimList.size() > 1) {
+                // If this neighbor's neighbor has receiving
+                int[] firstRecvOp = nnOpDimList.remove(1);
+                // Pairing neighbor's neighbor with one node on receiving
+                nnOpDimList.get(0)[0] = firstRecvOp[0];
+                nnOpDimList.get(0)[1] = 2;
+                // Modify neighbor's neighbor's neighbor
+                modifiedNeighbors.add(firstRecvOp[0]);
+                List<int[]> nnnOpDimList =
+                  nodeMap.get(firstRecvOp[0]).getNeighborOpList().get(i);
+                nnnOpDimList.get(0)[0] = nnNodeID;
+                nnnOpDimList.get(0)[1] = 2;
+              } else {
+                // Change neighbor's neighbor to send only
+                nnOpDimList.get(0)[1] = 1;
+                // Add "receive" on the neighbor
+                nOpDimList.add(new int[] { nnNodeID, 0 });
+              }
             } else if (nOpDimList.get(0)[0] != neighborOp[0]
               && nOpDimList.get(0)[1] == 1) {
               // If this neighbor sends data to another neighbor
@@ -814,51 +830,67 @@ public class HyperCubeTopology implements Topology {
     // The first op is a "sending" or a "pairing"
     op = neighborOpDimList.get(0);
     if (op[0] == deadNodeID) {
-      // Find the alternative neighbor
-      int neighborID =
-        findAltNeighborInZone(nodeID, deadNodeID, maxNodeID, moduloBase, dimID,
-          nodeMap);
-      // Find alternative neighbor from dead node's zone
-      // If cannot find the neighbor, then set neighbor ID to -1 or -2
-      if (neighborID < 0) {
-        op[0] = neighborID;
-        op[1] = -1;
-      } else {
-        // Get neighbor's op list at this dimension
+      if (op[1] == 2 && neighborOpDimList.size() > 1) {
+        // If op[1] == 2 and neighborOpDimList.size() > 1
+        // In this case, we need to modify pairing to sending only.
+        // If there is a receiving op there, we set pairing to this node
+        int[] firstRecvOp = neighborOpDimList.remove(1);
+        // Get the neighbor's op list at this dimension
+        modifiedNodes.add(firstRecvOp[0]);
         List<int[]> nOpDimList =
-          nodeMap.get(neighborID).getNeighborOpList().get(dimID);
+          nodeMap.get(firstRecvOp[0]).getNeighborOpList().get(dimID);
         int[] nOp = nOpDimList.get(0);
-        // If this alternative neighbor is sending to another node,
-        // try to remove the receiving and create a pair.
-        // Though we create a pair here, in adding tasks, we try to replace the
-        // pair with the real pairing. The real pairing is created through id
-        // calculation. Because it won't overlap, once it exists, we remove the
-        // temporary pairing caused by node deletion.
-        if (nOp[1] == 1) {
-          List<int[]> nnOpDimList =
-            nodeMap.get(nOp[0]).getNeighborOpList().get(dimID);
-          int rmOpIndex = -1;
-          // Check this neighbor's neighbor ops, remove receiving
-          for (int i = 1; i < nnOpDimList.size(); i++) {
-            if (nnOpDimList.get(i)[0] == neighborID) {
-              rmOpIndex = i;
-              break;
-            }
-          }
-          nnOpDimList.remove(rmOpIndex);
+        nOp[0] = nodeID;
+        nOp[1] = 2;
+        op[0] = firstRecvOp[0];
+        op[1] = 2;
+      } else {
+        // Find the alternative neighbor
+        int neighborID =
+          findAltNeighborInZone(nodeID, deadNodeID, maxNodeID, moduloBase,
+            dimID, nodeMap);
+        // Find alternative neighbor from dead node's zone
+        // If cannot find the neighbor, then set neighbor ID to -1 or -2
+        if (neighborID < 0) {
           op[0] = neighborID;
-          op[1] = 2;
-          nOp[0] = nodeID;
-          nOp[1] = 2;
+          op[1] = -1;
         } else {
-          // If it pairs with someone else
-          op[0] = neighborID;
-          op[1] = 1;
-          // Add receiving
-          nOpDimList.add(new int[] { nodeID, 0 });
+          // Get neighbor's op list at this dimension
+          List<int[]> nOpDimList =
+            nodeMap.get(neighborID).getNeighborOpList().get(dimID);
+          int[] nOp = nOpDimList.get(0);
+          // If this alternative neighbor is sending to another node,
+          // try to remove the receiving and create a pair.
+          // Though we create a pair here, in adding tasks, we try to replace
+          // the pair with the real pairing. The real pairing is created through
+          // id calculation. Because it won't overlap, once it exists, we remove
+          // the temporary pairing caused by node deletion.
+          if (nOp[1] == 1) {
+            List<int[]> nnOpDimList =
+              nodeMap.get(nOp[0]).getNeighborOpList().get(dimID);
+            int rmOpIndex = -1;
+            // Check this neighbor's neighbor ops, remove receiving
+            for (int i = 1; i < nnOpDimList.size(); i++) {
+              if (nnOpDimList.get(i)[0] == neighborID) {
+                rmOpIndex = i;
+                break;
+              }
+            }
+            nnOpDimList.remove(rmOpIndex);
+            op[0] = neighborID;
+            op[1] = 2;
+            nOp[0] = nodeID;
+            nOp[1] = 2;
+          } else {
+            // If it pairs with someone else
+            op[0] = neighborID;
+            op[1] = 1;
+            // Add receiving
+            nOpDimList.add(new int[] { nodeID, 0 });
+          }
+          // For neighbor ID < 0 are not recorded
+          modifiedNodes.add(neighborID);
         }
-        // For neighbor ID < 0 are not recorded
-        modifiedNodes.add(neighborID);
       }
     } else {
       // Dead node isn't seen in the first op,
@@ -919,6 +951,8 @@ public class HyperCubeTopology implements Topology {
       }
       modifiedNeighbors.remove(taskID);
       // Update the topology in sandbox after the failure
+      // The modified neighbors returned by deleteTask are not used because
+      // every task is notified
       deleteTask(sandBox, taskID);
       // Print and check the difference between two topologies
       System.out.println("Print active Hypercube.");
