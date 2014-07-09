@@ -26,15 +26,19 @@ public final class SparseExample implements Example {
    *
    */
   private static final long serialVersionUID = -2127500625316875426L;
-  private final double[] values;
+  private final float[] values;
   private final int[] indices;
   private final double label;
 
-  public SparseExample(final double label, final double[] values, final int[] indices) {
+  public SparseExample(final double label, final float[] values, final int[] indices) {
     this.label = label;
     this.values = values;
     this.indices = indices;
 
+  }
+
+  public int getFeatureLength() {
+    return values.length;
   }
 
   @Override
