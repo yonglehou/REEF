@@ -136,8 +136,8 @@ public class HyperCubeTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverID = driverID;
-    // this.minInitialTasks = numberOfTasks / 2 + 1;
-    this.minInitialTasks = numberOfTasks;
+    this.minInitialTasks = numberOfTasks / 2 + 1;
+    // this.minInitialTasks = numberOfTasks;
   }
 
   @Override
@@ -1036,6 +1036,13 @@ public class HyperCubeTopology implements Topology {
       }
     }
     if (allContained) {
+      if (minIteration > maxIteration) {
+        // Probably all the tasks are dead (rare case),
+        // then driver doesn't know which iteration all tasks are
+        // we set the iteration to the current iteration.
+        minIteration = iteration.get();
+        maxIteration = iteration.get();
+      }
       // If yes, calculate which iteration the new topology is for
       activeTopo = sandBox;
       sandBox = null;

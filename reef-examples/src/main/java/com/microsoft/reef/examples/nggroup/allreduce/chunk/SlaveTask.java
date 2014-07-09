@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.allreduce;
+package com.microsoft.reef.examples.nggroup.allreduce.chunk;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,6 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
-import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.nggroup.impl.AllReducer;
@@ -36,47 +35,63 @@ import com.microsoft.tang.annotations.Parameter;
 /**
  *
  */
-public class MasterTask implements Task {
-
-  private static final Logger LOG = Logger
-    .getLogger(MasterTask.class.getName());
+public class SlaveTask implements Task {
+  private static final Logger LOG = Logger.getLogger(SlaveTask.class.getName());
 
   private final CommunicationGroupClient communicationGroupClient;
   private final AllReducer<Vector> modelAllReducer;
   private final int dimensions;
 
   @Inject
-  public MasterTask(final GroupCommClient groupCommClient,
+  public SlaveTask(final GroupCommClient groupCommClient,
     @Parameter(Dimensions.class) final int dimensions) {
-    this.communicationGroupClient = groupCommClient
-      .getCommunicationGroup(AllCommunicationGroup.class);
-    this.modelAllReducer = (AllReducer<Vector>) communicationGroupClient
-      .getAllReducer(ModelAllReducer.class);
+    this.communicationGroupClient =
+      groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    this.modelAllReducer =
+      (AllReducer<Vector>) communicationGroupClient
+        .getAllReducer(ModelAllReducer.class);
     this.dimensions = dimensions;
   }
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    Vector model = new DenseVector(new double[] { 1, 0 });
-    Vector newModel = null;
+    List<Vector> models = new ArrayList<>();
+    int numChunks = 10;
+    for (int i = 0; i < numChunks; i++) {
+      Vector model = new DenseVector(new double[] { 1, 0 });
+      models.add(model);
+    }
+    List<Vector> newModels = null;
     final int numIters = 10;
     final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");
-      model.set(1, i);
-      newModel = modelAllReducer.apply(model);
+      if (Math.random() < 0.1) {
+        System.out.println("Simulated Failure");
+        throw new RuntimeException("Simulated Failure");
+      }
+      for (int j = 0; j < models.size(); j++) {
+        models.get(j).set(1, i);
+      }
+      newModels = modelAllReducer.apply(models);
       if (modelAllReducer.isLastIterationFailed()) {
         System.out.println("Iter: " + i + " apply data fails.");
         i = i - modelAllReducer.getNumFailedIterations();
-        newModel = null;
       } else {
         System.out.println("Iter: " + i + " apply data succeeds.");
-        i = (int) newModel.get(1);
+        System.out.println("The size of new models: " + newModels.size());
+        if (!newModels.isEmpty()) {
+          i = (int) newModels.get(0).get(1);
+        }
       }
-      if (newModel != null) {
+      if (newModels != null) {
         StringBuffer sb = new StringBuffer();
-        for (int j = 0; j < newModel.size(); j++) {
-          sb.append(newModel.get(j) + ",");
+        for (int j = 0; j < newModels.size(); j++) {
+          sb.append('[');
+          for (int k = 0; k < newModels.get(j).size(); k++) {
+            sb.append(newModels.get(j).get(k) + ",");
+          }
+          sb.setCharAt(sb.length() - 1, ']');
         }
         System.out.println(sb);
       } else {
