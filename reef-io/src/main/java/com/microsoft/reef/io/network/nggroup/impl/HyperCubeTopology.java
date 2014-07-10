@@ -20,7 +20,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -100,6 +99,13 @@ public class HyperCubeTopology implements Topology {
   }
 
   private TopoStruct activeTopo = new TopoStruct();
+  /**
+   * Because task ids are reused when restarting, track task version. We keep
+   * every task id existed and update the version id when it comes back. The
+   * content of the map doesn't refelect the topology.
+   */
+  private final ConcurrentMap<String, AtomicInteger> taskVersionMap =
+    new ConcurrentHashMap<>();
 
   /**
    * When the number of running tasks arrives at the minimum number required,
@@ -111,12 +117,6 @@ public class HyperCubeTopology implements Topology {
   private final AtomicInteger numRunningInitialTasks = new AtomicInteger(0);
   /** Iteration is used to track the iteration number of allreduce operation */
   private final AtomicInteger iteration = new AtomicInteger(0);
-  /**
-   * Because task id s are reused when restarting, track task version in
-   * driver-task communication
-   */
-  private final ConcurrentMap<String, AtomicInteger> taskVersionMap =
-    new ConcurrentHashMap<>();
 
   /** This is used to collect all new task ids */
   private final Set<String> newTasks = new HashSet<>();
@@ -157,7 +157,7 @@ public class HyperCubeTopology implements Topology {
   }
 
   @Override
-  public Configuration getConfig(final String taskID) {
+  public synchronized Configuration getConfig(final String taskID) {
     // The topology configuration binds with the sender/receiver client
     // implementation!
     // When a task is failed, it will restart with the same taskID,
@@ -324,7 +324,7 @@ public class HyperCubeTopology implements Topology {
     // {-1, -1} means no neighbor for sending or pairing
     // {-2, -1} means no sending or pairing because of the dead zone.
     for (int i = 0; i < dimLevel; i++) {
-      neighborOpDimList = new ArrayList<int[]>();
+      neighborOpDimList = new LinkedList<int[]>();
       // Get the default op
       neighborOp = new int[] { -1, -1 };
       // Generate the pairing neighbor
@@ -371,7 +371,7 @@ public class HyperCubeTopology implements Topology {
         // add default op {-1, -1} on each dimension <= i.
         if ((nOpList.size() - 1) < i) {
           for (int j = nOpList.size(); j <= i; j++) {
-            nOpDimList = new ArrayList<int[]>();
+            nOpDimList = new LinkedList<int[]>();
             nOpDimList.add(new int[] { -1, -1 });
             nOpList.add(nOpDimList);
           }
@@ -576,7 +576,7 @@ public class HyperCubeTopology implements Topology {
 
   private List<Integer> findAllOtherNodesInZone(int nodeID, int moduloBase,
     int maxNodeID, Map<Integer, HyperCubeNode> nodeMap) {
-    List<Integer> allNodes = new ArrayList<Integer>();
+    List<Integer> allNodes = new LinkedList<Integer>();
     int upStartID = nodeID + moduloBase;
     int downStartID = nodeID - moduloBase;
     HyperCubeNode node = null;
@@ -610,7 +610,7 @@ public class HyperCubeTopology implements Topology {
     if (!isInitialized.get()) {
       newTask(activeTopo, taskID);
       if (this.numRunningInitialTasks.get() == this.minInitialTasks) {
-        initializeTopology(activeTopo);
+        initializeTopology(activeTopo, taskVersionMap);
         isInitialized.set(true);
         System.out.println("Hypercube topology is initialized!");
       }
@@ -659,7 +659,8 @@ public class HyperCubeTopology implements Topology {
     }
   }
 
-  private void initializeTopology(TopoStruct topo) {
+  private void initializeTopology(TopoStruct topo,
+    Map<String, AtomicInteger> taskVersionMap) {
     HyperCubeNode node = null;
     int ite = iteration.get();
     for (Entry<Integer, HyperCubeNode> entry : topo.nodeMap.entrySet()) {
@@ -667,7 +668,8 @@ public class HyperCubeTopology implements Topology {
       System.out.println("Send topology setup msg to " + node.getTaskID());
       try {
         // The base iteration and the new iteration are the same.
-        sendTopology(node, topo, Type.TopologySetup, ite, ite, false);
+        sendTopology(node, topo, taskVersionMap, Type.TopologySetup, ite, ite,
+          false);
       } catch (IOException e) {
         e.printStackTrace();
         LOG.log(Level.WARNING, "", e);
@@ -675,11 +677,12 @@ public class HyperCubeTopology implements Topology {
     }
   }
 
-  private void sendTopology(HyperCubeNode node, TopoStruct topo, Type msgType,
-    int baseIteration, int newIteration, boolean isFailed) throws IOException {
+  private void sendTopology(HyperCubeNode node, TopoStruct topo,
+    Map<String, AtomicInteger> taskVersionMap, Type msgType, int baseIteration,
+    int newIteration, boolean isFailed) throws IOException {
     byte[] bytes =
-      encodeNodeTopologyToBytes(node, topo.nodeMap, baseIteration,
-        newIteration, isFailed);
+      encodeNodeTopologyToBytes(node, topo.nodeMap, taskVersionMap,
+        baseIteration, newIteration, isFailed);
     // Currently we try to build message directly on the original message
     // builder. The version number is a number agreed by the driver and this
     // task.
@@ -707,18 +710,23 @@ public class HyperCubeTopology implements Topology {
   }
 
   private byte[] encodeNodeTopologyToBytes(HyperCubeNode node,
-    Map<Integer, HyperCubeNode> nodeMap, int baseIteration, int newIteration,
-    boolean isFailed) throws IOException {
+    Map<Integer, HyperCubeNode> nodeMap,
+    Map<String, AtomicInteger> taskVersionMap, int baseIteration,
+    int newIteration, boolean isFailed) throws IOException {
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     DataOutputStream dout = new DataOutputStream(bout);
     node.write(dout);
-    // We add a map between node id and task id
+    // Add mapping between node id, task id and task version
     Map<Integer, String> nodeTaskMap =
       getOpTaskMap(node.getNeighborOpList(), nodeMap);
     dout.writeInt(nodeTaskMap.size());
     for (Entry<Integer, String> entry : nodeTaskMap.entrySet()) {
+      // Node ID
       dout.writeInt(entry.getKey());
+      // Task ID
       dout.writeUTF(entry.getValue());
+      // Task Version
+      dout.writeInt(taskVersionMap.get(entry.getValue()).get());
     }
     dout.writeInt(baseIteration);
     dout.writeInt(newIteration);
@@ -728,12 +736,6 @@ public class HyperCubeTopology implements Topology {
     return bout.toByteArray();
   }
 
-  /**
-   * Remember that when we do this, we are in the lock zone in set running.
-   * 
-   * @param opList
-   * @return
-   */
   private Map<Integer, String> getOpTaskMap(List<List<int[]>> opList,
     Map<Integer, HyperCubeNode> nodeMap) {
     Map<Integer, String> nodeTaskMap = new HashMap<Integer, String>();
@@ -895,7 +897,7 @@ public class HyperCubeTopology implements Topology {
     } else {
       // Dead node isn't seen in the first op,
       // It is only in "receive" ops, so just remove them.
-      List<Integer> remvOpIndexList = new ArrayList<Integer>();
+      List<Integer> remvOpIndexList = new LinkedList<Integer>();
       for (int i = 1; i < neighborOpDimList.size(); i++) {
         op = neighborOpDimList.get(i);
         if (op[0] == deadNodeID && op[1] == 0) {
@@ -1006,7 +1008,7 @@ public class HyperCubeTopology implements Topology {
       processNeighborUpdate();
     }
   }
-  
+
   private int getIterationInBytes(byte[] bytes) {
     ByteArrayInputStream bin = new ByteArrayInputStream(bytes);
     DataInputStream din = new DataInputStream(bin);
@@ -1093,8 +1095,8 @@ public class HyperCubeTopology implements Topology {
         HyperCubeNode node =
           activeTopo.nodeMap.get(activeTopo.taskMap.get(taskID));
         try {
-          sendTopology(node, activeTopo, Type.UpdateTopology, baseIteration,
-            newIteration, isFailed.get());
+          sendTopology(node, activeTopo, taskVersionMap, Type.UpdateTopology,
+            baseIteration, newIteration, isFailed.get());
         } catch (IOException e) {
           e.printStackTrace();
           LOG.log(Level.WARNING, "", e);
@@ -1105,8 +1107,8 @@ public class HyperCubeTopology implements Topology {
         HyperCubeNode node =
           activeTopo.nodeMap.get(activeTopo.taskMap.get(taskID));
         try {
-          sendTopology(node, activeTopo, Type.UpdateTopology, baseIteration,
-            newIteration, isFailed.get());
+          sendTopology(node, activeTopo, taskVersionMap, Type.UpdateTopology,
+            baseIteration, newIteration, isFailed.get());
         } catch (IOException e) {
           e.printStackTrace();
           LOG.log(Level.WARNING, "", e);
@@ -1117,8 +1119,8 @@ public class HyperCubeTopology implements Topology {
         HyperCubeNode node =
           activeTopo.nodeMap.get(activeTopo.taskMap.get(taskID));
         try {
-          sendTopology(node, activeTopo, Type.TopologySetup, baseIteration,
-            newIteration, false);
+          sendTopology(node, activeTopo, taskVersionMap, Type.TopologySetup,
+            baseIteration, newIteration, false);
         } catch (IOException e) {
           e.printStackTrace();
           LOG.log(Level.WARNING, "", e);

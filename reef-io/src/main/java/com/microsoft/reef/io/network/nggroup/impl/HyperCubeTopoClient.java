@@ -42,7 +42,8 @@ import com.microsoft.tang.annotations.Name;
 
 class NodeTopology {
   HyperCubeNode node = null;
-  Map<Integer, String> opTaskMap = null;
+  Map<Integer, String> nodeTaskMap = null;
+  Map<String, Integer> taskVersionMap = null;
   int baseIteration = -1;
   int newIteration = -1;
   // The reasons for updating
@@ -52,29 +53,31 @@ class NodeTopology {
 
 public class HyperCubeTopoClient {
 
-  // private final Class<? extends Name<String>> groupName;
-  // private final Class<? extends Name<String>> operName;
-  // private final String selfID;
+  private final Class<? extends Name<String>> groupName;
+  private final Class<? extends Name<String>> operName;
+  private final String selfID;
 
   private final BlockingQueue<GroupCommMessage> ctrlQueue =
     new LinkedBlockingQueue<>();
   private final TreeMap<Integer, NodeTopology> nodeTopoMap = new TreeMap<>();
   private final int version;
-  
+
   public HyperCubeTopoClient(final Class<? extends Name<String>> groupName,
     final Class<? extends Name<String>> operName, final String selfId,
     final String driverId, final Sender sender, final int version) {
-    // this.groupName = groupName;
-    // this.operName = operName;
-    // this.selfID = selfId;
+    this.groupName = groupName;
+    this.operName = operName;
+    this.selfID = selfId;
     this.version = version;
   }
 
   public void handle(final GroupCommMessage msg) {
     // No topology change or topology updated.
     // Those two types of messages won't come here.
-    System.out.println("Topology client - Handling " + msg.getType()
-      + " msg from " + msg.getSrcid());
+    if (msg.getVersion() != version) {
+      printMsgInfo(msg);
+      return;
+    }
     try {
       switch (msg.getType()) {
       case TopologySetup:
@@ -93,21 +96,18 @@ public class HyperCubeTopoClient {
   void waitForNewNodeTopology() {
     // Wait for the data
     GroupCommMessage msg = null;
-    System.out.println("Topology client - "
-      + "Wait for the topology from the driver.");
     do {
       try {
         msg = ctrlQueue.take();
+        printMsgInfo(msg);
         // If this msg is mistakenly put into the queue, ignore it.
-        if (msg.getSrcVersion() != version) {
+        if (msg.getVersion() != version) {
           msg = null;
         }
       } catch (InterruptedException e) {
         e.printStackTrace();
       }
     } while (msg == null);
-    System.out.println("Topology client - Got " + msg.getType() + " msg from "
-      + msg.getSrcid());
     // Decode the topology data
     NodeTopology nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
     System.out.println(nodeTopo.node.toString());
@@ -127,14 +127,20 @@ public class HyperCubeTopoClient {
     DataInputStream din = new DataInputStream(bin);
     NodeTopology nodeTopo = new NodeTopology();
     HyperCubeNode node = new HyperCubeNode("", -1);
-    Map<Integer, String> opTaskMap = new HashMap<Integer, String>();
+    Map<Integer, String> nodeTaskMap = new HashMap<Integer, String>();
+    Map<String, Integer> taskVersionMap = new HashMap<String, Integer>();
     nodeTopo.node = node;
-    nodeTopo.opTaskMap = opTaskMap;
+    nodeTopo.nodeTaskMap = nodeTaskMap;
+    nodeTopo.taskVersionMap = taskVersionMap;
     try {
       node.read(din);
-      int opTaskMapSize = din.readInt();
-      for (int i = 0; i < opTaskMapSize; i++) {
-        opTaskMap.put(din.readInt(), din.readUTF());
+      int mapSize = din.readInt();
+      for (int i = 0; i < mapSize; i++) {
+        int nodeID = din.readInt();
+        String taskID = din.readUTF();
+        int taskVersion = din.readInt();
+        nodeTaskMap.put(nodeID, taskID);
+        taskVersionMap.put(taskID, taskVersion);
       }
       nodeTopo.baseIteration = din.readInt();
       nodeTopo.newIteration = din.readInt();
@@ -158,7 +164,7 @@ public class HyperCubeTopoClient {
   NodeTopology getNodeTopology(int iteration) {
     return nodeTopoMap.get(iteration);
   }
-  
+
   void removeOldNodeTopologies(int iteration) {
     List<Integer> rmKeys = new ArrayList<>();
     for (Entry<Integer, NodeTopology> entry : nodeTopoMap.entrySet()) {
@@ -177,5 +183,16 @@ public class HyperCubeTopoClient {
 
   NodeTopology getNewestNodeTopology() {
     return nodeTopoMap.lastEntry().getValue();
+  }
+
+  private void printMsgInfo(GroupCommMessage msg) {
+    System.out.println(getQualifiedName() + "Get " + msg.getType()
+      + " msg from " + msg.getSrcid() + " with source version "
+      + msg.getSrcVersion() + " with target version " + msg.getVersion());
+  }
+
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
+      + selfID + ":TopoClient:" + version + " - ";
   }
 }

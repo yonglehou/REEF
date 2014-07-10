@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -66,19 +67,22 @@ public class AllReducer<T> implements AllReduce<T>,
 
   private static final Logger LOG = Logger
     .getLogger(AllReducer.class.getName());
-  private static final byte[] EmptyByteArr = new byte[0];
+  // private static final byte[] EmptyByteArr = new byte[0];
 
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
   private final CommGroupNetworkHandler commGroupNetworkHandler;
-  private final Codec<T> dataCodec;
+
   private final NetworkService<GroupCommMessage> netService;
   private final Sender sender;
+  private final Codec<T> dataCodec;
+  private final ReduceFunction<T> reduceFunction;
+  private final String selfID;
+  private final String driverID;
   private final int version;
 
-  private final ReduceFunction<T> reduceFunction;
+
   private final HyperCubeTopoClient topoClient;
-  // private final CommunicationGroupClient commGroupClient;
   private final AtomicBoolean isInitialized = new AtomicBoolean(false);
   private final AtomicInteger iteration;
 
@@ -90,16 +94,15 @@ public class AllReducer<T> implements AllReduce<T>,
     new ConcurrentHashMap<>();
   private final BlockingQueue<GroupCommMessage> dataQueue =
     new LinkedBlockingQueue<>();
-
-  private final String selfID;
-  private final String driverID;
   // Topology structure of this node
   private HyperCubeNode node;
-  private Map<Integer, String> opTaskMap;
+
+  private Map<Integer, String> nodeTaskMap;
+  private Map<String, Integer> taskVersionMap;
+  
+  // Failure control
   private final AtomicBoolean isLastIteFailed = new AtomicBoolean(false);
   private int numFailedIterations = 0;
-
-  // private final AtomicBoolean isNewTaskAdded = new AtomicBoolean(false);
 
   @Inject
   public AllReducer(
@@ -155,7 +158,8 @@ public class AllReducer<T> implements AllReduce<T>,
     NodeTopology nodeTopo = topoClient.getNewestNodeTopology();
     // This should not be null
     node = nodeTopo.node;
-    opTaskMap = nodeTopo.opTaskMap;
+    nodeTaskMap = nodeTopo.nodeTaskMap;
+    taskVersionMap = nodeTopo.taskVersionMap;
     iteration.set(nodeTopo.newIteration);
   }
 
@@ -174,23 +178,16 @@ public class AllReducer<T> implements AllReduce<T>,
     // This method can be invoked simultaneously with apply method
     // If the msg type is TopologyChange or TopologyUpdated
     // they cannot arrive here.
-    // There is no version checking when sending message between tasks
-    // If the message types are not the two mentioned above, they are processed
-    // here directly.
+    // printMsgInfo(msg);
+    if (msg.getVersion() != version) {
+      printMsgInfo(msg);
+      return;
+    }
     if (msg.getType() == Type.AllReduce) {
       // Messages are put in the queue
       // and wait to be processed in "apply"
-      System.out.println(getQualifiedName() + " Get AllReduce message from "
-        + msg.getSrcid() + " with version " + msg.getSrcVersion());
       dataQueue.add(msg);
     } else {
-      if (msg.getSrcVersion() != version) {
-        System.out.println(getQualifiedName()
-          + " Current task side node version is " + version
-          + ", which is different from the driver side node version "
-          + msg.getSrcVersion());
-        return;
-      }
       // Only driver sends these messages
       if (msg.getType() == Type.SourceDead) {
         dataQueue.add(msg);
@@ -223,16 +220,20 @@ public class AllReducer<T> implements AllReduce<T>,
     boolean isFailed = false;
     // Update topology for the iteration
     updateNodeTopology(ite);
+    // Prepare applying
     T reducedValue = aElement;
-    List<byte[]> valBytes = new ArrayList<byte[]>();
-    List<T> vals = new ArrayList<T>();
+    List<byte[]> valBytes = new LinkedList<byte[]>();
+    List<T> vals = new LinkedList<T>();
     // Record the last op performed in dim
-   int[] lastPerformedOpIndex = new int[] {-1};
+    int[] lastPerformedOpIndex = new int[] { -1 };
+    // Encode iteration and communication type for sending
+    byte[] iteComm = putIterationAndCommTypeTonBytes(ite, 0);
     int exitCode = -1;
     for (int i = 0; i < node.getNeighborOpList().size(); i++) {
       exitCode =
-        applyInDim(reducedValue, ite, selfID, valBytes, node
-          .getNeighborOpList().get(i), opTaskMap, lastPerformedOpIndex, version);
+        applyInDim(reducedValue, valBytes, node.getNeighborOpList().get(i),
+          nodeTaskMap, taskVersionMap, lastPerformedOpIndex, selfID, version,
+          ite, iteComm);
       if (exitCode == 0) {
         vals.add(reducedValue);
         for (byte[] data : valBytes) {
@@ -249,11 +250,9 @@ public class AllReducer<T> implements AllReduce<T>,
         // Ask driver, send source failure message
         // The version number is a number agreed between driver and task
         sendMsg(Type.SourceDead, selfID, version, driverID, version,
-          getIterationInBytes(ite));
+          putIterationToBytes(ite));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceDead.");
-        waitForNewNodeTopology(topoClient, ite);
+        waitForNewNodeTopology(topoClient, ite, Type.SourceDead);
         // Fail the current iteration
         // This should match with topoClient.isFailed();
         isFailed = true;
@@ -261,11 +260,9 @@ public class AllReducer<T> implements AllReduce<T>,
       } else if (exitCode == 2) {
         // Ask driver, send source add message
         sendMsg(Type.SourceAdd, selfID, version, driverID, version,
-          getIterationInBytes(ite));
+          putIterationToBytes(ite));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceAdd");
-        waitForNewNodeTopology(topoClient, ite);
+        waitForNewNodeTopology(topoClient, ite, Type.SourceAdd);
         // Check if there is failure in the current topology
         isFailed = topoClient.getNewestNodeTopology().isFailed;
         if (isFailed) {
@@ -279,19 +276,20 @@ public class AllReducer<T> implements AllReduce<T>,
     if (isFailed) {
       reducedValue = null;
       isLastIteFailed.set(true);
-      numFailedIterations =
-        ite - topoClient.getNewestNodeTopology().baseIteration + 1;
+      int baseIteration = topoClient.getNewestNodeTopology().baseIteration;
+      int newIteration = topoClient.getNewestNodeTopology().newIteration;
+      numFailedIterations = ite - baseIteration + 1;
       // Remove received byte data between this iteration and the new iteration
       // Because in failure state, every task is stopped and updated with new
       // topology, tasks no longer send messages of failed iterations.
       StringBuffer sb = new StringBuffer();
-      for (int i = ite; i < topoClient.getNewestNodeTopology().newIteration; i++) {
+      for (int i = ite; i < newIteration; i++) {
         sb.append(i + " ");
         dataMap.remove(i);
       }
       System.out.println("Remove data from iteration " + sb);
       // If failure happens, move to the new iteration assigned by the driver
-      iteration.set(topoClient.getNewestNodeTopology().newIteration);
+      iteration.set(newIteration);
     } else {
       isLastIteFailed.set(false);
       numFailedIterations = 0;
@@ -307,7 +305,8 @@ public class AllReducer<T> implements AllReduce<T>,
     NodeTopology nodeTopo = topoClient.getNodeTopology(iteration);
     if (nodeTopo != null) {
       node = nodeTopo.node;
-      opTaskMap = nodeTopo.opTaskMap;
+      nodeTaskMap = nodeTopo.nodeTaskMap;
+      taskVersionMap = nodeTopo.taskVersionMap;
       // If update successful, remove the topologies whose iteration number is
       // lower than the current one
       topoClient.removeOldNodeTopologies(iteration);
@@ -315,8 +314,9 @@ public class AllReducer<T> implements AllReduce<T>,
   }
 
   private void waitForNewNodeTopology(HyperCubeTopoClient topoClient,
-    int currentIteration) {
-    // Get the new topology
+    int currentIteration, Type msgType) {
+    System.out.println("Waiting for the new topology after getting " + msgType
+      + ".");
     topoClient.waitForNewNodeTopology();
     System.out.println("The current iteration: " + currentIteration
       + ", the base iteration of topology got from the driver: "
@@ -326,13 +326,11 @@ public class AllReducer<T> implements AllReduce<T>,
       + topoClient.getNewestNodeTopology().isFailed);
   }
 
-  private int applyInDim(T reducedValue, int iteration, String selfID,
-    List<byte[]> valBytes, List<int[]> opDimList,
-    Map<Integer, String> opTaskMap, int[] lastPerformedOpIndex, int version)
+  private int applyInDim(T reducedValue, List<byte[]> valBytes,
+    List<int[]> opDimList, Map<Integer, String> opTaskMap,
+    Map<String, Integer> taskVersionMap, int[] lastPerformedOpIndex,
+    String selfID, int version, int iteration, byte[] iteComm)
     throws NetworkException, InterruptedException {
-    String taskID = null;
-    int[] op = null;
-    byte[] bytes = null;
     int lastIndex = lastPerformedOpIndex[0];
     // If the last Performed OP index is less than 0 (negative, means nothing
     // performed), i starts with 0. otherwise, it starts with the last performed
@@ -342,17 +340,16 @@ public class AllReducer<T> implements AllReduce<T>,
     }
     int i = lastIndex < 0 ? 0 : lastIndex;
     for (; i < opDimList.size(); i++) {
-      op = opDimList.get(i);
-      taskID = opTaskMap.get(op[0]);
+      int[] op = opDimList.get(i);
+      String taskID = opTaskMap.get(op[0]);
       System.out.println("Apply, Task ID: " + taskID + ", op: [" + op[0] + ","
         + op[1] + "]");
       if (i != lastIndex) {
         if (op[1] == 1 || op[1] == 2) {
           // Send message to other tasks
-          // We set version to the iteration.
           System.out.println("Allreduce - send one data.");
-          sendMsg(Type.AllReduce, selfID, iteration, taskID, 0,
-            dataCodec.encode(reducedValue));
+          sendMsg(Type.AllReduce, selfID, version, taskID,
+            taskVersionMap.get(taskID), iteComm, dataCodec.encode(reducedValue));
         }
       }
       // For op 0, 1, 2, all need "receiving"
@@ -361,31 +358,23 @@ public class AllReducer<T> implements AllReduce<T>,
         GroupCommMessage msg = null;
         do {
           // Allreduce uses commType 0
-          msg = receiveMsg(iteration, taskID, 0);
+          msg = receiveMsg(iteration, taskID, 0, version);
           if (msg.getType() == Type.AllReduce) {
-            bytes = Utils.getData(msg);
             // If op is 0 or 2, the data is needed
             if (op[1] != 1) {
-              valBytes.add(bytes);
+              // The first part of the message body is the iteration and
+              // communication type
+              // The real data is contained at the second byte[]
+              valBytes.add(msg.getMsgs(1).getData().toByteArray());
             }
           } else if (msg.getType() == Type.SourceDead) {
             // Source Dead message from driver
-            // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 1;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 1;
           } else if (msg.getType() == Type.SourceAdd) {
             // Source Add message from the driver
-            // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 2;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 2;
           }
         } while (msg == null);
       }
@@ -393,9 +382,9 @@ public class AllReducer<T> implements AllReduce<T>,
       // we continue the original operations.
       // For receiving only operation, send an ack message.
       if (op[1] == 0) {
-        // send an ack message to the sender task
-        // We set version to iteration.
-        sendMsg(Type.AllReduce, selfID, iteration, taskID, 0, EmptyByteArr);
+        // Send an ack message to the sender task
+        sendMsg(Type.AllReduce, selfID, version, taskID,
+          taskVersionMap.get(taskID).intValue(), iteComm);
       }
     }
     lastPerformedOpIndex[0] = opDimList.size();
@@ -413,7 +402,8 @@ public class AllReducer<T> implements AllReduce<T>,
     }
   }
 
-  private byte[] getIterationInBytes(int iteration) {
+
+  private byte[] putIterationToBytes(int iteration) {
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     DataOutputStream dout = new DataOutputStream(bout);
     try {
@@ -426,31 +416,56 @@ public class AllReducer<T> implements AllReduce<T>,
     return bout.toByteArray();
   }
 
+  private byte[] putIterationAndCommTypeTonBytes(int iteration, int commType) {
+    ByteArrayOutputStream bout = new ByteArrayOutputStream();
+    DataOutputStream dout = new DataOutputStream(bout);
+    byte[] bytes = null;
+    try {
+      dout.writeInt(iteration);
+      dout.writeInt(commType);
+      dout.flush();
+      dout.close();
+      bytes = bout.toByteArray();
+    } catch (IOException e) {
+      bytes = null;
+      e.printStackTrace();
+    }
+    return bytes;
+  }
+
   private GroupCommMessage receiveMsg(int iteration, String neighborID,
-    int commType) throws InterruptedException {
+    int commType, int version) throws InterruptedException {
     // Comm type:
     // 0: allreduce on one message
     // 1: reducescatter on chunk messages
     // -1: allgather on chunk messages
     GroupCommMessage msg = null;
     do {
-      msg = getMsgFromMap(iteration, neighborID, commType);
+      msg = getMsgFromMap(iteration, neighborID, commType, version);
       if (msg != null) {
         return msg;
       }
       msg = dataQueue.take();
-      if (msg.getType() == Type.SourceDead) {
+      printMsgInfo(msg);
+      if (msg.getVersion() != version) {
+        msg = null;
+      } else if (msg.getType() == Type.SourceDead) {
         return msg;
       } else if (msg.getType() == Type.SourceAdd) {
         return msg;
       } else if (msg.getType() == Type.AllReduce) {
         // Source version is used as iteration
         // Target version is used as communication type
-        if (msg.getSrcid().equals(neighborID)
-          && msg.getSrcVersion() == iteration && msg.getVersion() == commType) {
+        int[] iteComm = getIterationAndCommType(msg);
+        int msgIteration = iteComm[0];
+        int msgCommType = iteComm[1];
+        if (msg.getSrcid().equals(neighborID) && msgIteration == iteration
+          && msgCommType == commType) {
           return msg;
         } else {
-          addMsgToMap(msg);
+          // Notice that if the msg version is incorrect,
+          // it cannot be added to the map.
+          addMsgToMap(msg, msgIteration, msgCommType);
           msg = null;
         }
       }
@@ -459,7 +474,8 @@ public class AllReducer<T> implements AllReduce<T>,
   }
 
   private GroupCommMessage getMsgFromMap(int iteration, String taskID,
-    int commType) {
+    int commType, int version) {
+    GroupCommMessage msg = null;
     if (commType == 0) {
       ConcurrentMap<String, GroupCommMessage> iteMap = dataMap.get(iteration);
       if (iteMap == null) {
@@ -470,30 +486,52 @@ public class AllReducer<T> implements AllReduce<T>,
           iteMap = oldIteMap;
         }
       }
-      return iteMap.remove(taskID);
+      msg = iteMap.remove(taskID);
     } else {
       Map<Integer, GroupCommMessage> msgMap = getRsAgMsgMap(iteration, taskID);
-      return msgMap.remove(commType);
+      msg = msgMap.remove(commType);
+    }
+    // We may or may not get a message
+    // Avoid old version message
+    if (msg != null && msg.getVersion() == version) {
+      return msg;
+    } else {
+      return null;
     }
   }
 
-  private void addMsgToMap(GroupCommMessage msg) {
-    if (msg.getVersion() == 0) {
-      ConcurrentMap<String, GroupCommMessage> iteMap =
-        dataMap.get(msg.getSrcVersion());
+  private int[] getIterationAndCommType(GroupCommMessage msg) {
+    int[] iteComm = new int[2];
+    byte[] bytes = msg.getMsgs(0).getData().toByteArray();
+    ByteArrayInputStream bin = new ByteArrayInputStream(bytes);
+    DataInputStream din = new DataInputStream(bin);
+    try {
+      iteComm[0] = din.readInt();
+      iteComm[1] = din.readInt();
+      din.close();
+    } catch (IOException e) {
+      iteComm = null;
+      e.printStackTrace();
+    }
+    return iteComm;
+  }
+
+  private void addMsgToMap(GroupCommMessage msg, int iteration, int commType) {
+    if (commType == 0) {
+      ConcurrentMap<String, GroupCommMessage> iteMap = dataMap.get(iteration);
       if (iteMap == null) {
         iteMap = new ConcurrentHashMap<>();
         ConcurrentMap<String, GroupCommMessage> oldIteMap =
-          dataMap.putIfAbsent(msg.getSrcVersion(), iteMap);
+          dataMap.putIfAbsent(iteration, iteMap);
         if (oldIteMap != null) {
           iteMap = oldIteMap;
         }
       }
       iteMap.put(msg.getSrcid(), msg);
     } else {
-      Map<Integer, GroupCommMessage> msgMap =
-        getRsAgMsgMap(msg.getSrcVersion(), msg.getSrcid());
-      msgMap.put(msg.getVersion(), msg);
+      ConcurrentMap<Integer, GroupCommMessage> msgMap =
+        getRsAgMsgMap(iteration, msg.getSrcid());
+      msgMap.put(commType, msg);
     }
   }
 
@@ -544,36 +582,37 @@ public class AllReducer<T> implements AllReduce<T>,
     List<T> reducedVals = null;
     // Do reduce scatter
     isFailed =
-      reduceScatter(reducedValMap, ite, selfID, node.getNodeID(),
-        node.getNeighborOpList(), opTaskMap, dataCodec, reduceFunction,
-        driverID, topoClient, version);
+      reduceScatter(reducedValMap, node.getNeighborOpList(), nodeTaskMap,
+        taskVersionMap, dataCodec, reduceFunction, selfID, node.getNodeID(),
+        version, ite, driverID, topoClient);
     // Do allgather
     if (!isFailed) {
       isFailed =
-        allGather(reducedValMap, ite, selfID, node.getNodeID(),
-          node.getNeighborOpList(), opTaskMap, dataCodec, reduceFunction,
-          driverID, topoClient, version);
+        allGather(reducedValMap, node.getNeighborOpList(), nodeTaskMap, taskVersionMap,
+          dataCodec, reduceFunction, selfID, node.getNodeID(), version, ite,
+          driverID, topoClient);
     }
     if (isFailed) {
       reducedVals = null;
       isLastIteFailed.set(true);
-      numFailedIterations =
-        ite - topoClient.getNewestNodeTopology().baseIteration + 1;
+      int baseIteration = topoClient.getNewestNodeTopology().baseIteration;
+      int newIteration = topoClient.getNewestNodeTopology().newIteration;
+      numFailedIterations = ite - baseIteration + 1;
       // Remove received byte data between this iteration and the new iteration
       StringBuffer sb = new StringBuffer();
-      for (int i = ite; i < topoClient.getNewestNodeTopology().newIteration; i++) {
+      for (int i = ite; i < newIteration; i++) {
         sb.append(i + " ");
         rsagDataMap.remove(i);
       }
       System.out.println("Remove data from iteration " + sb);
       // If failure happens, move to the new iteration assigned by the driver
-      iteration.set(topoClient.getNewestNodeTopology().newIteration);
+      iteration.set(newIteration);
     } else {
       // Remove the reduced vals in the map and put to the list.
       // Keep the order.
-      reducedVals = new ArrayList<>(reducedValMap.size());
       System.out.println("Num of chunks of ReduceScatter + Allgather (end): "
         + reducedValMap.size());
+      reducedVals = new ArrayList<>(reducedValMap.size());
       for (Entry<Integer, T> entry : reducedValMap.entrySet()) {
         reducedVals.add(entry.getKey().intValue(), entry.getValue());
       }
@@ -587,17 +626,20 @@ public class AllReducer<T> implements AllReduce<T>,
     return reducedVals;
   }
 
-  private boolean reduceScatter(Map<Integer, T> reducedValMap, int iteration,
-    String selfID, int nodeID, List<List<int[]>> opList,
-    Map<Integer, String> opTaskMap, Codec<T> codec,
-    ReduceFunction<T> reduceFunc, String driverID,
-    HyperCubeTopoClient topoClient, int version) throws InterruptedException {
-    // Record operations performed on this dimension
-    int[] lastPerformedOpIndex = new int[] { -1 };
+  private boolean reduceScatter(Map<Integer, T> reducedValMap,
+    List<List<int[]>> opList, Map<Integer, String> opTaskMap,
+    Map<String, Integer> taskVersionMap, Codec<T> codec,
+    ReduceFunction<T> reduceFunc, String selfID, int nodeID, int version,
+    int iteration, String driverID, HyperCubeTopoClient topoClient)
+    throws InterruptedException {
     // Chunk ID <-> byte messages from other nodes
     Map<Integer, List<byte[]>> valByteMap = new HashMap<>();
     // Used in reduce function
-    List<T> vals = new ArrayList<T>();
+    List<T> vals = new LinkedList<T>();
+    // Record operations performed on this dimension
+    int[] lastPerformedOpIndex = new int[] { -1 };
+    // Encode iteration and communication type for sending
+    byte[] iteComm = putIterationAndCommTypeTonBytes(iteration, 1);
     boolean isFailed = false;
     int moduloBase = 2;
     int exitCode = -1;
@@ -605,12 +647,13 @@ public class AllReducer<T> implements AllReduce<T>,
     for (int i = 0; i < opList.size(); i++) {
       // For each dimension, follow the topology and send the data
       exitCode =
-        reduceScatterInDim(reducedValMap, iteration, selfID, nodeID,
-          valByteMap, opList.get(i), opTaskMap, moduloBase, codec,
-          lastPerformedOpIndex, version);
+        reduceScatterInDim(reducedValMap, valByteMap, opList.get(i), opTaskMap,
+          taskVersionMap, lastPerformedOpIndex, moduloBase, codec, selfID,
+          nodeID, version, iteration, iteComm);
       if (exitCode == 0) {
         // Apply on each chunk ID
-        System.out.println("Num of chunks received: " + valByteMap.size());
+        System.out.println("ReduceScatter - Num of chunks received: "
+          + valByteMap.size());
         for (Entry<Integer, List<byte[]>> entry : valByteMap.entrySet()) {
           int chunkID = entry.getKey().intValue();
           List<byte[]> valBytes = entry.getValue();
@@ -639,24 +682,19 @@ public class AllReducer<T> implements AllReduce<T>,
       } else if (exitCode == 1) {
         // Ask driver, send source failure message
         sendMsg(Type.SourceDead, selfID, version, driverID, version,
-          getIterationInBytes(iteration));
+          putIterationToBytes(iteration));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceDead.");
-        waitForNewNodeTopology(topoClient, iteration);
+        waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
         // Fail the current iteration
         // This should match with topoClient.isFailed();
         isFailed = true;
         break;
       } else if (exitCode == 2) {
         // Ask driver, send source add message
-        // The version number is always 0 when sending to the driver
         sendMsg(Type.SourceAdd, selfID, version, driverID, version,
-          getIterationInBytes(iteration));
+          putIterationToBytes(iteration));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceAdd");
-        waitForNewNodeTopology(topoClient, iteration);
+        waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
         // Check if there is failure in the current topology
         isFailed = topoClient.getNewestNodeTopology().isFailed;
         if (isFailed) {
@@ -670,13 +708,12 @@ public class AllReducer<T> implements AllReduce<T>,
     return isFailed;
   }
 
-  private int reduceScatterInDim(Map<Integer, T> reducedValMap, int iteration,
-    String selfID, int nodeID, Map<Integer, List<byte[]>> valByteMap,
-    List<int[]> opDimList, Map<Integer, String> opTaskMap, int moduloBase,
-    Codec<T> codec, int[] lastPerformedOpIndex, int version)
+  private int reduceScatterInDim(Map<Integer, T> reducedValMap,
+    Map<Integer, List<byte[]>> valByteMap, List<int[]> opDimList,
+    Map<Integer, String> opTaskMap, Map<String, Integer> taskVersionMap,
+    int[] lastPerformedOpIndex, int moduloBase, Codec<T> codec, String selfID,
+    int nodeID, int version, int iteration, byte[] iteComm)
     throws InterruptedException {
-    String taskID = null;
-    int[] op = null;
     int lastIndex = lastPerformedOpIndex[0];
     // If the last Performed OP index is less than 0 (negative, means nothing
     // performed), i starts with 0. otherwise, it starts with the last performed
@@ -686,8 +723,8 @@ public class AllReducer<T> implements AllReduce<T>,
     }
     int i = lastIndex < 0 ? 0 : lastIndex;
     for (; i < opDimList.size(); i++) {
-      op = opDimList.get(i);
-      taskID = opTaskMap.get(op[0]);
+      int[] op = opDimList.get(i);
+      String taskID = opTaskMap.get(op[0]);
       System.out.println("ReduceScatter, Task ID: " + taskID + ", op: ["
         + op[0] + "," + op[1] + "]");
       if (i != lastIndex) {
@@ -695,8 +732,8 @@ public class AllReducer<T> implements AllReduce<T>,
         // otherwise, if the code exits because of ResourceDead and ResourceAdd
         // we record the index and resume receiving.
         if (op[1] == 1 || op[1] == 2) {
-          List<Integer> chunkIDs = new ArrayList<>();
-          List<byte[]> byteList = new ArrayList<>();
+          List<Integer> chunkIDs = new LinkedList<>();
+          LinkedList<byte[]> byteList = new LinkedList<>();
           // Send chunks not belonged to this node
           for (Entry<Integer, T> entry : reducedValMap.entrySet()) {
             int chunkID = entry.getKey().intValue();
@@ -712,8 +749,10 @@ public class AllReducer<T> implements AllReduce<T>,
           }
           System.out.println("ReduceScatter - Num of chunks sent: "
             + chunkIDs.size());
-          byteList.add(0, getChunkIDsToBytes(chunkIDs));
-          sendMsg(Type.AllReduce, selfID, iteration, taskID, 1,
+          byteList.addFirst(putChunkIDsToBytes(chunkIDs));
+          byteList.addFirst(iteComm);
+          sendMsg(Type.AllReduce, selfID, version, taskID,
+            taskVersionMap.get(taskID),
             byteList.toArray(new byte[byteList.size()][]));
         }
       }
@@ -722,7 +761,7 @@ public class AllReducer<T> implements AllReduce<T>,
         GroupCommMessage msg = null;
         do {
           // Reduce Scatter in Allreduce uses commType 1
-          msg = receiveMsg(iteration, taskID, 1);
+          msg = receiveMsg(iteration, taskID, 1, version);
           if (msg.getType() == Type.AllReduce) {
             // If op is 0 or 2, the data is needed
             if (op[1] != 1) {
@@ -730,22 +769,12 @@ public class AllReducer<T> implements AllReduce<T>,
             }
           } else if (msg.getType() == Type.SourceDead) {
             // Source Dead message from driver
-            // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 1;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 1;
           } else if (msg.getType() == Type.SourceAdd) {
             // Source Add message from the driver
-            // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 2;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 2;
           }
         } while (msg == null);
       }
@@ -755,7 +784,8 @@ public class AllReducer<T> implements AllReduce<T>,
       if (op[1] == 0) {
         // send an ack message to the sender task
         // The source version is the iteration
-        sendMsg(Type.AllReduce, selfID, iteration, taskID, 1, EmptyByteArr);
+        sendMsg(Type.AllReduce, selfID, version, taskID,
+          taskVersionMap.get(taskID), iteComm);
       }
     }
     // All ops are performed
@@ -764,7 +794,7 @@ public class AllReducer<T> implements AllReduce<T>,
     return 0;
   }
 
-  private byte[] getChunkIDsToBytes(List<Integer> chunkIDs) {
+  private byte[] putChunkIDsToBytes(List<Integer> chunkIDs) {
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     DataOutputStream dout = new DataOutputStream(bout);
     byte[] bytes = null;
@@ -802,40 +832,48 @@ public class AllReducer<T> implements AllReduce<T>,
     return chunkIDs;
   }
 
-  private void getRsAgDataFromMsg(
-    Map<Integer, List<byte[]>> valByteMap, GroupCommMessage msg) {
+  private void getRsAgDataFromMsg(Map<Integer, List<byte[]>> valByteMap,
+    GroupCommMessage msg) {
     List<Integer> chunkIDs =
-      getChunkIDsFromBytes(msg.getMsgs(0).getData().toByteArray());
+      getChunkIDsFromBytes(msg.getMsgs(1).getData().toByteArray());
     int chunkID = -1;
     for (int i = 0; i < chunkIDs.size(); i++) {
       chunkID = chunkIDs.get(i);
       List<byte[]> byteList = valByteMap.get(chunkID);
       if (byteList == null) {
-        byteList = new ArrayList<>();
+        // Use linked list for the list with unknown size
+        byteList = new LinkedList<>();
         valByteMap.put(chunkID, byteList);
       }
-      byteList.add(msg.getMsgs(i + 1).getData().toByteArray());
+      // The first byte[] is iteration and communication type
+      // the second byte[] is chunk ids.
+      byteList.add(msg.getMsgs(i + 2).getData().toByteArray());
     }
   }
 
-  private boolean allGather(Map<Integer, T> reducedValMap, int iteration,
-    String selfID, int nodeID, List<List<int[]>> opList,
-    Map<Integer, String> opTaskMap, Codec<T> codec,
-    ReduceFunction<T> reduceFunc, String driverID,
-    HyperCubeTopoClient topoClient, int version) throws InterruptedException {
-    int[] lastPerformedOpIndex = new int[] { -1 };
+  private boolean allGather(Map<Integer, T> reducedValMap,
+    List<List<int[]>> opList, Map<Integer, String> opTaskMap,
+    Map<String, Integer> taskVersionMap, Codec<T> codec,
+    ReduceFunction<T> reduceFunc, String selfID, int nodeID, int version,
+    int iteration, String driverID, HyperCubeTopoClient topoClient)
+    throws InterruptedException {
     // Chunk ID <-> byte messages from other nodes
     Map<Integer, List<byte[]>> valByteMap = new HashMap<>();
     // Used in reduce function
-    List<T> vals = new ArrayList<T>();
+    List<T> vals = new LinkedList<T>();
+    // Record last op performed
+    int[] lastPerformedOpIndex = new int[] { -1 };
+    // Encode iteration and communication type for sending
+    byte[] iteComm = putIterationAndCommTypeTonBytes(iteration, -1);
     boolean isFailed = false;
     int exitCode = -1;
     // Do allgather
     for (int i = 0; i < opList.size(); i++) {
       // For each dimension, follow the topology and send the data
       exitCode =
-        allgatherInDim(reducedValMap, iteration, selfID, nodeID, valByteMap,
-          opList.get(i), opTaskMap, codec, lastPerformedOpIndex, version);
+        allgatherInDim(reducedValMap, valByteMap, opList.get(i), opTaskMap,
+          taskVersionMap, lastPerformedOpIndex, codec, selfID, nodeID, version,
+          iteration, iteComm);
       if (exitCode == 0) {
         // Apply each chunk received
         System.out.println("Allgather - Num of chunks received: "
@@ -868,11 +906,9 @@ public class AllReducer<T> implements AllReduce<T>,
       } else if (exitCode == 1) {
         // Ask driver, send source failure message
         sendMsg(Type.SourceDead, selfID, version, driverID, version,
-          getIterationInBytes(iteration));
+          putIterationToBytes(iteration));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceDead.");
-        waitForNewNodeTopology(topoClient, iteration);
+        waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
         // Fail the current iteration
         // This should match with topoClient.isFailed();
         isFailed = true;
@@ -881,11 +917,9 @@ public class AllReducer<T> implements AllReduce<T>,
         // Ask driver, send source add message
         // The version number is always 0 when sending to the driver
         sendMsg(Type.SourceAdd, selfID, version, driverID, version,
-          getIterationInBytes(iteration));
+          putIterationToBytes(iteration));
         // Get the new topology
-        System.out
-          .println("Waiting for the new topology after getting SourceAdd");
-        waitForNewNodeTopology(topoClient, iteration);
+        waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
         // Check if there is failure in the current topology
         isFailed = topoClient.getNewestNodeTopology().isFailed;
         if (isFailed) {
@@ -899,12 +933,11 @@ public class AllReducer<T> implements AllReduce<T>,
     return isFailed;
   }
 
-  private int allgatherInDim(Map<Integer, T> reducedValMap, int iteration,
-    String selfID, int nodeID, Map<Integer, List<byte[]>> valByteMap,
-    List<int[]> opDimList, Map<Integer, String> opTaskMap, Codec<T> codec,
-    int[] lastPerformedOpIndex, int version) throws InterruptedException {
-    String taskID = null;
-    int[] op = null;
+  private int allgatherInDim(Map<Integer, T> reducedValMap,
+    Map<Integer, List<byte[]>> valByteMap, List<int[]> opDimList,
+    Map<Integer, String> opTaskMap, Map<String, Integer> taskVersionMap,
+    int[] lastPerformedOpIndex, Codec<T> codec, String selfID, int nodeID,
+    int version, int iteration, byte[] iteComm) throws InterruptedException {
     int lastIndex = lastPerformedOpIndex[0];
     // If the last Performed OP index is less than 0 (negative, means nothing
     // performed), i starts with 0. otherwise, it starts with the last performed
@@ -914,14 +947,14 @@ public class AllReducer<T> implements AllReduce<T>,
     }
     int i = lastIndex < 0 ? 0 : lastIndex;
     for (; i < opDimList.size(); i++) {
-      op = opDimList.get(i);
-      taskID = opTaskMap.get(op[0]);
+      int[] op = opDimList.get(i);
+      String taskID = opTaskMap.get(op[0]);
       System.out.println("Allgather, Task ID: " + taskID + ", op: [" + op[0]
         + "," + op[1] + "]");
       if (i != lastIndex) {
         if (op[1] == 1 || op[1] == 2) {
-          List<Integer> chunkIDs = new ArrayList<>();
-          List<byte[]> byteList = new ArrayList<>();
+          List<Integer> chunkIDs = new LinkedList<>();
+          LinkedList<byte[]> byteList = new LinkedList<>();
           for (Entry<Integer, T> entry : reducedValMap.entrySet()) {
             int chunkID = entry.getKey().intValue();
             chunkIDs.add(chunkID);
@@ -929,8 +962,10 @@ public class AllReducer<T> implements AllReduce<T>,
           }
           System.out.println("Allgather - Num of chunks sent: "
             + chunkIDs.size());
-          byteList.add(0, getChunkIDsToBytes(chunkIDs));
-          sendMsg(Type.AllReduce, selfID, iteration, taskID, -1,
+          byteList.addFirst(putChunkIDsToBytes(chunkIDs));
+          byteList.addFirst(iteComm);
+          sendMsg(Type.AllReduce, selfID, version, taskID,
+            taskVersionMap.get(taskID),
             byteList.toArray(new byte[byteList.size()][]));
         }
       }
@@ -939,7 +974,7 @@ public class AllReducer<T> implements AllReduce<T>,
         GroupCommMessage msg = null;
         do {
           // Allgather in Allreduce uses commType -1
-          msg = receiveMsg(iteration, taskID, -1);
+          msg = receiveMsg(iteration, taskID, -1, version);
           if (msg.getType() == Type.AllReduce) {
             // If op is 0 or 2, the data is needed
             if (op[1] != 1) {
@@ -947,22 +982,13 @@ public class AllReducer<T> implements AllReduce<T>,
             }
           } else if (msg.getType() == Type.SourceDead) {
             // Source Dead message from driver
-            // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 1;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 1;
           } else if (msg.getType() == Type.SourceAdd) {
             // Source Add message from the driver
             // ignore the message mistakenly put here
-            if (msg.getSrcVersion() == version) {
-              lastPerformedOpIndex[0] = i;
-              return 2;
-            } else {
-              msg = null;
-            }
+            lastPerformedOpIndex[0] = i;
+            return 2;
           }
         } while (msg == null);
       }
@@ -973,7 +999,8 @@ public class AllReducer<T> implements AllReduce<T>,
         // send an ack message to the sender task
         // The source version is the iteration
         // The target version is the commType
-        sendMsg(Type.AllReduce, selfID, iteration, taskID, -1, EmptyByteArr);
+        sendMsg(Type.AllReduce, selfID, version, taskID,
+          taskVersionMap.get(taskID), iteComm);
       }
     }
     lastPerformedOpIndex[0] = opDimList.size();
@@ -981,9 +1008,15 @@ public class AllReducer<T> implements AllReduce<T>,
     return 0;
   }
 
+  private void printMsgInfo(GroupCommMessage msg) {
+    System.out.println(getQualifiedName() + "Get " + msg.getType()
+      + " msg from " + msg.getSrcid() + " with source version "
+      + msg.getSrcVersion() + " with target version " + msg.getVersion());
+  }
+
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
-      + selfID + " - ";
+      + selfID + ":" + version + " - ";
   }
 
   /**
