@@ -41,6 +41,7 @@ import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.poison.PoisonedConfiguration;
 import com.microsoft.reef.runtime.common.driver.DriverStatusManager;
 import com.microsoft.tang.Configuration;
+import com.microsoft.tang.Configurations;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Parameter;
@@ -66,6 +67,11 @@ import java.util.logging.Logger;
 @Unit
 public class BGDDriver {
   private static final Logger LOG = Logger.getLogger(BGDDriver.class.getName());
+
+  /**
+   *
+   */
+  private static final Tang TANG = Tang.Factory.getTang();
 
   private final DataLoadingService dataLoadingService;
 
@@ -95,8 +101,6 @@ public class BGDDriver {
 
   private final int iters;
 
-  private final DriverStatusManager driverStatusManager;
-
   private final boolean rampup;
 
 
@@ -105,7 +109,6 @@ public class BGDDriver {
       final DataLoadingService dataLoadingService,
       final GroupCommDriver groupCommDriver,
       final ConfigurationSerializer confSerializer,
-      final DriverStatusManager driverStatusManager,
       @Parameter(ModelDimensions.class) final int dimensions,
       @Parameter(Lambda.class) final double lambda,
       @Parameter(Eps.class) final double eps,
@@ -115,7 +118,6 @@ public class BGDDriver {
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
-    this.driverStatusManager = driverStatusManager;
     this.dimensions = dimensions;
     this.lambda = lambda;
     this.eps = eps;
@@ -211,13 +213,8 @@ public class BGDDriver {
           }
           LOG.info("Clearing runningTasks");
           runningTasks.clear();
-//          driverStatusManager.onComplete();
         }
       }
-
-
-//      task.getActiveContext().close();
-
     }
 
   }
@@ -241,6 +238,7 @@ public class BGDDriver {
 
   final class ContextActiveHandler implements EventHandler<ActiveContext> {
 
+
     @Override
     public void onNext(final ActiveContext activeContext) {
       LOG.info("Got active context-" + activeContext.getId());
@@ -260,7 +258,7 @@ public class BGDDriver {
        */
       if (groupCommDriver.configured(activeContext)) {
         if (activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()) {
-          final Configuration partialTaskConf = Tang.Factory.getTang()
+          final Configuration partialTaskConf = TANG
               .newConfigurationBuilder(
                   TaskConfiguration.CONF
                       .set(TaskConfiguration.IDENTIFIER, "MasterTask")
@@ -279,20 +277,8 @@ public class BGDDriver {
           LOG.info(confSerializer.toString(taskConf));
           activeContext.submitTask(taskConf);
         } else {
-          final Configuration partialTaskConf = Tang.Factory.getTang()
-              .newConfigurationBuilder(
-                  TaskConfiguration.CONF
-                      .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
-                      .set(TaskConfiguration.TASK, SlaveTask.class)
-                      .build()
-                  , PoisonedConfiguration.TASK_CONF
-                      .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.01")
-                      .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-                      .build())
-              .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
-              .bindImplementation(Parser.class, SVMLightParser.class)
-              .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
-              .build();
+          final Configuration partialTaskConf = Configurations.merge(getSlaveTaskConf(getSlaveId(activeContext)),
+                  getTaskPoisonConfiguration());
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting SlaveTask conf");
@@ -315,13 +301,29 @@ public class BGDDriver {
       }
     }
 
+    private Configuration getTaskPoisonConfiguration() {
+      return PoisonedConfiguration.TASK_CONF
+          .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.01")
+          .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+          .build();
+    }
+
+    private Configuration getContextPoisonConfiguration() {
+      return PoisonedConfiguration.CONTEXT_CONF
+          .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.3")
+          .set(PoisonedConfiguration.CRASH_TIMEOUT, "5")
+          .build();
+    }
+
+
+
     /**
      * @param contextConf
      * @return
      */
     private String contextId(final Configuration contextConf) {
       try {
-        final Injector injector = Tang.Factory.getTang().newInjector(contextConf);
+        final Injector injector = TANG.newInjector(contextConf);
         return injector.getNamedInstance(ContextIdentifier.class);
       } catch (final InjectionException e) {
         throw new RuntimeException("Unable to inject context identifier from context conf", e);
@@ -344,39 +346,40 @@ public class BGDDriver {
     }
   }
 
+  private Configuration getSlaveTaskConf(final String taskId) {
+    return Tang.Factory.getTang()
+        .newConfigurationBuilder(
+            TaskConfiguration.CONF
+                .set(TaskConfiguration.IDENTIFIER, taskId)
+                .set(TaskConfiguration.TASK, SlaveTask.class)
+                .build())
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
+        .bindImplementation(Parser.class, SVMLightParser.class)
+        .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
+        .build();
+  }
+
   final class TaskFailedHandler implements EventHandler<FailedTask> {
 
     @Override
     public void onNext(final FailedTask failedTask) {
-      LOG.info("Got failed Task " + failedTask.getId());
+      final String failedTaskId = failedTask.getId();
+      LOG.info("Got failed Task " + failedTaskId);
 
       synchronized (runningTasks) {
         if (jobComplete.get()) {
           LOG.info("Job has completed. Not resubmitting. Closing activecontext");
-          final RunningTask rTask = runningTasks.remove(failedTask.getId());
+          final RunningTask rTask = runningTasks.remove(failedTaskId);
           if (rTask != null) {
             rTask.getActiveContext().close();
           }
           return;
         } else {
-          runningTasks.remove(failedTask.getId());
+          runningTasks.remove(failedTaskId);
         }
       }
       final ActiveContext activeContext = failedTask.getActiveContext().get();
-      final Configuration partialTaskConf = Tang.Factory.getTang()
-          .newConfigurationBuilder(
-              TaskConfiguration.CONF
-                  .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
-                  .set(TaskConfiguration.TASK, SlaveTask.class)
-                  .build()
-              , PoisonedConfiguration.TASK_CONF
-                  .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
-                  .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-                  .build())
-          .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
-          .bindImplementation(Parser.class, SVMLightParser.class)
-          .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
-          .build();
+      final Configuration partialTaskConf = getSlaveTaskConf(failedTaskId);
       //Do not add the task back
       //allCommGroup.addTask(partialTaskConf);
       final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);

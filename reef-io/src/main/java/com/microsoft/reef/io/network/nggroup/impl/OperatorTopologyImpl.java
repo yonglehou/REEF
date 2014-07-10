@@ -56,12 +56,54 @@ public class OperatorTopologyImpl implements OperatorTopology {
   private final Object topologyLock = new Object();
 
   private final BlockingQueue<GroupCommMessage> deltas = new LinkedBlockingQueue<>();
-  private final EStage<GroupCommMessage> baseTopologyUpdateStage;
+
   private OperatorTopologyStruct baseTopology;
   private OperatorTopologyStruct effectiveTopology;
   private CountDownLatch topologyLockAquired = new CountDownLatch(1);
   private final AtomicBoolean updatingTopo = new AtomicBoolean(false);
 
+  private final EStage<GroupCommMessage> baseTopologyUpdateStage = new SingleThreadStage<>(new EventHandler<GroupCommMessage>() {
+
+    @Override
+    public void onNext(final GroupCommMessage msg) {
+      assert (msg.getType() == Type.UpdateTopology);
+      LOG.info(getQualifiedName() + "BaseTopologyUpdateStage received " + msg.getType() + " msg");
+      synchronized (topologyLock) {
+        LOG.info(getQualifiedName() + "Acquired topoLock");
+        LOG.info(getQualifiedName() + "Releasing topoLoackAcquired CDL");
+        topologyLockAquired.countDown();
+        updateBaseTopology();
+      }
+    }
+  }, 5);
+
+  //The queue capacity might determine how many
+  //tasks can be handled
+  private final EStage<GroupCommMessage> dataHandlingStage = new SingleThreadStage<>("DataHandlingStage",
+          new EventHandler<GroupCommMessage>() {
+
+            @Override
+            public void onNext(final GroupCommMessage dataMsg) {
+              synchronized (topologyLock) {
+                //Data msg
+                while (updatingTopo.get()) {
+                  try {
+                    topologyLock.wait();
+                  } catch (final InterruptedException e) {
+                    throw new RuntimeException("InterruptedException while data handling" +
+                    		"stage was waiting for updatingTopo to become false", e);
+                  }
+                }
+                if (effectiveTopology != null) {
+                  LOG.info(getQualifiedName()
+                      + "Non-null effectiveTopo.addAsData(msg)");
+                  effectiveTopology.addAsData(dataMsg);
+                } else {
+                  LOG.warning("Received a data message before effective topology was setup");
+                }
+              }
+            }
+          }, 10000);
 
   private final int version;
 
@@ -76,20 +118,6 @@ public class OperatorTopologyImpl implements OperatorTopology {
     this.driverId = driverId;
     this.sender = sender;
     this.version = version;
-    baseTopologyUpdateStage = new SingleThreadStage<>(new EventHandler<GroupCommMessage>() {
-
-      @Override
-      public void onNext(final GroupCommMessage msg) {
-        assert (msg.getType() == Type.UpdateTopology);
-        LOG.info(getQualifiedName() + "BaseTopologyUpdateStage received " + msg.getType() + " msg");
-        synchronized (topologyLock) {
-          LOG.info(getQualifiedName() + "Acquired topoLock");
-          LOG.info(getQualifiedName() + "Releasing topoLoackAcquired CDL");
-          topologyLockAquired.countDown();
-          updateBaseTopology();
-        }
-      }
-    }, 5);
   }
 
   @Override
@@ -135,6 +163,11 @@ public class OperatorTopologyImpl implements OperatorTopology {
         case ChildDead:
           LOG.info(getQualifiedName() + "Adding to deltas queue");
           deltas.put(msg);
+          //No synchronization is needed here
+          //2 states: UpdatingTopo & NotUpdatingTopo
+          //If UpdatingTopo, deltas.put still takes care of adding this msg to effTop
+          //through baseTopo changes.
+          //If not, we add to effTopo. So we are good.
           if (effectiveTopology != null) {
             LOG.info(getQualifiedName()
                 + "Adding as data msg to non-null effective topology struct with msg");
@@ -146,19 +179,23 @@ public class OperatorTopologyImpl implements OperatorTopology {
           break;
 
         default:
-          synchronized (topologyLock) {
-            //Data msg
-            while (updatingTopo.get()) {
-              topologyLock.wait();
-            }
-            if (effectiveTopology != null) {
-              LOG.info(getQualifiedName()
-                  + "Non-null effectiveTopo.addAsData(msg)");
-              effectiveTopology.addAsData(msg);
-            } else {
-              LOG.warning("Received a data message before effective topology was setup");
-            }
-          }
+          //This needs to be synchronized unlike Dead msgs
+          //because data msgs are not routed through the base topo changes
+          //So we need to make sure to wait for updateTopo to complete
+          //and for the new effective topo to take effect. Hence updatinTopo
+          //is set to false in refreshEffTopo.
+          //Also, since this is called from a netty IO thread, we need to
+          //create a stage to move the msgs from netty space to application space
+          //and release the netty threads. Otherwise weird deadlocks can happen
+          //Ex: Sent model to k nodes using broadcast. Send to K+1 th is waiting
+          //for ACK. The K nodes already compute their states and reduce send
+          //their results. If we haven't finished refreshEffTopo because of which
+          //updatingTopo is true, we can't add the new msgs if the #netty threads is k
+          //All k threads are waiting to add data. Single user thread that is waiting
+          //for ACK does not come around to refreshEffTopo and we are deadlocked
+          //because there aren't enough netty threads to dispatch
+          //msgs to the application. Hence the stage
+          dataHandlingStage.onNext(msg);
       }
     } catch (final InterruptedException e) {
       throw new RuntimeException("InterruptedException while trying to put ctrl msg into delta queue", e);

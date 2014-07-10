@@ -43,7 +43,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
   /**
    *
    */
-  private static final int SMALL_MSG_LENGTH = 1 << 13;
+  private static final int SMALL_MSG_LENGTH = 1 << 20;
 
   /**
    *
@@ -143,7 +143,7 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
     } else {
       try {
         nodesWithData.put(node);
-        LOG.info(getQualifiedName() + "Added node " + srcId + "to nodesWithData queue");
+        LOG.info(getQualifiedName() + "Added node " + srcId + " to nodesWithData queue");
       } catch (final InterruptedException e) {
         throw new RuntimeException(
             "InterruptedException while adding to childrenWithData queue", e);
@@ -168,25 +168,36 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
       final NodeStruct node) {
     final String nodeId = node.getId();
     try {
-      final byte[] tmpVal;
+
       if (data.length > SMALL_MSG_LENGTH) {
         LOG.info(getQualifiedName() + "Msg too big. Sending readiness to send " + msgType
             + " msg to " + nodeId);
         sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
             version, nodeId, node.getVersion(), EMPTY_BYTE));
-        tmpVal = receiveFromNode(node);
-        LOG.info(getQualifiedName() + "Got readiness to accept " + msgType + " msg from " + nodeId);
+        final byte[] tmpVal = receiveFromNode(node);
+        if(tmpVal!=null) {
+          LOG.info(getQualifiedName() + "Got readiness to accept " + msgType + " msg from " + nodeId
+                  + ". Will send actual msg now");
+        } else {
+          LOG.info(getQualifiedName() + "So moving on");
+          return;
+        }
       }
-      else {
-        tmpVal = EMPTY_BYTE;
-      }
-      if(tmpVal==null) {
-        return;
-      }
-      else {
-        LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + nodeId);
-        sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
-            version, nodeId, node.getVersion(), data));
+
+      LOG.info(getQualifiedName() + "Sending " + msgType + " msg to " + nodeId);
+      sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfId,
+          version, nodeId, node.getVersion(), data));
+
+      if (data.length > SMALL_MSG_LENGTH) {
+        LOG.info(getQualifiedName() + "Msg too big. Will wait for ACK before queing up one more msg");
+        final byte[] tmpVal = receiveFromNode(node);
+        if(tmpVal!=null) {
+          LOG.info(getQualifiedName() + "Got " + msgType + " msg received ACK from " + nodeId
+                  + ". Will move to next msg if it exists");
+        } else {
+          LOG.info(getQualifiedName() + "So moving on");
+          return;
+        }
       }
     } catch (final NetworkException e) {
       throw new RuntimeException("NetworkException while sending "
@@ -241,6 +252,13 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
           + " has large data and is ready to send data. Sending Ack to receive data");
       sendToNode(EMPTY_BYTE, Type.Broadcast, parent);
       retVal = receiveFromNode(parent);
+      if(retVal!=null) {
+        LOG.info(getQualifiedName() + "Received large msg from Parent " + parent.getId()
+                + ". Will return it after ACKing it");
+        sendToNode(EMPTY_BYTE, Type.Broadcast, parent);
+      }else {
+        LOG.info(getQualifiedName() + "Will return null");
+      }
       final boolean removed = nodesWithData.remove(parent);
       LOG.info(getQualifiedName() + "Removed(" + removed + ") parent "
           + parent.getId() + " from nodesWithData queue");
@@ -275,6 +293,13 @@ public class OperatorTopologyStructImpl implements OperatorTopologyStruct {
             + " has large data and is ready to send data. Sending Ack to receive data");
         sendToNode(EMPTY_BYTE, Type.Reduce, child);
         retVal = receiveFromNode(child);
+        if(retVal!=null) {
+          LOG.info(getQualifiedName() + "Received large msg from child " + child.getId()
+                  + ". Will reduce it after ACKing it");
+          sendToNode(EMPTY_BYTE, Type.Reduce, child);
+        }else {
+          LOG.info(getQualifiedName() + "Will not reduce it");
+        }
         final boolean removed = nodesWithData.remove(child);
         LOG.info(getQualifiedName() + "Removed(" + removed + ") child "
             + child.getId() + " from nodesWithData queue");

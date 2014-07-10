@@ -17,6 +17,7 @@ package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 import javax.inject.Inject;
 
@@ -42,6 +43,9 @@ import com.microsoft.reef.task.Task;
  *
  */
 public class SlaveTask implements Task {
+
+  private static final Logger LOG = Logger.getLogger(SlaveTask.class.getName());
+
   /**
    *
    */
@@ -198,9 +202,14 @@ public class SlaveTask implements Task {
    *
    */
   private void loadData() {
+    LOG.info("Loading data");
+    int i = 0;
     for (final Pair<LongWritable, Text> examplePair : dataSet) {
       final Example example = parser.parse(examplePair.second.toString());
       examples.add(example);
+      if(++i % 2000 == 0) {
+        LOG.info("Done parsing " + i + " lines");
+      }
     }
   }
 

@@ -72,6 +72,7 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
 
 
   private final Object yetToRunLock = new Object();
+  private final Object toBeRemovedLock = new Object();
 
   private final SetMap<MsgKey, IndexedMsg> msgQue = new SetMap<>();
 
@@ -196,11 +197,22 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
 
   @Override
   public void addTask(final Configuration partialTaskConf) {
+    final String taskId = taskId(partialTaskConf);
+    synchronized (toBeRemovedLock) {
+      LOG.info(getQualifiedName() + "Acquired toBeRemovedLock");
+      while (perTaskState.containsKey(taskId)) {
+        LOG.info(getQualifiedName() + "Trying to add an existing task. Will wait for removeTask");
+        try {
+          toBeRemovedLock.wait();
+        } catch (final InterruptedException e) {
+          throw new RuntimeException("InterruptedException", e);
+        }
+      }
+    }
+    LOG.info(getQualifiedName() + "Released toBeRemovedLock");
     synchronized (topologiesLock) {
       LOG.info(getQualifiedName() + "Acquired topologiesLock");
-      final String taskId = taskId(partialTaskConf);
-      for (final Class<? extends Name<String>> operName : operatorSpecs
-          .keySet()) {
+      for (final Class<? extends Name<String>> operName : operatorSpecs.keySet()) {
         final Topology topology = topologies.get(operName);
         topology.addTask(taskId);
       }
@@ -212,9 +224,23 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
   /**
    * @param id
    */
-  public void removeTask(final String id) {
-    // TODO Auto-generated method stub
-
+  public void removeTask(final String taskId) {
+    LOG.warning(getQualifiedName() + "Removing Task as the evaluator has failed");
+    synchronized (topologiesLock) {
+      LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      for (final Class<? extends Name<String>> operName : operatorSpecs.keySet()) {
+        final Topology topology = topologies.get(operName);
+        topology.removeTask(taskId);
+      }
+      perTaskState.remove(taskId);
+    }
+    LOG.info(getQualifiedName() + "Released topologiesLock");
+    LOG.info(getQualifiedName() + "Removed Task " + taskId + " Notifying waiting threads");
+    synchronized (toBeRemovedLock) {
+      LOG.info(getQualifiedName() + "Acquired toBeRemovedLock");
+      toBeRemovedLock.notifyAll();
+    }
+    LOG.info(getQualifiedName() + "Released toBeRemovedLock");
   }
 
 
@@ -240,13 +266,6 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
       yetToRunLock.notifyAll();
     }
     LOG.info(getQualifiedName() + "Released yetToRunLock");
-  }
-
-  /**
-   * @return
-   */
-  private String getQualifiedName() {
-    return Utils.simpleName(groupName) + " - ";
   }
 
   /**
@@ -397,5 +416,12 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
     } catch (final InjectionException e) {
       throw new RuntimeException("Unable to find task identifier", e);
     }
+  }
+
+  /**
+   * @return
+   */
+  private String getQualifiedName() {
+    return Utils.simpleName(groupName) + " - ";
   }
 }

@@ -59,7 +59,7 @@ public class SVMLightParser implements Parser<String> {
     for (int j = 1; j < entries.length; ++j) {
       final String x = entries[j];
       final String[] entity = StringUtils.split(x, ':');
-      final int offset = pipeExists ? 1 : 0;
+      final int offset = pipeExists ? 0 : 1;
       indices[j - 1] = Integer.parseInt(entity[0]) - offset;
       values[j - 1] = Float.parseFloat(entity[1]);
     }
