@@ -46,58 +46,58 @@ public class NameServer implements Stage {
 
   private final Transport transport;
   private final Map<Identifier, InetSocketAddress> idToAddrMap;
-  
+
   private final int port;
-  
+
   /**
    * Constructs a name server
-   * 
-   * @param port a listening port number
+   *
+   * @param port    a listening port number
    * @param factory an identifier factory
    */
   @Inject
-  public NameServer(@Parameter(NameServerParameters.NameServerPort.class) int port, 
-      @Parameter(NameServerParameters.NameServerIdentifierFactory.class) IdentifierFactory factory) {
-    
+  public NameServer(@Parameter(NameServerParameters.NameServerPort.class) int port,
+                    @Parameter(NameServerParameters.NameServerIdentifierFactory.class) IdentifierFactory factory) {
+
     Codec<NamingMessage> codec = NamingCodecFactory.createFullCodec(factory);
     EventHandler<NamingMessage> handler = createEventHandler(codec);
-    
+
     transport = new NettyMessagingTransport(NetUtils.getLocalAddress(), port, null, new SyncStage<TransportEvent>(new NamingServerHandler(handler, codec)));
     this.port = transport.getListeningPort();
-    idToAddrMap = Collections.synchronizedMap(new HashMap<Identifier, InetSocketAddress> ());
+    idToAddrMap = Collections.synchronizedMap(new HashMap<Identifier, InetSocketAddress>());
 
     LOG.log(Level.FINE, "NameServer starting, listening at port " + this.port);
   }
 
   private EventHandler<NamingMessage> createEventHandler(Codec<NamingMessage> codec) {
-    Map<Class<? extends NamingMessage>, EventHandler<? extends NamingMessage>> clazzToHandlerMap 
-      = new HashMap<Class<? extends NamingMessage>, EventHandler<? extends NamingMessage>> ();
+    Map<Class<? extends NamingMessage>, EventHandler<? extends NamingMessage>> clazzToHandlerMap
+        = new HashMap<Class<? extends NamingMessage>, EventHandler<? extends NamingMessage>>();
     clazzToHandlerMap.put(NamingLookupRequest.class, new NamingLookupRequestHandler(this, codec));
     clazzToHandlerMap.put(NamingRegisterRequest.class, new NamingRegisterRequestHandler(this, codec));
     clazzToHandlerMap.put(NamingUnregisterRequest.class, new NamingUnregisterRequestHandler(this));
     EventHandler<NamingMessage> handler = new MultiEventHandler<NamingMessage>(clazzToHandlerMap);
     return handler;
   }
-  
+
   /**
    * Gets port
    */
   public int getPort() {
-	return port;
+    return port;
   }
-  
+
   /**
    * Closes resources
    */
   @Override
   public void close() throws Exception {
-    transport.close();    
+    transport.close();
   }
 
   /**
    * Registers an (identifier, address) mapping locally
-   * 
-   * @param id an identifier
+   *
+   * @param id   an identifier
    * @param addr an Internet socket address
    */
   public void register(Identifier id, InetSocketAddress addr) {
@@ -107,17 +107,17 @@ public class NameServer implements Stage {
 
   /**
    * Unregisters an identifier locally
-   * 
+   *
    * @param id an identifier
    */
   public void unregister(Identifier id) {
     LOG.log(Level.FINE, "id: " + id);
-    idToAddrMap.remove(id);    
+    idToAddrMap.remove(id);
   }
 
   /**
    * Finds an address for an identifier locally
-   * 
+   *
    * @param id an identifier
    * @return an Internet socket address
    */
@@ -128,23 +128,23 @@ public class NameServer implements Stage {
 
   /**
    * Finds addresses for identifiers locally
-   * 
+   *
    * @param identifiers an iterable of identifiers
    * @return a list of name assignments
    */
   public List<NameAssignment> lookup(Iterable<Identifier> identifiers) {
     LOG.log(Level.FINE, "identifiers");
-    List<NameAssignment> nas = new ArrayList<NameAssignment> ();
-    for(Identifier id : identifiers) {
+    List<NameAssignment> nas = new ArrayList<NameAssignment>();
+    for (Identifier id : identifiers) {
       InetSocketAddress addr = idToAddrMap.get(id);
-      LOG.log(Level.FINEST, "id : " + id + " addr: " + addr);        	
+      LOG.log(Level.FINEST, "id : " + id + " addr: " + addr);
 
       if (addr != null)
         nas.add(new NameAssignmentTuple(id, addr));
     }
     return nas;
   }
-  
+
 }
 
 /**
@@ -159,15 +159,15 @@ class NamingServerHandler implements EventHandler<TransportEvent> {
     this.codec = codec;
     this.handler = handler;
   }
-  
+
   @Override
   public void onNext(TransportEvent value) {
     byte[] data = value.getData();
-    NamingMessage message = (NamingMessage)codec.decode(data);
+    NamingMessage message = (NamingMessage) codec.decode(data);
     message.setLink(value.getLink());
     handler.onNext(message);
   }
-  
+
 }
 
 /**
@@ -177,12 +177,12 @@ class NamingLookupRequestHandler implements EventHandler<NamingLookupRequest> {
 
   private final NameServer server;
   private final Codec<NamingMessage> codec;
-  
+
   public NamingLookupRequestHandler(NameServer server, Codec<NamingMessage> codec) {
     this.server = server;
     this.codec = codec;
   }
-  
+
   @Override
   public void onNext(NamingLookupRequest value) {
     List<NameAssignment> nas = server.lookup(value.getIdentifiers());
@@ -193,7 +193,7 @@ class NamingLookupRequestHandler implements EventHandler<NamingLookupRequest> {
       e.printStackTrace();
     }
   }
-  
+
 }
 
 /**
@@ -203,12 +203,12 @@ class NamingRegisterRequestHandler implements EventHandler<NamingRegisterRequest
 
   private final NameServer server;
   private final Codec<NamingMessage> codec;
-  
+
   public NamingRegisterRequestHandler(NameServer server, Codec<NamingMessage> codec) {
     this.server = server;
     this.codec = codec;
   }
-  
+
   @Override
   public void onNext(NamingRegisterRequest value) {
     server.register(value.getNameAssignment().getIdentifier(), value.getNameAssignment().getAddress());
@@ -219,7 +219,7 @@ class NamingRegisterRequestHandler implements EventHandler<NamingRegisterRequest
       e.printStackTrace();
     }
   }
-  
+
 }
 
 /**
@@ -228,16 +228,16 @@ class NamingRegisterRequestHandler implements EventHandler<NamingRegisterRequest
 class NamingUnregisterRequestHandler implements EventHandler<NamingUnregisterRequest> {
 
   private final NameServer server;
-  
+
   public NamingUnregisterRequestHandler(NameServer server) {
     this.server = server;
   }
-  
+
   @Override
   public void onNext(NamingUnregisterRequest value) {
     server.unregister(value.getIdentifier());
   }
-  
+
 }
 
 
