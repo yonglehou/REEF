@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.bgd.utils;
 
 public class Timer implements AutoCloseable {
 
@@ -22,13 +22,18 @@ public class Timer implements AutoCloseable {
 
   public Timer(final String description) {
     this.description = description;
+    System.out.println();
+    System.out.println(description + " Starting:");
     t1 = System.currentTimeMillis();
   }
 
   @Override
   public void close() {
     final long t2 = System.currentTimeMillis();
+    System.out.println();
+    System.out.println(description + " Ended:");
     System.out.println(description + " took " + (t2 - t1) / 1000.0 + " sec");
+    System.out.println();
   }
 
 }

@@ -1,11 +1,11 @@
-/**
- * Copyright (C) 2014 Microsoft Corporation
+/*
+ * Copyright 2013 Microsoft.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *         http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,44 +15,13 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
-import com.microsoft.reef.client.DriverConfiguration;
-import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.driver.evaluator.EvaluatorRequest;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
-import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
-import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
-import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
-import com.microsoft.tang.Configurations;
-import com.microsoft.tang.JavaConfigurationBuilder;
-import com.microsoft.tang.Tang;
-import com.microsoft.tang.annotations.Parameter;
-import com.microsoft.tang.formats.CommandLine;
-import org.apache.hadoop.mapred.TextInputFormat;
-
-import javax.inject.Inject;
 
 /**
- * A client to submit BGD Jobs
+ *
  */
-public class BGDClient {
-  private final String input;
-  private final int numSplits;
-  private final int memory;
-
-  private final BGDControlParameters bgdControlParameters;
-
-  @Inject
-  public BGDClient(final @Parameter(InputDir.class) String input,
-                   final @Parameter(NumSplits.class) int numSplits,
-                   final @Parameter(EvaluatorMemory.class) int memory,
-                   final BGDControlParameters bgdControlParameters) {
-    this.input = input;
-    this.bgdControlParameters = bgdControlParameters;
-    this.numSplits = numSplits;
-    this.memory = memory;
-  }
+public interface BGDClient {
 
   /**
    * Runs BGD on the given runtime.
@@ -62,10 +31,7 @@ public class BGDClient {
    * @return
    * @throws Exception
    */
-  public LauncherStatus run(final Configuration runtimeConfiguration, final String jobName) throws Exception {
-    final Configuration driverConfiguration = getDriverConfiguration(jobName);
-    return DriverLauncher.getLauncher(runtimeConfiguration).run(driverConfiguration);
-  }
+  LauncherStatus run(Configuration runtimeConfiguration, String jobName) throws Exception;
 
   /**
    * Runs BGD on the given runtime.
@@ -76,50 +42,6 @@ public class BGDClient {
    * @return
    * @throws Exception
    */
-  public LauncherStatus run(final Configuration runtimeConfiguration, final String jobName, final int timeout) throws Exception {
-    final Configuration driverConfiguration = getDriverConfiguration(jobName);
-    return DriverLauncher.getLauncher(runtimeConfiguration).run(driverConfiguration, timeout);
-  }
-
-  private final Configuration getDriverConfiguration(final String jobName) {
-    return Configurations.merge(
-              getDataLoadConfiguration(jobName),
-              GroupCommService.getConfiguration(),
-              bgdControlParameters.getConfiguration());
-  }
-
-  private Configuration getDataLoadConfiguration(final String jobName) {
-    final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
-        .setNumber(1)
-        .setMemory(memory)
-        .build();
-    final Configuration dataLoadConfiguration = new DataLoadingRequestBuilder()
-        .setMemoryMB(memory)
-        .setInputFormatClass(TextInputFormat.class)
-        .setInputPath(input)
-        .setNumberOfDesiredSplits(numSplits)
-        .setComputeRequest(computeRequest)
-        .setDriverConfigurationModule(EnvironmentUtils
-            .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
-            .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)
-            .set(DriverConfiguration.ON_TASK_RUNNING, BGDDriver.TaskRunningHandler.class)
-            .set(DriverConfiguration.ON_TASK_FAILED, BGDDriver.TaskFailedHandler.class)
-            .set(DriverConfiguration.ON_TASK_COMPLETED, BGDDriver.TaskCompletedHandler.class)
-            .set(DriverConfiguration.DRIVER_IDENTIFIER, jobName))
-        .build();
-    return dataLoadConfiguration;
-  }
-
-  public static final BGDClient fromCommandLine(final String[] args) throws Exception {
-    final JavaConfigurationBuilder configurationBuilder = Tang.Factory.getTang().newConfigurationBuilder();
-    final CommandLine commandLine = new CommandLine(configurationBuilder);
-    commandLine.registerShortNameOfClass(InputDir.class);
-    commandLine.registerShortNameOfClass(Timeout.class);
-    commandLine.registerShortNameOfClass(EvaluatorMemory.class);
-    commandLine.registerShortNameOfClass(NumSplits.class);
-    BGDControlParameters.registerShortNames(commandLine);
-    commandLine.processCommandLine(args);
-    return Tang.Factory.getTang().newInjector(configurationBuilder.build()).getInstance(BGDClient.class);
-  }
+  LauncherStatus run(Configuration runtimeConfiguration, String jobName, int timeout) throws Exception;
 
 }

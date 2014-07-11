@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.bgd.utils;
 
 import org.mortbay.log.Log;
 
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
+import com.microsoft.reef.examples.nggroup.bgd.full.MasterTask;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.JavaConfigurationBuilder;

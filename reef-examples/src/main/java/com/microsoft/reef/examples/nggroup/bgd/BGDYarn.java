@@ -16,6 +16,7 @@
 package com.microsoft.reef.examples.nggroup.bgd;
 
 import com.microsoft.reef.client.LauncherStatus;
+import com.microsoft.reef.examples.nggroup.bgd.full.BGDClientImpl;
 import com.microsoft.reef.runtime.yarn.client.YarnClientConfiguration;
 import com.microsoft.tang.Configuration;
 
@@ -25,7 +26,7 @@ import com.microsoft.tang.Configuration;
 public class BGDYarn {
 
   public static void main(final String[] args) throws Exception {
-    final BGDClient bgdClient = BGDClient.fromCommandLine(args);
+    final BGDClient bgdClient = BGDClientFactory.fromCommandLine(args);
     final Configuration runtimeConfiguration = YarnClientConfiguration.CONF.build();
     final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDYarn");
     System.out.println("Result: " + result.toString());

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.bgd.full;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +24,7 @@ import javax.inject.Inject;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 
+import com.microsoft.reef.examples.nggroup.bgd.ControlMessages;
 import com.microsoft.reef.examples.nggroup.bgd.data.Example;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
@@ -31,6 +32,7 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.operatornames.*;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.utils.StepSizes;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -58,7 +60,6 @@ public class SlaveTask implements Task {
   private final Broadcast.Receiver<Vector> descentDirectionBroadcaster;
   private final Reduce.Sender<Pair<Vector, Integer>> lineSearchEvaluationsReducer;
   private final Broadcast.Receiver<Double> minEtaBroadcaster;
-  private final GroupCommClient groupCommClient;
   private final List<Example> examples = new ArrayList<>();
   private final DataSet<LongWritable, Text> dataSet;
   private final Parser<String> parser;
@@ -75,7 +76,6 @@ public class SlaveTask implements Task {
       final Parser<String> parser,
       final LossFunction lossFunction,
       final StepSizes ts) {
-    this.groupCommClient = groupCommClient;
     this.dataSet = dataSet;
     this.parser = parser;
     this.lossFunction = lossFunction;
@@ -101,17 +101,13 @@ public class SlaveTask implements Task {
           break;
 
         case ComputeGradientWithModel:
-          if (Math.random() < FAILURE_PROB) {
-            throw new RuntimeException("Simulated Failure");
-          }
+          failPerhaps();
           this.model = modelBroadcaster.receive();
           lossAndGradientReducer.send(computeLossAndGradient());
           break;
 
         case ComputeGradientWithMinEta:
-          if (Math.random() < FAILURE_PROB) {
-            throw new RuntimeException("Simulated Failure");
-          }
+          failPerhaps();
           final double minEta = minEtaBroadcaster.receive();
           assert (descentDirection != null);
           this.descentDirection.scale(minEta);
@@ -121,17 +117,13 @@ public class SlaveTask implements Task {
           break;
 
         case DoLineSearch:
-          if (Math.random() < FAILURE_PROB) {
-            throw new RuntimeException("Simulated Failure");
-          }
+          failPerhaps();
           this.descentDirection = descentDirectionBroadcaster.receive();
           lineSearchEvaluationsReducer.send(lineSearchEvals());
           break;
 
         case DoLineSearchWithModel:
-          if (Math.random() < FAILURE_PROB) {
-            throw new RuntimeException("Simulated Failure");
-          }
+          failPerhaps();
           final Pair<Vector, Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
           this.model = modelAndDescentDir.first;
           this.descentDirection = modelAndDescentDir.second;
@@ -143,6 +135,12 @@ public class SlaveTask implements Task {
       }
     }
     return null;
+  }
+
+  private void failPerhaps() {
+    if (Math.random() < FAILURE_PROB) {
+      throw new RuntimeException("Simulated Failure");
+    }
   }
 
   /**

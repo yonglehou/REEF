@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd;
+package com.microsoft.reef.examples.nggroup.bgd.full;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,6 +33,9 @@ import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
+import com.microsoft.reef.examples.nggroup.bgd.BGDControlParameters;
+import com.microsoft.reef.examples.nggroup.bgd.LineSearchReduceFunction;
+import com.microsoft.reef.examples.nggroup.bgd.LossAndGradientReduceFunction;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.SVMLightParser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
@@ -50,6 +53,7 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
+import com.microsoft.reef.examples.nggroup.bgd.utils.SubConfiguration;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -231,6 +235,11 @@ public class BGDDriver {
   final class ContextActiveHandler implements EventHandler<ActiveContext> {
 
 
+    /**
+     *
+     */
+    private static final double STARTUP_FAILURE_PROB = 0.01;
+
     @Override
     public void onNext(final ActiveContext activeContext) {
       LOG.info("Got active context-" + activeContext.getId());
@@ -292,8 +301,8 @@ public class BGDDriver {
 
     private Configuration getTaskPoisonConfiguration() {
       return PoisonedConfiguration.TASK_CONF
-          .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.01")
-          .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
+          .set(PoisonedConfiguration.CRASH_PROBABILITY, STARTUP_FAILURE_PROB)
+          .set(PoisonedConfiguration.CRASH_TIMEOUT, 1)
           .build();
     }
 
