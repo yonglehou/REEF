@@ -116,6 +116,7 @@ public class BGDClient {
     commandLine.registerShortNameOfClass(InputDir.class);
     commandLine.registerShortNameOfClass(Timeout.class);
     commandLine.registerShortNameOfClass(EvaluatorMemory.class);
+    commandLine.registerShortNameOfClass(NumSplits.class);
     BGDControlParameters.registerShortNames(commandLine);
     commandLine.processCommandLine(args);
     return Tang.Factory.getTang().newInjector(configurationBuilder.build()).getInstance(BGDClient.class);
