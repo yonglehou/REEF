@@ -30,7 +30,7 @@ public class BGDLocal {
     final Configuration runtimeConfiguration = LocalRuntimeConfiguration.CONF
         .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, NUM_LOCAL_THREADS)
         .build();
-    final LauncherStatus result = bgdClient.run(runtimeConfiguration, "BGDLocal");
+    final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDLocal");
     System.out.println("Result: " + result.toString());
   }
 }

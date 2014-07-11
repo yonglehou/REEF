@@ -106,22 +106,4 @@ public class TestVector {
     }
   }
 
-  public static class Timer implements AutoCloseable {
-
-    private final String description;
-    private final long t1;
-
-    public Timer(final String description) {
-      this.description = description;
-      t1 = System.currentTimeMillis();
-    }
-
-    @Override
-    public void close() {
-      final long t2 = System.currentTimeMillis();
-      System.out.println(description + " took " + (t2 - t1) / 1000.0 + " sec");
-    }
-
-  }
-
 }

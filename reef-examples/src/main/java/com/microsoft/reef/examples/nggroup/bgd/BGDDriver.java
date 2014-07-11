@@ -15,6 +15,17 @@
  */
 package com.microsoft.reef.examples.nggroup.bgd;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.inject.Inject;
+
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.task.CompletedTask;
@@ -25,10 +36,20 @@ import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.SVMLightParser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
-import com.microsoft.reef.examples.nggroup.bgd.loss.WeightedLogisticLossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.*;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.ControlMessageBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.DescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.LineSearchEvaluationsReducer;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.LossAndGradientReducer;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.MinEtaBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelAndDescentDirectionBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelBroadcaster;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.EnableRampup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -39,26 +60,14 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.poison.PoisonedConfiguration;
-import com.microsoft.reef.runtime.common.driver.DriverStatusManager;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Configurations;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
-import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.annotations.Unit;
 import com.microsoft.tang.exceptions.InjectionException;
 import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EventHandler;
-
-import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *
@@ -68,9 +77,6 @@ import java.util.logging.Logger;
 public class BGDDriver {
   private static final Logger LOG = Logger.getLogger(BGDDriver.class.getName());
 
-  /**
-   *
-   */
   private static final Tang TANG = Tang.Factory.getTang();
 
   private final DataLoadingService dataLoadingService;
@@ -87,21 +93,13 @@ public class BGDDriver {
 
   private final ConfigurationSerializer confSerializer;
 
-  private final int dimensions;
-
-  private final double lambda;
-
   private final Map<String, RunningTask> runningTasks = new HashMap<>();
 
   private final AtomicBoolean jobComplete = new AtomicBoolean(false);
 
   private final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
 
-  private final double eps;
-
-  private final int iters;
-
-  private final boolean rampup;
+  private final BGDControlParameters bgdControlParameters;
 
 
   @Inject
@@ -109,22 +107,16 @@ public class BGDDriver {
       final DataLoadingService dataLoadingService,
       final GroupCommDriver groupCommDriver,
       final ConfigurationSerializer confSerializer,
-      @Parameter(ModelDimensions.class) final int dimensions,
-      @Parameter(Lambda.class) final double lambda,
-      @Parameter(Eps.class) final double eps,
-      @Parameter(Iterations.class) final int iters,
-      @Parameter(EnableRampup.class) final boolean rampup,
-      @Parameter(MinParts.class) final int minParts) {
+      final BGDControlParameters bgdControlParameters) {
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
-    this.dimensions = dimensions;
-    this.lambda = lambda;
-    this.eps = eps;
-    this.iters = iters;
-    this.rampup = rampup;
+    this.bgdControlParameters = bgdControlParameters;
 
-    final int minNumOfPartitions = rampup ? minParts : dataLoadingService.getNumberOfPartitions();
+    final int minNumOfPartitions =
+            bgdControlParameters.isRampup()
+            ? bgdControlParameters.getMinParts()
+            : dataLoadingService.getNumberOfPartitions();
     this.allCommGroup = this.groupCommDriver.newCommunicationGroup(
         AllCommunicationGroup.class,
         minNumOfPartitions + 1);
@@ -258,18 +250,15 @@ public class BGDDriver {
        */
       if (groupCommDriver.configured(activeContext)) {
         if (activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()) {
-          final Configuration partialTaskConf = TANG
-              .newConfigurationBuilder(
+          final Configuration partialTaskConf = Configurations.merge(
                   TaskConfiguration.CONF
-                      .set(TaskConfiguration.IDENTIFIER, "MasterTask")
-                      .set(TaskConfiguration.TASK, MasterTask.class)
-                      .build())
-              .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
-              .bindNamedParameter(Lambda.class, Double.toString(lambda))
-              .bindNamedParameter(Eps.class, Double.toString(eps))
-              .bindNamedParameter(Iterations.class, Integer.toString(iters))
-              .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
-              .build();
+                  .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+                  .set(TaskConfiguration.TASK, MasterTask.class)
+                  .build(),
+                  SubConfiguration.from(
+                          bgdControlParameters.getConfiguration(),
+                          ModelDimensions.class, Lambda.class,
+                          Eps.class, Iterations.class, EnableRampup.class));
 
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
@@ -308,15 +297,6 @@ public class BGDDriver {
           .build();
     }
 
-    private Configuration getContextPoisonConfiguration() {
-      return PoisonedConfiguration.CONTEXT_CONF
-          .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.3")
-          .set(PoisonedConfiguration.CRASH_TIMEOUT, "5")
-          .build();
-    }
-
-
-
     /**
      * @param contextConf
      * @return
@@ -353,9 +333,9 @@ public class BGDDriver {
                 .set(TaskConfiguration.IDENTIFIER, taskId)
                 .set(TaskConfiguration.TASK, SlaveTask.class)
                 .build())
-        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
+        .bindNamedParameter(ModelDimensions.class, Integer.toString(bgdControlParameters.getDimensions()))
         .bindImplementation(Parser.class, SVMLightParser.class)
-        .bindImplementation(LossFunction.class, WeightedLogisticLossFunction.class)
+        .bindImplementation(LossFunction.class, bgdControlParameters.getLossFunction())
         .build();
   }
 

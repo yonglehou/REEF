@@ -27,7 +27,7 @@ public class BGDHDI {
   public static void main(final String[] args) throws Exception {
     final BGDClient bgdClient = BGDClient.fromCommandLine(args);
     final Configuration runtimeConfiguration = UnsafeHDInsightRuntimeConfiguration.fromEnvironment();
-    final LauncherStatus result = bgdClient.run(runtimeConfiguration, "BGDHDI");
+    final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDHDI");
     System.out.println("Result: " + result.toString());
   }
 }

@@ -24,12 +24,11 @@ import com.microsoft.reef.io.data.loading.api.DataLoadingRequestBuilder;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.util.EnvironmentUtils;
 import com.microsoft.tang.Configuration;
+import com.microsoft.tang.Configurations;
 import com.microsoft.tang.JavaConfigurationBuilder;
 import com.microsoft.tang.Tang;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.tang.formats.CommandLine;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextInputFormat;
 
 import javax.inject.Inject;
@@ -39,34 +38,20 @@ import javax.inject.Inject;
  */
 public class BGDClient {
   private final String input;
-  private final int dimensions;
-  private final double lambda;
-  private final double eps;
-  private final int iters;
   private final int numSplits;
   private final int memory;
-  private final boolean rampup;
-  private final int minParts;
+
+  private final BGDControlParameters bgdControlParameters;
 
   @Inject
   public BGDClient(final @Parameter(InputDir.class) String input,
-                   final @Parameter(ModelDimensions.class) int dimensions,
-                   final @Parameter(Lambda.class) double lambda,
-                   final @Parameter(Eps.class) double eps,
-                   final @Parameter(Iterations.class) int iters,
                    final @Parameter(NumSplits.class) int numSplits,
                    final @Parameter(EvaluatorMemory.class) int memory,
-                   final @Parameter(EnableRampup.class) boolean rampup,
-                   final @Parameter(MinParts.class) int minParts) {
+                   final BGDControlParameters bgdControlParameters) {
     this.input = input;
-    this.dimensions = dimensions;
-    this.lambda = lambda;
-    this.eps = eps;
-    this.iters = iters;
+    this.bgdControlParameters = bgdControlParameters;
     this.numSplits = numSplits;
     this.memory = memory;
-    this.rampup = rampup;
-    this.minParts = minParts;
   }
 
   /**
@@ -97,9 +82,13 @@ public class BGDClient {
   }
 
   private final Configuration getDriverConfiguration(final String jobName) {
-    final JobConf jobConf = new JobConf();
-    jobConf.setInputFormat(TextInputFormat.class);
-    TextInputFormat.addInputPath(jobConf, new Path(input));
+    return Configurations.merge(
+              getDataLoadConfiguration(jobName),
+              GroupCommService.getConfiguration(),
+              bgdControlParameters.getConfiguration());
+  }
+
+  private Configuration getDataLoadConfiguration(final String jobName) {
     final EvaluatorRequest computeRequest = EvaluatorRequest.newBuilder()
         .setNumber(1)
         .setMemory(memory)
@@ -118,34 +107,16 @@ public class BGDClient {
             .set(DriverConfiguration.ON_TASK_COMPLETED, BGDDriver.TaskCompletedHandler.class)
             .set(DriverConfiguration.DRIVER_IDENTIFIER, jobName))
         .build();
-
-    final Configuration groupCommServConfiguration = GroupCommService.getConfiguration();
-
-    final Configuration mergedDriverConfiguration = Tang.Factory.getTang()
-        .newConfigurationBuilder(groupCommServConfiguration, dataLoadConfiguration)
-        .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
-        .bindNamedParameter(Lambda.class, Double.toString(lambda))
-        .bindNamedParameter(Eps.class, Double.toString(eps))
-        .bindNamedParameter(Iterations.class, Integer.toString(iters))
-        .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
-        .bindNamedParameter(MinParts.class, Integer.toString(minParts))
-        .build();
-    return mergedDriverConfiguration;
+    return dataLoadConfiguration;
   }
 
   public static final BGDClient fromCommandLine(final String[] args) throws Exception {
     final JavaConfigurationBuilder configurationBuilder = Tang.Factory.getTang().newConfigurationBuilder();
     final CommandLine commandLine = new CommandLine(configurationBuilder);
     commandLine.registerShortNameOfClass(InputDir.class);
-    commandLine.registerShortNameOfClass(ModelDimensions.class);
-    commandLine.registerShortNameOfClass(Lambda.class);
-    commandLine.registerShortNameOfClass(Eps.class);
-    commandLine.registerShortNameOfClass(Iterations.class);
-    commandLine.registerShortNameOfClass(NumSplits.class);
     commandLine.registerShortNameOfClass(Timeout.class);
     commandLine.registerShortNameOfClass(EvaluatorMemory.class);
-    commandLine.registerShortNameOfClass(EnableRampup.class);
-    commandLine.registerShortNameOfClass(MinParts.class);
+    BGDControlParameters.registerShortNames(commandLine);
     commandLine.processCommandLine(args);
     return Tang.Factory.getTang().newInjector(configurationBuilder.build()).getInstance(BGDClient.class);
   }

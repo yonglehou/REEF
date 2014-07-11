@@ -27,7 +27,7 @@ public class BGDYarn {
   public static void main(final String[] args) throws Exception {
     final BGDClient bgdClient = BGDClient.fromCommandLine(args);
     final Configuration runtimeConfiguration = YarnClientConfiguration.CONF.build();
-    final LauncherStatus result = bgdClient.run(runtimeConfiguration, "BGDYarn");
+    final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDYarn");
     System.out.println("Result: " + result.toString());
   }
 }
