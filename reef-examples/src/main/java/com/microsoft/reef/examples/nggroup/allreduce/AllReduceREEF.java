@@ -23,7 +23,7 @@ import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.client.DriverConfiguration;
 import com.microsoft.reef.client.DriverLauncher;
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.impl.GroupCommService;
 import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
@@ -76,7 +76,7 @@ public class AllReduceREEF {
     try {
       final CommandLine cl = new CommandLine(cb);
       cl.registerShortNameOfClass(Local.class);
-      cl.registerShortNameOfClass(Dimensions.class);
+      cl.registerShortNameOfClass(ModelDimensions.class);
       cl.registerShortNameOfClass(NumberOfReceivers.class);
       cl.processCommandLine(aArgs);
     } catch (final BindException | IOException ex) {
@@ -96,7 +96,7 @@ public class AllReduceREEF {
     final Injector injector = Tang.Factory.getTang().newInjector(
       commandLineConf);
     local = injector.getNamedInstance(Local.class);
-    dimensions = injector.getNamedInstance(Dimensions.class);
+    dimensions = injector.getNamedInstance(ModelDimensions.class);
     numberOfReceivers = injector.getNamedInstance(NumberOfReceivers.class);
   }
 
@@ -149,7 +149,7 @@ public class AllReduceREEF {
     final Configuration mergedDriverConfiguration = Tang.Factory
       .getTang()
       .newConfigurationBuilder(groupCommServConfiguration, driverConfiguration)
-      .bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
+      .bindNamedParameter(ModelDimensions.class, Integer.toString(dimensions))
       .bindNamedParameter(NumberOfReceivers.class,
         Integer.toString(numberOfReceivers)).build();
 

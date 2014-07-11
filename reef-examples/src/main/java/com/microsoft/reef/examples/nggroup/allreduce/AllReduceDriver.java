@@ -34,7 +34,7 @@ import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -79,7 +79,7 @@ public class AllReduceDriver {
   public AllReduceDriver(final EvaluatorRequestor requestor,
     final GroupCommDriver groupCommDriver,
     final ConfigurationSerializer confSerializer,
-    @Parameter(Dimensions.class) final int dimensions,
+    @Parameter(ModelDimensions.class) final int dimensions,
     @Parameter(NumberOfReceivers.class) final int numberOfReceivers) {
     this.requestor = requestor;
     this.groupCommDriver = groupCommDriver;
@@ -88,9 +88,11 @@ public class AllReduceDriver {
     this.numberOfReceivers = numberOfReceivers;
     this.numberOfAllocatedEvaluators = new AtomicInteger(numberOfReceivers + 1);
 
+    int numTotalTasks = (numberOfReceivers + 1) / 2 + 1;
+    // int numTotalTasks = numberOfReceivers + 1;
     this.allCommGroup =
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
-        numberOfReceivers + 1);
+        numTotalTasks);
     LOG.info("Obtained all communication group");
 
     final Codec<Vector> modelCodec = new SerializableCodec<>();
@@ -157,14 +159,15 @@ public class AllReduceDriver {
             TaskConfiguration.CONF
               .set(TaskConfiguration.IDENTIFIER, failedTask.getId())
               .set(TaskConfiguration.TASK, SlaveTask.class).build()
-          // ,PoisonedConfiguration.TASK_CONF
+          // ,
+          // PoisonedConfiguration.TASK_CONF
           // .set(PoisonedConfiguration.CRASH_PROBABILITY, "0")
-          // .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-          // .build()
-          ).bindNamedParameter(Dimensions.class, Integer.toString(dimensions))
-          .build();
+          // .set(PoisonedConfiguration.CRASH_TIMEOUT, "1").build()
+          )
+          .bindNamedParameter(ModelDimensions.class,
+            Integer.toString(dimensions)).build();
       // Do not add the task back
-      allCommGroup.addTask(partialTaskConf);
+      // allCommGroup.addTask(partialTaskConf);
       final Configuration taskConf =
         groupCommDriver.getTaskConfiguration(partialTaskConf);
       LOG.info("Submitting SlaveTask conf");
@@ -195,7 +198,7 @@ public class AllReduceDriver {
                 TaskConfiguration.CONF
                   .set(TaskConfiguration.IDENTIFIER, "MasterTask")
                   .set(TaskConfiguration.TASK, MasterTask.class).build())
-              .bindNamedParameter(Dimensions.class,
+              .bindNamedParameter(ModelDimensions.class,
                 Integer.toString(dimensions)).build();
 
           allCommGroup.addTask(partialTaskConf);
@@ -212,12 +215,12 @@ public class AllReduceDriver {
                 TaskConfiguration.CONF
                   .set(TaskConfiguration.IDENTIFIER, getSlaveId(activeContext))
                   .set(TaskConfiguration.TASK, SlaveTask.class).build()
-              // ,PoisonedConfiguration.TASK_CONF
+              // ,
+              // PoisonedConfiguration.TASK_CONF
               // .set(PoisonedConfiguration.CRASH_PROBABILITY, "0.4")
-              // .set(PoisonedConfiguration.CRASH_TIMEOUT, "1")
-              // .build()
+              // .set(PoisonedConfiguration.CRASH_TIMEOUT, "1").build()
               )
-              .bindNamedParameter(Dimensions.class,
+              .bindNamedParameter(ModelDimensions.class,
                 Integer.toString(dimensions)).build();
           allCommGroup.addTask(partialTaskConf);
           final Configuration taskConf =

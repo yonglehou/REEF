@@ -114,7 +114,7 @@ public class HyperCubeTopology implements Topology {
   private final AtomicBoolean isInitialized = new AtomicBoolean(false);
   /** The total number of tasks initialized */
   private final int minInitialTasks;
-  private final AtomicInteger numRunningInitialTasks = new AtomicInteger(0);
+  private final AtomicInteger numRunningTasks = new AtomicInteger(0);
   /** Iteration is used to track the iteration number of allreduce operation */
   private final AtomicInteger iteration = new AtomicInteger(0);
 
@@ -136,8 +136,8 @@ public class HyperCubeTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverID = driverID;
-    this.minInitialTasks = numberOfTasks / 2 + 1;
-    // this.minInitialTasks = numberOfTasks;
+    // this.minInitialTasks = numberOfTasks / 2 + 1;
+    this.minInitialTasks = numberOfTasks;
   }
 
   @Override
@@ -606,10 +606,10 @@ public class HyperCubeTopology implements Topology {
     // Invoked by TopologyRunningTaskHandler when task is running
     System.out.println(taskID + " is running.");
     // We add the number of running tasks.
-    this.numRunningInitialTasks.incrementAndGet();
+    this.numRunningTasks.incrementAndGet();
     if (!isInitialized.get()) {
       newTask(activeTopo, taskID);
-      if (this.numRunningInitialTasks.get() == this.minInitialTasks) {
+      if (this.numRunningTasks.get() == this.minInitialTasks) {
         initializeTopology(activeTopo, taskVersionMap);
         isInitialized.set(true);
         System.out.println("Hypercube topology is initialized!");
@@ -918,7 +918,7 @@ public class HyperCubeTopology implements Topology {
     // Invoked by TopologyFailedTaskHandler when task is failed
     System.out.println(taskID + " fails.");
     // We decrease the number of running tasks.
-    numRunningInitialTasks.decrementAndGet();
+    numRunningTasks.decrementAndGet();
     if (!isInitialized.get()) {
       deleteTask(activeTopo, taskID);
     } else {
@@ -1025,9 +1025,11 @@ public class HyperCubeTopology implements Topology {
   private void processNeighborUpdate() {
     // Check if all the task reports include all the failed neighbors
     System.out.println("Process neighbor update.");
-    if (this.numRunningInitialTasks.get() < this.minInitialTasks) {
+    if (this.numRunningTasks.get() < this.minInitialTasks) {
       // We don't process the neighbor update if we haven't got the
       // minimum number of running tasks.
+      // Because the driver stop processing the message when the number of tasks
+      // is less than the number of intial tasks, no message can arrive here.
       System.out.println("The current number of tasks is lower than"
         + " the number of running tasks required.");
       return;

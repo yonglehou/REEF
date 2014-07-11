@@ -24,7 +24,7 @@ import javax.inject.Inject;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Dimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
@@ -44,7 +44,7 @@ public class SlaveTask implements Task {
 
   @Inject
   public SlaveTask(final GroupCommClient groupCommClient,
-    @Parameter(Dimensions.class) final int dimensions) {
+    @Parameter(ModelDimensions.class) final int dimensions) {
     this.communicationGroupClient =
       groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     this.modelAllReducer =
