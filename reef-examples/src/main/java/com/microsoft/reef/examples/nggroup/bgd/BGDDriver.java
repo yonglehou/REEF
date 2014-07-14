@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd.full;
+package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,9 +33,6 @@ import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
-import com.microsoft.reef.examples.nggroup.bgd.BGDControlParameters;
-import com.microsoft.reef.examples.nggroup.bgd.LineSearchReduceFunction;
-import com.microsoft.reef.examples.nggroup.bgd.LossAndGradientReduceFunction;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.SVMLightParser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
@@ -48,6 +45,7 @@ import com.microsoft.reef.examples.nggroup.bgd.operatornames.MinEtaBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelAndDescentDirectionBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.BGDControlParameters;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.EnableRampup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Eps;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;

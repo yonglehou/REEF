@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd.full;
+package com.microsoft.reef.examples.nggroup.bgd;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,6 @@ import javax.inject.Inject;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 
-import com.microsoft.reef.examples.nggroup.bgd.ControlMessages;
 import com.microsoft.reef.examples.nggroup.bgd.data.Example;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;

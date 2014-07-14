@@ -21,7 +21,7 @@ import com.microsoft.tang.annotations.NamedParameter;
 /**
  *
  */
-@NamedParameter(doc="Type of BGDClient to be used: SimpleBGD|SimpleBGDLS|FullBGD", short_name="bgdtype", default_value="FullBGD")
-public class BGDType implements Name<String> {
+@NamedParameter(doc="Loss Function to be used: logLoss|weightedLogLoss|squaredError", short_name="loss", default_value="logLoss")
+public class LossFunctionType implements Name<String> {
 
 }

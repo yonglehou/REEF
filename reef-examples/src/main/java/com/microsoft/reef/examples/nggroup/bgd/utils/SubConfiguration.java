@@ -19,7 +19,7 @@ import org.mortbay.log.Log;
 
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
-import com.microsoft.reef.examples.nggroup.bgd.full.MasterTask;
+import com.microsoft.reef.examples.nggroup.bgd.MasterTask;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.JavaConfigurationBuilder;

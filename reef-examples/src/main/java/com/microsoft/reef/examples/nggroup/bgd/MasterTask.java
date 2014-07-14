@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgd.full;
+package com.microsoft.reef.examples.nggroup.bgd;
 
-import com.microsoft.reef.examples.nggroup.bgd.ControlMessages;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.operatornames.*;
