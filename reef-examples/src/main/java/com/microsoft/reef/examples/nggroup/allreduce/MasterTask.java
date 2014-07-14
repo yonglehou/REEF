@@ -59,7 +59,7 @@ public class MasterTask implements Task {
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1, 0 });
     Vector newModel = null;
-    final int numIters = 10;
+    final int numIters = 20;
     final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");

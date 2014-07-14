@@ -28,8 +28,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -57,11 +59,6 @@ import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.Identifier;
 
-/**
- * AllReducer, which sends/ receives data with a list of neighbor nodes in the
- * hyper cube topology.
- * 
- */
 public class AllReducer<T> implements AllReduce<T>,
   EventHandler<GroupCommMessage> {
 
@@ -81,10 +78,7 @@ public class AllReducer<T> implements AllReduce<T>,
   private final String driverID;
   private final int version;
 
-
   private final HyperCubeTopoClient topoClient;
-  private final AtomicBoolean isInitialized = new AtomicBoolean(false);
-  private final AtomicInteger iteration;
 
   // Data map for allreduce
   private final ConcurrentMap<Integer, ConcurrentMap<String, GroupCommMessage>> dataMap =
@@ -92,17 +86,28 @@ public class AllReducer<T> implements AllReduce<T>,
   // Data map for reduce scatter + allgather
   private final ConcurrentMap<Integer, ConcurrentMap<String, ConcurrentMap<Integer, GroupCommMessage>>> rsagDataMap =
     new ConcurrentHashMap<>();
+  // Message queue
   private final BlockingQueue<GroupCommMessage> dataQueue =
     new LinkedBlockingQueue<>();
+
   // Topology structure of this node
   private HyperCubeNode node;
-
   private Map<Integer, String> nodeTaskMap;
   private Map<String, Integer> taskVersionMap;
-  
+
+  // Flow control
+  private final AtomicBoolean isTopoInitialized = new AtomicBoolean(false);
+  private final AtomicInteger iteration;
+  private final AtomicBoolean isApplyRunning = new AtomicBoolean(false);
+  private final AtomicBoolean isApplyWaiting = new AtomicBoolean(false);
+  private final AtomicBoolean isTopoUpdating = new AtomicBoolean(false);
+  private final CyclicBarrier topoBarrier = new CyclicBarrier(2);
+  private final Object runningLock = new Object();
+
   // Failure control
   private final AtomicBoolean isLastIteFailed = new AtomicBoolean(false);
   private int numFailedIterations = 0;
+  private final AtomicBoolean isLastFailureKnown = new AtomicBoolean(false);
 
   @Inject
   public AllReducer(
@@ -138,6 +143,7 @@ public class AllReducer<T> implements AllReduce<T>,
     selfID = selfId;
     driverID = driverId;
     LOG.info(operName + " injection ends.");
+    System.out.println("AllReducer is initialized.");
   }
 
   @Override
@@ -153,14 +159,8 @@ public class AllReducer<T> implements AllReduce<T>,
   public void initialize() {
     // Due to the control on CommunicationGroupClientImpl initialization
     // This code won't be invoked repeatedly.
-    System.out.println("Initialize AllReducer.");
-    topoClient.waitForNewNodeTopology();
-    NodeTopology nodeTopo = topoClient.getNewestNodeTopology();
-    // This should not be null
-    node = nodeTopo.node;
-    nodeTaskMap = nodeTopo.nodeTaskMap;
-    taskVersionMap = nodeTopo.taskVersionMap;
-    iteration.set(nodeTopo.newIteration);
+    // This code may be invoked in the first allreduce apply call or
+    // invoked by other operators in initialization.
   }
 
   @Override
@@ -178,26 +178,169 @@ public class AllReducer<T> implements AllReduce<T>,
     // This method can be invoked simultaneously with apply method
     // If the msg type is TopologyChange or TopologyUpdated
     // they cannot arrive here.
-    // printMsgInfo(msg);
+    printMsgInfo(msg, "onNext.");
     if (msg.getVersion() != version) {
-      printMsgInfo(msg);
       return;
     }
-    if (msg.getType() == Type.AllReduce) {
-      // Messages are put in the queue
-      // and wait to be processed in "apply"
-      dataQueue.add(msg);
-    } else {
-      // Only driver sends these messages
-      if (msg.getType() == Type.SourceDead) {
-        dataQueue.add(msg);
-      } else if (msg.getType() == Type.SourceAdd) {
-        dataQueue.add(msg);
+    // Use runningLock to sync with startApplying
+    // and stopApplying. If apply is running, this will
+    // put messages to the queue. If apply is stopped, this will process
+    // messages by itself.
+    synchronized (runningLock) {
+      if (isApplyRunning.get()) {
+        printMsgInfo(msg, "Send msg to the queue.");
+        if (msg.getType() == Type.AllReduce) {
+          // Messages are put in the queue
+          // and wait to be processed in "apply"
+          dataQueue.add(msg);
+        } else if (msg.getType() == Type.SourceDead) {
+          dataQueue.add(msg);
+        } else if (msg.getType() == Type.SourceAdd) {
+          dataQueue.add(msg);
+        } else {
+          // Topology related messages are processed by topoClient
+          topoClient.handle(msg);
+        }
       } else {
-        // Topology related messages are processed by topoClient
-        topoClient.handle(msg);
+        processMsgInIdle(msg);
       }
     }
+  }
+
+  private void processMsgInIdle(GroupCommMessage msg) {
+    // Process the messages when no "applying" happens
+    // Sync through runningLock
+    if (msg.getVersion() != version) {
+      // When this message is processed, check the version again.
+      printMsgInfo(msg, "Wrong version found when processing in idle.");
+      return;
+    }
+    if (msg.getType() == Type.TopologySetup
+      || msg.getType() == Type.UpdateTopology) {
+      processOneMsgInIdle(msg);
+      while (!dataQueue.isEmpty()) {
+        try {
+          boolean goOn = processOneMsgInIdle(dataQueue.take());
+          if (!goOn) {
+            break;
+          }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+      // Unblock apply if it is blocked by topology initialization or updating.
+      if (isApplyWaiting.get()) {
+        try {
+          topoBarrier.await();
+        } catch (InterruptedException | BrokenBarrierException e) {
+          e.printStackTrace();
+        }
+      }
+    } else {
+      // Process other type of messages.
+      processOneMsgInIdle(msg);
+    }
+  }
+
+  private boolean processOneMsgInIdle(GroupCommMessage msg) {
+    if (msg.getVersion() != version) {
+      // When this message is processed, check the version again.
+      printMsgInfo(msg,
+        "Wrong version found when processing one message in idle.");
+      // Continue to next message
+      return true;
+    }
+    if (msg.getType() == Type.AllReduce) {
+      if (!this.isTopoInitialized.get() || isTopoUpdating.get()) {
+        printMsgInfo(msg, "Put the msg in idle to the data queue.");
+        dataQueue.add(msg);
+        return false;
+      } else {  
+        // No "applying" is working, put to the map
+        int[] iteComm = getIterationAndCommType(msg);
+        int msgIteration = iteComm[0];
+        int msgCommType = iteComm[1];
+        printMsgInfo(msg, "Add msg to the map in idle, iteration: "
+          + msgIteration + ", commType: " + msgCommType);
+        addMsgToMap(msg, msgIteration, msgCommType);
+      }
+    } else if (msg.getType() == Type.SourceDead
+      || msg.getType() == Type.SourceAdd) {
+      if (!this.isTopoInitialized.get() || isTopoUpdating.get()
+        || isApplyWaiting.get()) {
+        printMsgInfo(msg, "Put the msg in idle to the data queue.");
+        dataQueue.add(msg);
+        return false;
+      } else {
+        printMsgInfo(msg, "Process one msg in idle.");
+        // the iteration is updated in at the end of "applying"
+        // at this moment, we consider we are in a new iteration.
+        // Ask driver for a new topology,
+        sendMsg(msg.getType(), selfID, version, driverID, version,
+          putIterationToBytes(iteration.get()));
+        isTopoUpdating.set(true);
+        return false;
+      }
+    } else if (msg.getType() == Type.TopologySetup) {
+      printMsgInfo(msg, "Process one msg in idle.");
+      // Initialize if is never initialized.
+      if (isTopoInitialized.compareAndSet(false, true)) {
+        topoClient.handle(msg);
+        initializeNodeTopology();
+      }
+    } else if (msg.getType() == Type.UpdateTopology) {
+      printMsgInfo(msg, "Process one msg in idle.");
+      // This message won't be generated unless Source add/dead
+      // are processed. Once this message is received, process immediately.
+      int ite = iteration.get();
+      getNewNodeTopologyInIdle(msg, topoClient, ite);
+      // Check if there is failure in the current topology
+      boolean isFailed = topoClient.getNewestNodeTopology().isFailed;
+      // If it is not failed, go to next iteration as what originally planned.
+      if (isFailed) {
+        int baseIteration = topoClient.getNewestNodeTopology().baseIteration;
+        int newIteration = topoClient.getNewestNodeTopology().newIteration;
+        if (!isLastIteFailed.get()) {
+          // If the last iteration is not failed
+          // Check if the base iteration is less than the current iteration,
+          // remember that if the base iteration is the current one, which means
+          // the last iteration was successful, never update lastIteFailed and
+          // numFailedIterations.
+          if (baseIteration < ite) {
+            isLastIteFailed.set(true);
+            isLastFailureKnown.set(false);
+            numFailedIterations = ite - baseIteration;
+          }
+        }
+        // Remove the data.
+        removeOldMsgInMap(newIteration - 1);
+        iteration.set(newIteration);
+      }
+      isTopoUpdating.set(false);
+    }
+    return true;
+  }
+
+  private void initializeNodeTopology() {
+    System.out.println("Initialize topology.");
+    topoClient.waitForNewNodeTopology();
+    NodeTopology nodeTopo = topoClient.getNewestNodeTopology();
+    // This should not be null
+    node = nodeTopo.node;
+    nodeTaskMap = nodeTopo.nodeTaskMap;
+    taskVersionMap = nodeTopo.taskVersionMap;
+    iteration.set(nodeTopo.newIteration);
+  }
+
+  private void getNewNodeTopologyInIdle(GroupCommMessage msg,
+    HyperCubeTopoClient topoClient, int currentIteration) {
+    topoClient.processNodeTopologyMsg(msg);
+    System.out.println("The current iteration (in idle): " + currentIteration
+      + ", the base iteration of topology got from the driver: "
+      + topoClient.getNewestNodeTopology().baseIteration
+      + ", the new iteration of topology got from the driver: "
+      + topoClient.getNewestNodeTopology().newIteration + ", is failed? "
+      + topoClient.getNewestNodeTopology().isFailed);
   }
 
   @Override
@@ -206,14 +349,16 @@ public class AllReducer<T> implements AllReduce<T>,
   }
 
   @Override
-  public T apply(T aElement) throws InterruptedException, NetworkException {
-    if (isInitialized.compareAndSet(false, true)) {
-      // This goes to the topology client initialization
-      // commGroupClient.initialize();
-      // Because the call above just loop through all the operators and
-      // initialize each of them
-      // Here we just initialize this operator only
-      initialize();
+  public synchronized T apply(T aElement) throws InterruptedException,
+    NetworkException {
+    startApplying();
+    if (isLastIteFailed.get() && !isLastFailureKnown.get()) {
+      // If the user didn't notice there was a failure in the last iteration,
+      // exit.
+      System.out.println("Last failure is not known by user.");
+      finishApplying();
+      numFailedIterations++;
+      return null;
     }
     int ite = iteration.get();
     System.out.println("Current iteration: " + ite);
@@ -276,28 +421,75 @@ public class AllReducer<T> implements AllReduce<T>,
     if (isFailed) {
       reducedValue = null;
       isLastIteFailed.set(true);
+      isLastFailureKnown.set(false);
       int baseIteration = topoClient.getNewestNodeTopology().baseIteration;
       int newIteration = topoClient.getNewestNodeTopology().newIteration;
       numFailedIterations = ite - baseIteration + 1;
-      // Remove received byte data between this iteration and the new iteration
-      // Because in failure state, every task is stopped and updated with new
-      // topology, tasks no longer send messages of failed iterations.
-      StringBuffer sb = new StringBuffer();
-      for (int i = ite; i < newIteration; i++) {
-        sb.append(i + " ");
-        dataMap.remove(i);
-      }
-      System.out.println("Remove data from iteration " + sb);
+      removeOldMsgInMap(newIteration - 1);
       // If failure happens, move to the new iteration assigned by the driver
       iteration.set(newIteration);
     } else {
       isLastIteFailed.set(false);
       numFailedIterations = 0;
-      dataMap.remove(ite);
-      System.out.println("Remove data from iteration " + ite);
+      removeOldMsgInMap(ite);
       iteration.incrementAndGet();
     }
+    finishApplying();
     return reducedValue;
+  }
+
+  private void startApplying() {
+    // Block message processing in onNext
+    boolean isUpdating = false;
+    boolean isInitialized = false;
+    System.out.println("Apply start stage 1");
+    synchronized (runningLock) {
+      isApplyWaiting.set(true);
+      isUpdating = isTopoUpdating.get();
+      isInitialized = isTopoInitialized.get();
+    }
+    System.out.println("Apply start stage 2");
+    // Allow message processing in onNext
+    // If onNext see apply is waiting,
+    // it stops processing source add/dead
+    // and add to the queue.
+    // If it is initializing/updating topology
+    // wait until topology updating is finished.
+    if (!isInitialized || isUpdating) {
+      System.out.println("Apply start waiting...");
+      try {
+        topoBarrier.await();
+      } catch (InterruptedException | BrokenBarrierException e) {
+        e.printStackTrace();
+      }
+    }
+    // Block applying
+    // If onNext is updating, let it finish first
+    System.out.println("Apply start stage 3");
+    synchronized (runningLock) {
+      isApplyRunning.set(true);
+      isApplyWaiting.set(false);
+    }
+    System.out.println("Apply start stage 4");
+   
+  }
+
+  private void finishApplying() {
+    System.out.println("Apply finish stage 1");
+    synchronized (runningLock) {
+      this.isApplyRunning.set(false);
+      while (!dataQueue.isEmpty()) {
+        try {
+          boolean goOn = processOneMsgInIdle(dataQueue.take());
+          if (!goOn) {
+            break;
+          }
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    System.out.println("Apply finish stage 2");
   }
 
   private void updateNodeTopology(int iteration) {
@@ -394,14 +586,21 @@ public class AllReducer<T> implements AllReduce<T>,
 
   private void sendMsg(Type msgType, String selfID, int srcVersion,
     String taskID, int tgtVersion, byte[]... bytes) {
-    try {
-      sender.send(Utils.bldVersionedGCM(groupName, operName, msgType, selfID,
-        srcVersion, taskID, tgtVersion, bytes));
-    } catch (NetworkException e) {
-      e.printStackTrace();
-    }
+    boolean isSuccess = true;
+    GroupCommMessage msg =
+      Utils.bldVersionedGCM(groupName, operName, msgType, selfID, srcVersion,
+        taskID, tgtVersion, bytes);
+    do {
+      try {
+        sender.send(msg);
+        isSuccess = true;
+      } catch (Exception e) {
+        System.out.println("Fail to send the message, retry..");
+        isSuccess = false;
+        e.printStackTrace();
+      }
+    } while (!isSuccess);
   }
-
 
   private byte[] putIterationToBytes(int iteration) {
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -446,7 +645,7 @@ public class AllReducer<T> implements AllReduce<T>,
         return msg;
       }
       msg = dataQueue.take();
-      printMsgInfo(msg);
+      printMsgInfo(msg, "Process from the queue.");
       if (msg.getVersion() != version) {
         msg = null;
       } else if (msg.getType() == Type.SourceDead) {
@@ -461,10 +660,14 @@ public class AllReducer<T> implements AllReduce<T>,
         int msgCommType = iteComm[1];
         if (msg.getSrcid().equals(neighborID) && msgIteration == iteration
           && msgCommType == commType) {
+          System.out.println("Return Allreduce message - iteration :"
+            + msgIteration + ", commType: " + msgCommType);
           return msg;
         } else {
           // Notice that if the msg version is incorrect,
           // it cannot be added to the map.
+          System.out.println("Add Allreduce message to map - iteration :"
+            + msgIteration + ", commType: " + msgCommType);
           addMsgToMap(msg, msgIteration, msgCommType);
           msg = null;
         }
@@ -535,6 +738,35 @@ public class AllReducer<T> implements AllReduce<T>,
     }
   }
 
+  private void removeOldMsgInMap(int iteration) {
+    List<Integer> keys = new LinkedList<>();
+    StringBuffer sb = new StringBuffer();
+    for (Entry<Integer, ConcurrentMap<String, GroupCommMessage>> entry : dataMap
+      .entrySet()) {
+      if (entry.getKey() <= iteration) {
+        keys.add(entry.getKey().intValue());
+        sb.append(entry.getKey().toString() + ",");
+      }
+    }
+    for (int key : keys) {
+      dataMap.remove(key);
+    }
+    System.out.println("Remove msg in dataMap from iteration:  " + sb);
+    keys.clear();
+    sb.delete(0, sb.length());
+    for (Entry<Integer, ConcurrentMap<String, ConcurrentMap<Integer, GroupCommMessage>>> entry : rsagDataMap
+      .entrySet()) {
+      if (entry.getKey() <= iteration) {
+        keys.add(entry.getKey().intValue());
+        sb.append(entry.getKey().toString() + ",");
+      }
+    }
+    for (int key : keys) {
+      rsagDataMap.remove(key);
+    }
+    System.out.println("Remove msg in rsagDataMap from iteration:  " + sb);
+  }
+
   private ConcurrentMap<Integer, GroupCommMessage> getRsAgMsgMap(int iteration,
     String taskID) {
     ConcurrentMap<String, ConcurrentMap<Integer, GroupCommMessage>> iteMap =
@@ -559,12 +791,12 @@ public class AllReducer<T> implements AllReduce<T>,
     return msgMap;
   }
 
-  public List<T> apply(List<T> elements) throws InterruptedException,
-    NetworkException {
+  public synchronized List<T> apply(List<T> elements)
+    throws InterruptedException, NetworkException {
     // See if we can apply large message data
     // We need to change the interface to make chunking automatic.
     // Assume the elements are ordered.
-    if (isInitialized.compareAndSet(false, true)) {
+    if (isTopoInitialized.compareAndSet(false, true)) {
       initialize();
     }
     int ite = iteration.get();
@@ -588,9 +820,9 @@ public class AllReducer<T> implements AllReduce<T>,
     // Do allgather
     if (!isFailed) {
       isFailed =
-        allGather(reducedValMap, node.getNeighborOpList(), nodeTaskMap, taskVersionMap,
-          dataCodec, reduceFunction, selfID, node.getNodeID(), version, ite,
-          driverID, topoClient);
+        allGather(reducedValMap, node.getNeighborOpList(), nodeTaskMap,
+          taskVersionMap, dataCodec, reduceFunction, selfID, node.getNodeID(),
+          version, ite, driverID, topoClient);
     }
     if (isFailed) {
       reducedVals = null;
@@ -1008,10 +1240,11 @@ public class AllReducer<T> implements AllReduce<T>,
     return 0;
   }
 
-  private void printMsgInfo(GroupCommMessage msg) {
+  private void printMsgInfo(GroupCommMessage msg, String cmd) {
     System.out.println(getQualifiedName() + "Get " + msg.getType()
       + " msg from " + msg.getSrcid() + " with source version "
-      + msg.getSrcVersion() + " with target version " + msg.getVersion());
+      + msg.getSrcVersion() + " with target version " + msg.getVersion() + ". "
+      + cmd);
   }
 
   private String getQualifiedName() {
@@ -1024,8 +1257,14 @@ public class AllReducer<T> implements AllReduce<T>,
    * 
    * @return If the last iteration is failed.
    */
-  public boolean isLastIterationFailed() {
-    return this.isLastIteFailed.get();
+  public synchronized boolean isLastIterationFailed() {
+    // Block message processing in idle
+    synchronized (runningLock) {
+      if (isLastIteFailed.get()) {
+        isLastFailureKnown.set(true);
+      }
+      return isLastIteFailed.get();
+    }
   }
 
   /**
@@ -1033,8 +1272,11 @@ public class AllReducer<T> implements AllReduce<T>,
    * 
    * @return
    */
-  public int getNumFailedIterations() {
-    return this.numFailedIterations;
+  public synchronized int getNumFailedIterations() {
+    // Block message processing in idle
+    synchronized (runningLock) {
+      return numFailedIterations;
+    }
   }
 
   @Override

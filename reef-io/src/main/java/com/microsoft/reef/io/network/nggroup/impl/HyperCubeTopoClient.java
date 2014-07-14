@@ -75,7 +75,7 @@ public class HyperCubeTopoClient {
     // No topology change or topology updated.
     // Those two types of messages won't come here.
     if (msg.getVersion() != version) {
-      printMsgInfo(msg);
+      printMsgInfo(msg, "Wrong version.");
       return;
     }
     try {
@@ -99,7 +99,7 @@ public class HyperCubeTopoClient {
     do {
       try {
         msg = ctrlQueue.take();
-        printMsgInfo(msg);
+        printMsgInfo(msg, "Take from the ctrl queue.");
         // If this msg is mistakenly put into the queue, ignore it.
         if (msg.getVersion() != version) {
           msg = null;
@@ -108,6 +108,10 @@ public class HyperCubeTopoClient {
         e.printStackTrace();
       }
     } while (msg == null);
+    processNodeTopologyMsg(msg);
+  }
+
+  void processNodeTopologyMsg(GroupCommMessage msg) {
     // Decode the topology data
     NodeTopology nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
     System.out.println(nodeTopo.node.toString());
@@ -182,13 +186,18 @@ public class HyperCubeTopoClient {
   }
 
   NodeTopology getNewestNodeTopology() {
-    return nodeTopoMap.lastEntry().getValue();
+    Entry<Integer, NodeTopology> lastEntry = nodeTopoMap.lastEntry();
+    if (lastEntry != null) {
+      return lastEntry.getValue();
+    }
+    return null;
   }
 
-  private void printMsgInfo(GroupCommMessage msg) {
+  private void printMsgInfo(GroupCommMessage msg, String cmd) {
     System.out.println(getQualifiedName() + "Get " + msg.getType()
       + " msg from " + msg.getSrcid() + " with source version "
-      + msg.getSrcVersion() + " with target version " + msg.getVersion());
+      + msg.getSrcVersion() + " with target version " + msg.getVersion() + ". "
+      + cmd);
   }
 
   private String getQualifiedName() {
