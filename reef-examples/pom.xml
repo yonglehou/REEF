@@ -78,7 +78,6 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
 
@@ -442,9 +441,41 @@
                                 </argument>
                                 <argument>-Djava.util.logging.config.class=com.microsoft.reef.util.logging.Config
                                 </argument>
-                                <argument>com.microsoft.reef.examples.nggroup.bgd.BGDREEF</argument>
+                                <argument>com.microsoft.reef.examples.nggroup.bgd.BGDLocal</argument>
                                 <argument>-input</argument>
-                                <argument>"file:///C:/Users/shravan/data/TreeDataSets/a9a.txt"</argument>
+                                <argument>"file:///home/zhangbj/a9a.txt"</argument>
+                                <argument>-dim</argument>
+                                <argument>123</argument>
+                                <argument>-iterations</argument>
+                                <argument>50</argument>
+                                <argument>-lambda</argument>
+                                <argument>.0056</argument>
+                            </arguments>
+        				</configuration>
+        			</plugin>
+        		</plugins>
+        	</build>
+        </profile>
+        <profile>
+          <id>BGDAllReduceDemo</id>
+            <build>
+        		<defaultGoal>exec:exec</defaultGoal>
+        		<plugins>
+        			<plugin>
+        				<groupId>org.codehaus.mojo</groupId>
+        				<artifactId>exec-maven-plugin</artifactId>
+        				<configuration>
+        					<executable>java</executable>
+                            <arguments>
+                                <argument>-classpath</argument>
+                                <classpath />
+                                <argument>-Dcom.microsoft.reef.runtime.local.folder=${project.build.directory}
+                                </argument>
+                                <argument>-Djava.util.logging.config.class=com.microsoft.reef.util.logging.Config
+                                </argument>
+                                <argument>com.microsoft.reef.examples.nggroup.bgdallreduce.BGDLocal</argument>
+                                <argument>-input</argument>
+                                <argument>"file:///home/zhangbj/a9a.txt"</argument>
                                 <argument>-dim</argument>
                                 <argument>123</argument>
                                 <argument>-iterations</argument>
@@ -458,5 +489,4 @@
         	</build>
         </profile>
     </profiles>
-
 </project>
