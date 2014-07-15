@@ -56,6 +56,10 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
 
   @Override
   public void onNext(final GroupCommMessage msg) {
+    LOG.info("Get msg with type: " + msg.getType() + " with src id: "
+      + msg.getSrcid() + " with source version: " + msg.getSrcVersion()
+      + " with target id: " + msg.getDestid() + " with target version: "
+      + msg.getVersion());
     final Class<? extends Name<String>> operName = Utils.getClass(msg
         .getOperatorname());
     if (msg.getType() == Type.TopologyUpdated) {

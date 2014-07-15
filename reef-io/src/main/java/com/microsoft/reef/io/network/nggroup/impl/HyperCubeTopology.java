@@ -61,6 +61,36 @@ import com.microsoft.wake.EStage;
  * 
  * @author zhangbj
  */
+
+// New data structures for hype cube topology
+class TopoStruct {
+  /**
+   * This is used to generate hypercube ID (starts from 0, initialized as -1)
+   * for each task.This is also used to track the max ID in the hyper cube.
+   */
+  int hyperCubeNodeMaxID;
+  /**
+   * The dimension level or the total number dimensions of the current hyper
+   * cube (starts from 1, initialized as 0). This is calculated base on the max
+   * ID of the hyper cube. See if we need to make this variable atomic.
+   */
+  int dimensionLevel;
+  /** This is the mapping between task ID and hypercube node ID */
+  final Map<String, Integer> taskMap;
+  /** This is the mapping between hype cube ID and hyper cube node */
+  final Map<Integer, HyperCubeNode> nodeMap;
+  /** List of node ids which from failed nodes and make them be reusable */
+  final LinkedList<Integer> freeNodeIDs;
+
+  TopoStruct() {
+    hyperCubeNodeMaxID = -1;
+    dimensionLevel = 0;
+    taskMap = new TreeMap<>();
+    nodeMap = new TreeMap<>();
+    freeNodeIDs = new LinkedList<Integer>();
+  }
+}
+
 public class HyperCubeTopology implements Topology {
 
   private static final Logger LOG = Logger.getLogger(HyperCubeTopology.class
@@ -77,56 +107,34 @@ public class HyperCubeTopology implements Topology {
   private OperatorSpec operatorSpec;
   private final String driverID;
 
-  // New data structures for hype cube topology
-  private class TopoStruct {
-    /**
-     * This is used to generate hypercube ID (starts from 0, initialized as -1)
-     * for each task.This is also used to track the max ID in the hyper cube.
-     */
-    private int hyperCubeNodeMaxID = -1;
-    /**
-     * The dimension level or the total number dimensions of the current hyper
-     * cube (starts from 1, initialized as 0). This is calculated base on the
-     * max ID of the hyper cube. See if we need to make this variable atomic.
-     */
-    private int dimensionLevel = 0;
-    /** This is the mapping between task ID and hypercube node ID */
-    private final Map<String, Integer> taskMap = new TreeMap<>();
-    /** This is the mapping between hype cube ID and hyper cube node */
-    private final Map<Integer, HyperCubeNode> nodeMap = new TreeMap<>();
-    /** List of node ids which from failed nodes and make them be reusable */
-    private final LinkedList<Integer> freeNodeIDs = new LinkedList<Integer>();
-  }
-
-  private TopoStruct activeTopo = new TopoStruct();
+  private TopoStruct activeTopo;
+  private TopoStruct sandBox;
   /**
    * Because task ids are reused when restarting, track task version. We keep
    * every task id existed and update the version id when it comes back. The
    * content of the map doesn't refelect the topology.
    */
-  private final ConcurrentMap<String, AtomicInteger> taskVersionMap =
-    new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AtomicInteger> taskVersionMap;
 
   /**
    * When the number of running tasks arrives at the minimum number required,
    * set the topology as initialized
    */
-  private final AtomicBoolean isInitialized = new AtomicBoolean(false);
+  private final AtomicBoolean isInitialized;
   /** The total number of tasks initialized */
   private final int minInitialTasks;
-  private final AtomicInteger numRunningTasks = new AtomicInteger(0);
+  private final AtomicInteger numRunningTasks;
   /** Iteration is used to track the iteration number of allreduce operation */
-  private final AtomicInteger iteration = new AtomicInteger(0);
+  private final AtomicInteger iteration;
 
   /** This is used to collect all new task ids */
-  private final Set<String> newTasks = new HashSet<>();
-  private final Set<String> newTaskNeighbors = new HashSet<>();
+  private final Set<String> newTasks;
+  private final Set<String> newTaskNeighbors;
   /** This is used to collect all fail task ids */
-  private final Set<String> failedTaskNeighbors = new HashSet<>();
+  private final Set<String> failedTaskNeighbors;
   /** This is used to collect all reports about neighbor additions and deletions */
-  private final Map<String, Integer> taskReports = new HashMap<>();
-  private final AtomicBoolean isFailed = new AtomicBoolean(false);
-  private TopoStruct sandBox = null;
+  private final Map<String, Integer> taskReports;
+  private final AtomicBoolean isFailed;
 
   public HyperCubeTopology(final EStage<GroupCommMessage> senderStage,
     final Class<? extends Name<String>> groupName,
@@ -136,8 +144,20 @@ public class HyperCubeTopology implements Topology {
     this.groupName = groupName;
     this.operName = operatorName;
     this.driverID = driverID;
+
+    activeTopo = new TopoStruct();
+    sandBox = null;
+    isInitialized = new AtomicBoolean(false);
     // this.minInitialTasks = numberOfTasks / 2 + 1;
-    this.minInitialTasks = numberOfTasks;
+    minInitialTasks = numberOfTasks;
+    numRunningTasks = new AtomicInteger(0);
+    iteration = new AtomicInteger(0);
+    taskVersionMap = new ConcurrentHashMap<>();
+    newTasks = new HashSet<>();
+    newTaskNeighbors = new HashSet<>();
+    failedTaskNeighbors = new HashSet<>();
+    taskReports = new HashMap<>();
+    isFailed = new AtomicBoolean(false);
   }
 
   @Override
@@ -163,7 +183,7 @@ public class HyperCubeTopology implements Topology {
     // When a task is failed, it will restart with the same taskID,
     // to separate the old task and the new task, we use version in
     // configuration with is agreed between driver and a task.
-    final int version = generateNodeVersion(taskID);
+    final int version = getNodeVersion(taskID);
     final JavaConfigurationBuilder jcb =
       Tang.Factory.getTang().newConfigurationBuilder();
     jcb.bindNamedParameter(DataCodec.class, operatorSpec.getDataCodecClass());
@@ -178,24 +198,21 @@ public class HyperCubeTopology implements Topology {
     return jcb.build();
   }
 
-  private int generateNodeVersion(String taskID) {
-    AtomicInteger version = this.taskVersionMap.get(taskID);
+  @Override
+  public synchronized int getNodeVersion(String taskID) {
+    return createNodeVersion(taskID).get();
+  }
+
+  private AtomicInteger createNodeVersion(String taskID) {
+    AtomicInteger version = taskVersionMap.get(taskID);
     if (version == null) {
       version = new AtomicInteger(0);
-      AtomicInteger oldVersion =
-        this.taskVersionMap.putIfAbsent(taskID, version);
-      // Make sure there is only one atomicInteger
-      // is associated with this task ID.
+      AtomicInteger oldVersion = taskVersionMap.putIfAbsent(taskID, version);
       if (oldVersion != null) {
         version = oldVersion;
       }
     }
-    return version.incrementAndGet();
-  }
-
-  @Override
-  public int getNodeVersion(String taskID) {
-    return this.taskVersionMap.get(taskID).get();
+    return version;
   }
 
   @Override
@@ -692,7 +709,14 @@ public class HyperCubeTopology implements Topology {
   }
 
   private TopoStruct copyTopology(TopoStruct topo) {
+    if (topo == null) {
+      topo = this.activeTopo;
+    }
     TopoStruct sandbox = new TopoStruct();
+    if (topo == null) {
+      System.out.println("topo is null");
+      LOG.info("topo is null");
+    }
     sandbox.hyperCubeNodeMaxID = topo.hyperCubeNodeMaxID;
     sandbox.dimensionLevel = topo.dimensionLevel;
     for (int i = 0; i < topo.freeNodeIDs.size(); i++) {
@@ -750,8 +774,9 @@ public class HyperCubeTopology implements Topology {
   }
 
   private void sendMsg(GroupCommMessage gcm) {
-    System.out.println(getQualifiedName() + ": sendMsg " + gcm.getType()
-      + " from " + gcm.getSrcid() + " to " + gcm.getDestid());
+    System.out.println(getQualifiedName() + "sendMsg " + gcm.getType()
+      + " from " + gcm.getSrcid() + " with version " + gcm.getSrcVersion()
+      + " to " + gcm.getDestid() + " with version " + gcm.getVersion());
     senderStage.onNext(gcm);
   }
 
@@ -927,10 +952,12 @@ public class HyperCubeTopology implements Topology {
       // sandbox is not null), apply adding and see which neighbor nodes are
       // modified
       if (sandBox == null) {
+        System.out.println("Copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
       }
       // There are failed tasks in the current topology
       isFailed.set(true);
+      failCurrentNodeVersion(taskID);
       // See if this task is in newTasks.
       // if yes, remove.
       if (newTasks.contains(taskID)) {
@@ -985,6 +1012,11 @@ public class HyperCubeTopology implements Topology {
     }
   }
 
+  private int failCurrentNodeVersion(String taskID) {
+    AtomicInteger version = createNodeVersion(taskID);
+    return version.incrementAndGet();
+  }
+
   @Override
   public synchronized void processMsg(final GroupCommMessage msg) {
     // Invoked by TopologyMessageHandler when message arrives
@@ -997,9 +1029,16 @@ public class HyperCubeTopology implements Topology {
     // and it doesn't use all other types of messages,
     // there could cause problem in the code.
     // We assume there would only be AllReduce operator in the user code.
+    if (msg.getSrcVersion() != getNodeVersion(msg.getSrcid())) {
+      System.out.println(getQualifiedName() + "processing " + msg.getType()
+        + " from " + msg.getSrcid() + " with version " + msg.getSrcVersion()
+        + ". But current version is " + getNodeVersion(msg.getSrcid()));
+      return;
+    }
     int iteration = getIterationInBytes(Utils.getData(msg));
     System.out.println(getQualifiedName() + "processing " + msg.getType()
-      + " from " + msg.getSrcid() + " with iteration " + iteration);
+      + " from " + msg.getSrcid() + " with version " + msg.getSrcVersion()
+      + " with iteration " + iteration);
     if (msg.getType().equals(Type.SourceDead)) {
       taskReports.put(msg.getSrcid(), iteration);
       processNeighborUpdate();
@@ -1034,6 +1073,13 @@ public class HyperCubeTopology implements Topology {
         + " the number of running tasks required.");
       return;
     }
+    // the method may be triggered when the old message from failed tasks is
+    // received. Stop processing if no topology update is required.
+    // if (failedTaskNeighbors.size() == 0 && newTaskNeighbors.size() == 0
+    // && newTasks.size() == 0 && sandBox == null) {
+    // System.out.println("No topology update required.");
+    // return;
+    // }
     // We collect reports from new task neighbors and failed task neighbors
     // For new tasks waiting for topology setup, they don't have task reports.
     boolean allContained = true;
@@ -1083,7 +1129,9 @@ public class HyperCubeTopology implements Topology {
       }
       // If yes, calculate which iteration the new topology is for
       activeTopo = sandBox;
-      sandBox = null;
+      if (activeTopo == null) {
+        System.out.println("null activeTopo 1");
+      }
       // Set the internal agreed iteration number for updating the topology.
       int baseIteration = minIteration;
       int newIteration = maxIteration + 1;
@@ -1123,9 +1171,10 @@ public class HyperCubeTopology implements Topology {
         try {
           sendTopology(node, activeTopo, taskVersionMap, Type.TopologySetup,
             baseIteration, newIteration, false);
-        } catch (IOException e) {
+        } catch (Exception e) {
           e.printStackTrace();
           LOG.log(Level.WARNING, "", e);
+          System.out.println("Fail to send the topology setup");
         }
       }
       // Clean related data structures
@@ -1134,6 +1183,7 @@ public class HyperCubeTopology implements Topology {
       newTaskNeighbors.clear();
       newTasks.clear();
       isFailed.set(false);
+      sandBox = null;
     } else {
       System.out.println("Waiting for the arrival of more task reports.");
     }

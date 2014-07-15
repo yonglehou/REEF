@@ -15,8 +15,6 @@
  */
 package com.microsoft.reef.examples.nggroup.allreduce;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -57,7 +55,7 @@ public class SlaveTask implements Task {
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1, 0 });
     Vector newModel = null;
-    final int numIters = 20;
+    final int numIters = 50;
     final long time1 = System.currentTimeMillis();
     for (int i = 0; i < numIters; i++) {
       System.out.println("Iter: " + i + " starts.");

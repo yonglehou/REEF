@@ -32,11 +32,12 @@ public class HyperCubeNode {
   private String taskID;
   private int nodeID;
   /** The list of send/receive operations on the neighbors */
-  private final List<List<int[]>> neighborOpList = new ArrayList<List<int[]>>();
+  private final List<List<int[]>> neighborOpList;
 
   public HyperCubeNode(String taskID, int nodeID) {
     this.taskID = taskID;
     this.nodeID = nodeID;
+    neighborOpList = new ArrayList<List<int[]>>();
   }
 
   public String getTaskID() {

@@ -18,8 +18,8 @@ package com.microsoft.reef.io.network.nggroup.impl;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -41,14 +41,25 @@ import com.microsoft.tang.annotations.Name;
  */
 
 class NodeTopology {
-  HyperCubeNode node = null;
-  Map<Integer, String> nodeTaskMap = null;
-  Map<String, Integer> taskVersionMap = null;
-  int baseIteration = -1;
-  int newIteration = -1;
+  HyperCubeNode node;
+  Map<Integer, String> nodeTaskMap;
+  Map<String, Integer> taskVersionMap;
+  int baseIteration;
+  int newIteration;
   // The reasons for updating
-  boolean isFailed = false;
-  boolean isNewNodeAdded = false;
+  boolean isFailed;
+  boolean isNewNodeAdded;
+
+  NodeTopology() {
+    node = null;
+    nodeTaskMap = null;
+    taskVersionMap = null;
+    baseIteration = -1;
+    newIteration = -1;
+    // The reasons for updating
+    isFailed = false;
+    isNewNodeAdded = false;
+  }
 }
 
 public class HyperCubeTopoClient {
@@ -57,9 +68,8 @@ public class HyperCubeTopoClient {
   private final Class<? extends Name<String>> operName;
   private final String selfID;
 
-  private final BlockingQueue<GroupCommMessage> ctrlQueue =
-    new LinkedBlockingQueue<>();
-  private final TreeMap<Integer, NodeTopology> nodeTopoMap = new TreeMap<>();
+  private final BlockingQueue<GroupCommMessage> ctrlQueue;
+  private final TreeMap<Integer, NodeTopology> nodeTopoMap;
   private final int version;
 
   public HyperCubeTopoClient(final Class<? extends Name<String>> groupName,
@@ -69,6 +79,9 @@ public class HyperCubeTopoClient {
     this.operName = operName;
     this.selfID = selfId;
     this.version = version;
+
+    ctrlQueue = new LinkedBlockingQueue<>();
+    nodeTopoMap = new TreeMap<>();
   }
 
   public void handle(final GroupCommMessage msg) {
@@ -169,20 +182,17 @@ public class HyperCubeTopoClient {
     return nodeTopoMap.get(iteration);
   }
 
-  void removeOldNodeTopologies(int iteration) {
-    List<Integer> rmKeys = new ArrayList<>();
+  List<Integer> removeOldNodeTopologies(int iteration) {
+    List<Integer> rmKeys = new LinkedList<>();
     for (Entry<Integer, NodeTopology> entry : nodeTopoMap.entrySet()) {
       if (entry.getKey() < iteration) {
         rmKeys.add(entry.getKey());
       }
     }
-    StringBuffer sb = new StringBuffer();
     for (int key : rmKeys) {
-      sb.append(key + " ");
       nodeTopoMap.remove(key);
     }
-    System.out.println("Current new topology with iteration " + iteration
-      + ". Remove topologies with iterations: " + sb);
+    return rmKeys;
   }
 
   NodeTopology getNewestNodeTopology() {
