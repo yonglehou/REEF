@@ -114,9 +114,10 @@ public class SlaveTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(dimensions);
+    Vector descentDirection = null;
     int curIter = 0;
-    int lastOp = 0;
-    int curOp = 0;
+    int curOp = 1;
+    int startOp = 1; // Op for the start of computation, be 1 or 2.
     boolean syncModel = false;
     boolean ownModel = true;
     while (true) {
@@ -126,9 +127,10 @@ public class SlaveTask implements Task {
       if (curOp == 0) {
         Pair<Integer, Pair<Integer, Boolean>> recvState =
           allreducer.apply(new Pair<Integer, Pair<Integer, Boolean>>(curIter,
-            new Pair<>(lastOp, syncModel)));
+            new Pair<>(startOp, syncModel)));
         if (recvState != null) {
           syncModel = recvState.second.second.booleanValue();
+          ownModel = true;
           if (syncModel) {
             if (curIter != recvState.first.intValue()
               && curOp != recvState.second.first.intValue()) {
@@ -136,31 +138,34 @@ public class SlaveTask implements Task {
             }
           }
           curIter = recvState.first.intValue();
+          // Update curOp to 1 or 2
           curOp = recvState.second.first.intValue();
         } else {
-          // curOp will be 0
-          curOp = 0;
+          // curOp won't change
           // Check and update at the bottom
         }
       }
-      Vector gradient = null;
-      Vector descentDirection = null;
       if (curOp == 1) {
+        Vector recvModel = null;
         if (syncModel) {
           if (!ownModel) {
             model = new DenseVector(new double[0]);
           }
-          Vector recvModel = allreducer.apply(model);
+          recvModel = allreducer.apply(model);
           if (recvModel != null) {
             model = recvModel;
             syncModel = false;
             ownModel = true;
           } else {
+            // curIter doesn't change
             // curOp won't increase
+            // syncModel keeps true
             // Check and update at the bottom
+            // Resync at the iteration start
+            startOp = 1;
           }
         }
-        if (model != null) {
+        if (ownModel) {
           Pair<Pair<Double, Integer>, Vector> lossAndGradient =
             allreduceLossAndGradient(model);
           if (lossAndGradient != null) {
@@ -168,51 +173,58 @@ public class SlaveTask implements Task {
               + " #ex: " + lossAndGradient.first.second);
             System.out.println("Gradient: " + lossAndGradient.second + " #ex: "
               + lossAndGradient.first.second);
-            gradient = regularizeLossAndGradient(model, lossAndGradient);
+            Vector gradient = regularizeLossAndGradient(model, lossAndGradient);
             if (converged(gradient.norm2())) {
               break;
             }
             descentDirection = getDescentDirection(gradient);
-            syncModel = false;
-            curOp++;
+            curOp++; // Continue to next op.
           } else {
-            lastOp = 1;
+            startOp = 1;
           }
         }
       }
       if (curOp == 2) {
         if (syncModel) {
-          Pair<Vector, Vector> modelPair =
-            allreducer.apply(new Pair<Vector, Vector>(model, descentDirection));
-          if (modelPair != null) {
-            model = modelPair.second;
-            syncModel = true;
+          Pair<Vector, Vector> modelPair = new Pair<>(model, descentDirection);
+          if (!ownModel) {
+            modelPair =
+              new Pair<Vector, Vector>(new DenseVector(new double[0]),
+                new DenseVector(new double[0]));
+          }
+          Pair<Vector, Vector> recvModelPair = allreducer.apply(modelPair);
+          if (recvModelPair != null) {
+            model = recvModelPair.first;
+            descentDirection = recvModelPair.second;
+            syncModel = false;
+            ownModel = true;
           } else {
+            // curIter doesn't change
             // curOp won't increase
             // Check and update at the bottom
+            // Resync at the iteration start
+            startOp = 2;
           }
         }
-        if (model != null && descentDirection != null) {
+        if (ownModel) {
           // Line search
           Pair<Vector, Integer> lineSearchEvals =
             allreduceLineSearch(syncModel, model, descentDirection);
           if (lineSearchEvals != null) {
             updateModel(model, descentDirection, lineSearchEvals);
           } else {
-            lastOp = 2;
+            startOp = 2;
           }
         }
       }
       boolean isOK = checkAndUpdate();
       if (!isOK) {
         curOp = 0;
-        continue;
       } else {
         // If the iteration is successful,
         // go back to op 1 and evaluate the model.
         curIter++;
         curOp = 1;
-        syncModel = false;
       }
     }
     for (final Double loss : losses) {
