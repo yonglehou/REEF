@@ -13,31 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgdallreduce;
+package com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames;
 
-import javax.inject.Inject;
-
-import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 
 /**
- *
+ * Name of the reducer used to aggregate line search results.
  */
-public class ModelReduceFunction implements ReduceFunction<Vector> {
-
-  @Inject
-  public ModelReduceFunction() {
-  }
-
-  @Override
-  public Vector apply(final Iterable<Vector> evals) {
-    Vector model = null;
-    for (final Vector eval : evals) {
-      if (eval.size() > 0) {
-        model = eval;
-        break;
-      }
-    }
-    return model;
-  }
+@NamedParameter()
+public final class ModelDescentDirectionAllReducer implements Name<String> {
 }

@@ -114,31 +114,47 @@ public class SlaveTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(dimensions);
-    int curOp = 0;
     int curIter = 0;
-    boolean sendModel = false;
+    int lastOp = 0;
+    int curOp = 0;
+    boolean syncModel = false;
+    boolean ownModel = true;
     while (true) {
       // Control message allreduce
       // Get the current iteration, operation
       // and if the input data is required to send.
       if (curOp == 0) {
-        Integer op = allreducer.apply(curOp);
-        if (op != null) {
-          curOp = op.intValue();
-          sendModel = true;
+        Pair<Integer, Pair<Integer, Boolean>> recvState =
+          allreducer.apply(new Pair<Integer, Pair<Integer, Boolean>>(curIter,
+            new Pair<>(lastOp, syncModel)));
+        if (recvState != null) {
+          syncModel = recvState.second.second.booleanValue();
+          if (syncModel) {
+            if (curIter != recvState.first.intValue()
+              && curOp != recvState.second.first.intValue()) {
+              ownModel = false;
+            }
+          }
+          curIter = recvState.first.intValue();
+          curOp = recvState.second.first.intValue();
         } else {
           // curOp will be 0
+          curOp = 0;
           // Check and update at the bottom
         }
       }
       Vector gradient = null;
       Vector descentDirection = null;
       if (curOp == 1) {
-        if (sendModel) {
-          Pair<Integer, Vector> modelPair =
-            allreducer.apply(new Pair<Integer, Vector>(curIter, model));
-          if (modelPair != null) {
-            model = modelPair.second;
+        if (syncModel) {
+          if (!ownModel) {
+            model = new DenseVector(new double[0]);
+          }
+          Vector recvModel = allreducer.apply(model);
+          if (recvModel != null) {
+            model = recvModel;
+            syncModel = false;
+            ownModel = true;
           } else {
             // curOp won't increase
             // Check and update at the bottom
@@ -146,7 +162,7 @@ public class SlaveTask implements Task {
         }
         if (model != null) {
           Pair<Pair<Double, Integer>, Vector> lossAndGradient =
-            allreduceLossAndGradient(model, sendModel);
+            allreduceLossAndGradient(model);
           if (lossAndGradient != null) {
             System.out.println("Loss: " + lossAndGradient.first.first
               + " #ex: " + lossAndGradient.first.second);
@@ -157,19 +173,20 @@ public class SlaveTask implements Task {
               break;
             }
             descentDirection = getDescentDirection(gradient);
-            sendModel = false;
+            syncModel = false;
             curOp++;
+          } else {
+            lastOp = 1;
           }
         }
       }
       if (curOp == 2) {
-        if (sendModel) {
-          Pair<Integer, Vector> modelPair =
-            allreducer.apply(new Pair<Integer, Vector>(curIter, model,
-              descentDirection));
+        if (syncModel) {
+          Pair<Vector, Vector> modelPair =
+            allreducer.apply(new Pair<Vector, Vector>(model, descentDirection));
           if (modelPair != null) {
             model = modelPair.second;
-            sendModel = true;
+            syncModel = true;
           } else {
             // curOp won't increase
             // Check and update at the bottom
@@ -178,9 +195,11 @@ public class SlaveTask implements Task {
         if (model != null && descentDirection != null) {
           // Line search
           Pair<Vector, Integer> lineSearchEvals =
-            allreduceLineSearch(sendModel, model, descentDirection);
+            allreduceLineSearch(syncModel, model, descentDirection);
           if (lineSearchEvals != null) {
             updateModel(model, descentDirection, lineSearchEvals);
+          } else {
+            lastOp = 2;
           }
         }
       }
@@ -193,7 +212,7 @@ public class SlaveTask implements Task {
         // go back to op 1 and evaluate the model.
         curIter++;
         curOp = 1;
-        sendModel = false;
+        syncModel = false;
       }
     }
     for (final Double loss : losses) {
@@ -221,28 +240,12 @@ public class SlaveTask implements Task {
   }
 
   private Pair<Pair<Double, Integer>, Vector> allreduceLossAndGradient(
-    Vector model, boolean sendModel) throws NetworkException,
-    InterruptedException {
-    Pair<Pair<Double, Integer>, Vector> lossAndGradient = null;
-    if (sendModel) {
-      System.out.println("AllReduceGradientWithModel");
-      lossAndGradient =
-        lossAndGradientAllReducer.apply(computeLossAndGradient(model));
-    } else {
-      System.out.println("AllReduceGradientWithMinEta");
-      // model is initialed as 0s and minEta was 0
-      descentDirection.scale(minEta);
-      model.add(descentDirection);
-      lossAndGradient =
-        lossAndGradientAllReducer.apply(computeLossAndGradient(model));
-    }
+    Vector model) throws NetworkException, InterruptedException {
+    Pair<Pair<Double, Integer>, Vector> lossAndGradient =
+      lossAndGradientAllReducer.apply(computeLossAndGradient(model));
     return lossAndGradient;
   }
 
-  /**
-   * @param model
-   * @return
-   */
   private Pair<Pair<Double, Integer>, Vector> computeLossAndGradient(
     Vector model) {
     if (examples.isEmpty()) {
@@ -303,21 +306,9 @@ public class SlaveTask implements Task {
   private Pair<Vector, Integer> allreduceLineSearch(boolean sendModel,
     Vector model, Vector descentDirection) throws NetworkException,
     InterruptedException {
-    Pair<Vector, Integer> lineSearchEvals = null;
-    if (sendModel) {
-      System.out.println("DoLineSearchWithModel");
-      // Do AllReduce with the model and descentDirection and get
-      // lineSearchVals
-      lineSearchEvals =
-        lineSearchEvaluationsAllReducer.apply(lineSearch(model,
-          descentDirection));
-    } else {
-      System.out.println("DoLineSearch");
-      // Do AllReduce with descentDirection and get lineSearchVals
-      lineSearchEvals =
-        lineSearchEvaluationsAllReducer.apply(lineSearch(model,
-          descentDirection));
-    }
+    Pair<Vector, Integer> lineSearchEvals =
+      lineSearchEvaluationsAllReducer
+        .apply(lineSearch(model, descentDirection));
     return lineSearchEvals;
   }
 

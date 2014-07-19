@@ -24,11 +24,11 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
 /**
  *
  */
-public class ModelAndDescendentDirectionReduceFunction implements
+public class ModelDescentDirectionReduceFunction implements
   ReduceFunction<Pair<Integer, Vector>> {
 
   @Inject
-  public ModelAndDescendentDirectionReduceFunction() {
+  public ModelDescentDirectionReduceFunction() {
   }
 
   @Override
