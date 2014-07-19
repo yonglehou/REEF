@@ -29,16 +29,26 @@ import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.*;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.EnableRampup;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.bgd.utils.StepSizes;
+import com.microsoft.reef.examples.nggroup.bgd.utils.Timer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LineSearchEvaluationsAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LossAndGradientAllReducer;
+import com.microsoft.reef.exception.evaluator.NetworkException;
+import com.microsoft.reef.io.Tuple;
 import com.microsoft.reef.io.data.loading.api.DataSet;
-import com.microsoft.reef.io.network.group.operators.Broadcast;
-import com.microsoft.reef.io.network.group.operators.Reduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
+import com.microsoft.reef.io.network.nggroup.impl.AllReducer;
 import com.microsoft.reef.io.network.util.Utils.Pair;
+import com.microsoft.reef.io.serialization.Codec;
+import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.task.Task;
+import com.microsoft.tang.annotations.Parameter;
 
 /**
  *
@@ -47,107 +57,275 @@ public class SlaveTask implements Task {
 
   private static final Logger LOG = Logger.getLogger(SlaveTask.class.getName());
 
-  /**
-   *
-   */
   private static final double FAILURE_PROB = 0.001;
-  private final CommunicationGroupClient communicationGroup;
-  private final Broadcast.Receiver<ControlMessages> controlMessageBroadcaster;
-  private final Broadcast.Receiver<Vector> modelBroadcaster;
-  private final Reduce.Sender<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReducer;
-  private final Broadcast.Receiver<Pair<Vector, Vector>> modelAndDescentDirectionBroadcaster;
-  private final Broadcast.Receiver<Vector> descentDirectionBroadcaster;
-  private final Reduce.Sender<Pair<Vector, Integer>> lineSearchEvaluationsReducer;
-  private final Broadcast.Receiver<Double> minEtaBroadcaster;
+  private final CommunicationGroupClient communicationGroupClient;
+  private final AllReducer<Pair<Pair<Double, Integer>, Vector>> lossAndGradientAllReducer;
+  private final AllReducer<Pair<Vector, Integer>> lineSearchEvaluationsAllReducer;
+
   private final List<Example> examples = new ArrayList<>();
   private final DataSet<LongWritable, Text> dataSet;
   private final Parser<String> parser;
   private final LossFunction lossFunction;
   private final StepSizes ts;
 
-  private Vector model = null;
+  // private Vector model = null;
   private Vector descentDirection = null;
 
+  // boolean sendModel = true;
+  private final int dimensions;
+  private double minEta = 0;
+  private final double lambda;
+  private final int maxIters;
+  private final ArrayList<Double> losses = new ArrayList<>();
+  private final Codec<ArrayList<Double>> lossCodec =
+    new SerializableCodec<ArrayList<Double>>();
+  private final boolean ignoreAndContinue;
+
+  // Iteration control
+  private int iteration = 0;
+
   @Inject
-  public SlaveTask(
-      final GroupCommClient groupCommClient,
-      final DataSet<LongWritable, Text> dataSet,
-      final Parser<String> parser,
-      final LossFunction lossFunction,
-      final StepSizes ts) {
+  public SlaveTask(final GroupCommClient groupCommClient,
+    @Parameter(ModelDimensions.class) final int dimensions,
+    @Parameter(Lambda.class) final double lambda,
+    @Parameter(Iterations.class) final int maxIters,
+    @Parameter(EnableRampup.class) final boolean rampup,
+    final DataSet<LongWritable, Text> dataSet, final Parser<String> parser,
+    final LossFunction lossFunction, final StepSizes ts) {
     this.dataSet = dataSet;
     this.parser = parser;
     this.lossFunction = lossFunction;
     this.ts = ts;
-    communicationGroup = groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
-    controlMessageBroadcaster = communicationGroup.getBroadcastReceiver(ControlMessageBroadcaster.class);
-    modelBroadcaster = communicationGroup.getBroadcastReceiver(ModelBroadcaster.class);
-    lossAndGradientReducer = communicationGroup.getReduceSender(LossAndGradientReducer.class);
-    modelAndDescentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(ModelAndDescentDirectionBroadcaster.class);
-    this.descentDirectionBroadcaster = communicationGroup.getBroadcastReceiver(DescentDirectionBroadcaster.class);
-    lineSearchEvaluationsReducer = communicationGroup.getReduceSender(LineSearchEvaluationsReducer.class);
-    this.minEtaBroadcaster = communicationGroup.getBroadcastReceiver(MinEtaBroadcaster.class);
+    communicationGroupClient =
+      groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    lossAndGradientAllReducer =
+      (AllReducer<Pair<Pair<Double, Integer>, Vector>>) communicationGroupClient
+        .getAllReducer(LossAndGradientAllReducer.class);
+    lineSearchEvaluationsAllReducer =
+      (AllReducer<Pair<Vector, Integer>>) communicationGroupClient
+        .getAllReducer(LineSearchEvaluationsAllReducer.class);
+    // Members from master task
+    this.lambda = lambda;
+    this.maxIters = maxIters;
+    this.ignoreAndContinue = rampup;
+    this.dimensions = dimensions;
   }
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    boolean stop = false;
-    while (!stop) {
-      final ControlMessages controlMessage = controlMessageBroadcaster.receive();
-      switch (controlMessage) {
-        case Stop:
-          stop = true;
-          break;
-
-        case ComputeGradientWithModel:
-          failPerhaps();
-          this.model = modelBroadcaster.receive();
-          lossAndGradientReducer.send(computeLossAndGradient());
-          break;
-
-        case ComputeGradientWithMinEta:
-          failPerhaps();
-          final double minEta = minEtaBroadcaster.receive();
-          assert (descentDirection != null);
-          this.descentDirection.scale(minEta);
-          assert (model != null);
-          this.model.add(descentDirection);
-          lossAndGradientReducer.send(computeLossAndGradient());
-          break;
-
-        case DoLineSearch:
-          failPerhaps();
-          this.descentDirection = descentDirectionBroadcaster.receive();
-          lineSearchEvaluationsReducer.send(lineSearchEvals());
-          break;
-
-        case DoLineSearchWithModel:
-          failPerhaps();
-          final Pair<Vector, Vector> modelAndDescentDir = modelAndDescentDirectionBroadcaster.receive();
-          this.model = modelAndDescentDir.first;
-          this.descentDirection = modelAndDescentDir.second;
-          lineSearchEvaluationsReducer.send(lineSearchEvals());
-          break;
-
-        default:
-          break;
+    Vector model = new DenseVector(dimensions);
+    int curOp = 0;
+    int curIter = 0;
+    boolean sendModel = false;
+    while (true) {
+      // Control message allreduce
+      // Get the current iteration, operation
+      // and if the input data is required to send.
+      if (curOp == 0) {
+        Integer op = allreducer.apply(curOp);
+        if (op != null) {
+          curOp = op.intValue();
+          sendModel = true;
+        } else {
+          // curOp will be 0
+          // Check and update at the bottom
+        }
+      }
+      Vector gradient = null;
+      Vector descentDirection = null;
+      if (curOp == 1) {
+        if (sendModel) {
+          Pair<Integer, Vector> modelPair =
+            allreducer.apply(new Pair<Integer, Vector>(curIter, model));
+          if (modelPair != null) {
+            model = modelPair.second;
+          } else {
+            // curOp won't increase
+            // Check and update at the bottom
+          }
+        }
+        if (model != null) {
+          Pair<Pair<Double, Integer>, Vector> lossAndGradient =
+            allreduceLossAndGradient(model, sendModel);
+          if (lossAndGradient != null) {
+            System.out.println("Loss: " + lossAndGradient.first.first
+              + " #ex: " + lossAndGradient.first.second);
+            System.out.println("Gradient: " + lossAndGradient.second + " #ex: "
+              + lossAndGradient.first.second);
+            gradient = regularizeLossAndGradient(model, lossAndGradient);
+            if (converged(gradient.norm2())) {
+              break;
+            }
+            descentDirection = getDescentDirection(gradient);
+            sendModel = false;
+            curOp++;
+          }
+        }
+      }
+      if (curOp == 2) {
+        if (sendModel) {
+          Pair<Integer, Vector> modelPair =
+            allreducer.apply(new Pair<Integer, Vector>(curIter, model,
+              descentDirection));
+          if (modelPair != null) {
+            model = modelPair.second;
+            sendModel = true;
+          } else {
+            // curOp won't increase
+            // Check and update at the bottom
+          }
+        }
+        if (model != null && descentDirection != null) {
+          // Line search
+          Pair<Vector, Integer> lineSearchEvals =
+            allreduceLineSearch(sendModel, model, descentDirection);
+          if (lineSearchEvals != null) {
+            updateModel(model, descentDirection, lineSearchEvals);
+          }
+        }
+      }
+      boolean isOK = checkAndUpdate();
+      if (!isOK) {
+        curOp = 0;
+        continue;
+      } else {
+        // If the iteration is successful,
+        // go back to op 1 and evaluate the model.
+        curIter++;
+        curOp = 1;
+        sendModel = false;
       }
     }
-    return null;
+    for (final Double loss : losses) {
+      System.out.println(loss);
+    }
+    return lossCodec.encode(losses);
   }
 
-  private void failPerhaps() {
-    // Temporarily stop failure
-    // if (Math.random() < FAILURE_PROB) {
-    //  throw new RuntimeException("Simulated Failure");
-    // }
+  private boolean checkAndUpdate() {
+    communicationGroupClient.checkIteration();
+    if (communicationGroupClient.isCurrentIterationFailed()) {
+      communicationGroupClient.updateTopologyAndIteration();
+      return false;
+    } else if (communicationGroupClient.isNewTaskAvailable()) {
+      // May or may not update
+      communicationGroupClient.updateTopologyAndIteration();
+      return false;
+    }
+    communicationGroupClient.updateIteration();
+    return true;
+  }
+
+  private boolean converged(final double gradNorm) {
+    return iteration >= maxIters || Math.abs(gradNorm) <= 1e-3;
+  }
+
+  private Pair<Pair<Double, Integer>, Vector> allreduceLossAndGradient(
+    Vector model, boolean sendModel) throws NetworkException,
+    InterruptedException {
+    Pair<Pair<Double, Integer>, Vector> lossAndGradient = null;
+    if (sendModel) {
+      System.out.println("AllReduceGradientWithModel");
+      lossAndGradient =
+        lossAndGradientAllReducer.apply(computeLossAndGradient(model));
+    } else {
+      System.out.println("AllReduceGradientWithMinEta");
+      // model is initialed as 0s and minEta was 0
+      descentDirection.scale(minEta);
+      model.add(descentDirection);
+      lossAndGradient =
+        lossAndGradientAllReducer.apply(computeLossAndGradient(model));
+    }
+    return lossAndGradient;
+  }
+
+  /**
+   * @param model
+   * @return
+   */
+  private Pair<Pair<Double, Integer>, Vector> computeLossAndGradient(
+    Vector model) {
+    if (examples.isEmpty()) {
+      loadData();
+    }
+    final Vector gradient = new DenseVector(model.size());
+    double loss = 0.0;
+    for (final Example example : examples) {
+      final double f = example.predict(model);
+      final double g = lossFunction.computeGradient(example.getLabel(), f);
+      example.addGradient(gradient, g);
+      loss += lossFunction.computeLoss(example.getLabel(), f);
+    }
+    return new Pair<>(new Pair<>(loss, examples.size()), gradient);
+  }
+
+  private Vector regularizeLossAndGradient(Vector model,
+    final Pair<Pair<Double, Integer>, Vector> lossAndGradient) {
+    Vector gradient = null;
+    // Why timer?
+    try (Timer t = new Timer("Regularize(Loss) + Regularize(Gradient)")) {
+      final double loss =
+        regularizeLoss(lossAndGradient.first.first,
+          lossAndGradient.first.second, model);
+      System.out.println("RegLoss: " + loss);
+      gradient =
+        regularizeGrad(lossAndGradient.second, lossAndGradient.first.second,
+          model);
+      System.out.println("RegGradient: " + gradient);
+      losses.add(loss);
+    }
+    return gradient;
+  }
+
+  private double regularizeLoss(final double loss, final int numEx,
+    final Vector model) {
+    return regularizeLoss(loss, numEx, model.norm2Sqr());
+  }
+
+  private double regularizeLoss(final double loss, final int numEx,
+    final double modelNormSqr) {
+    return loss / numEx + ((lambda / 2) * modelNormSqr);
+  }
+
+  private Vector regularizeGrad(final Vector gradient, final int numEx,
+    final Vector model) {
+    gradient.scale(1.0 / numEx);
+    gradient.multAdd(lambda, model);
+    return gradient;
+  }
+
+  private Vector getDescentDirection(final Vector gradient) {
+    gradient.scale(-1);
+    System.out.println("DescentDirection: " + gradient);
+    return gradient;
+  }
+
+  private Pair<Vector, Integer> allreduceLineSearch(boolean sendModel,
+    Vector model, Vector descentDirection) throws NetworkException,
+    InterruptedException {
+    Pair<Vector, Integer> lineSearchEvals = null;
+    if (sendModel) {
+      System.out.println("DoLineSearchWithModel");
+      // Do AllReduce with the model and descentDirection and get
+      // lineSearchVals
+      lineSearchEvals =
+        lineSearchEvaluationsAllReducer.apply(lineSearch(model,
+          descentDirection));
+    } else {
+      System.out.println("DoLineSearch");
+      // Do AllReduce with descentDirection and get lineSearchVals
+      lineSearchEvals =
+        lineSearchEvaluationsAllReducer.apply(lineSearch(model,
+          descentDirection));
+    }
+    return lineSearchEvals;
   }
 
   /**
    * @param modelAndDescentDir
    * @return
    */
-  private Pair<Vector, Integer> lineSearchEvals() {
+  private Pair<Vector, Integer> lineSearch(Vector model, Vector descentDirection) {
     if (examples.isEmpty()) {
       loadData();
     }
@@ -160,7 +338,6 @@ public class SlaveTask implements Task {
       f = example.predict(descentDirection);
       ee.set(i, f);
     }
-
     final double[] t = ts.getT();
     final Vector evaluations = new DenseVector(t.length);
     int i = 0;
@@ -169,31 +346,45 @@ public class SlaveTask implements Task {
       for (int j = 0; j < examples.size(); j++) {
         final Example example = examples.get(j);
         final double val = zed.get(j) + d * ee.get(j);
-        loss += this.lossFunction.computeLoss(example.getLabel(), val);
+        loss += lossFunction.computeLoss(example.getLabel(), val);
       }
       evaluations.set(i++, loss);
     }
     return new Pair<>(evaluations, examples.size());
   }
 
-  /**
-   * @param model
-   * @return
-   */
-  private Pair<Pair<Double, Integer>, Vector> computeLossAndGradient() {
-    if (examples.isEmpty()) {
-      loadData();
+  private void updateModel(Vector model, Vector descentDirection,
+    final Pair<Vector, Integer> lineSearchEvals) {
+    try (Timer t = new Timer("GetDescentDirection + FindMinEta + UpdateModel")) {
+      minEta = findMinEta(model, descentDirection, lineSearchEvals);
+      descentDirection.scale(minEta);
+      model.add(descentDirection);
     }
-    final Vector gradient = new DenseVector(model.size());
-    double loss = 0.0;
-    for (final Example example : examples) {
-      final double f = example.predict(model);
+    System.out.println("New Model: " + model);
+  }
 
-      final double g = this.lossFunction.computeGradient(example.getLabel(), f);
-      example.addGradient(gradient, g);
-      loss += this.lossFunction.computeLoss(example.getLabel(), f);
+  private double findMinEta(final Vector model, final Vector descentDir,
+    final Pair<Vector, Integer> lineSearchEvals) {
+    final double wNormSqr = model.norm2Sqr();
+    final double dNormSqr = descentDir.norm2Sqr();
+    final double wDotd = model.dot(descentDir);
+    final double[] t = ts.getT();
+    int i = 0;
+    for (final double eta : t) {
+      final double modelNormSqr =
+        wNormSqr + (eta * eta) * dNormSqr + 2 * eta * wDotd;
+      final double loss =
+        regularizeLoss(lineSearchEvals.first.get(i), lineSearchEvals.second,
+          modelNormSqr);
+      lineSearchEvals.first.set(i, loss);
+      ++i;
     }
-    return new Pair<>(new Pair<>(loss, examples.size()), gradient);
+    System.out.println("Regularized LineSearchEvals: " + lineSearchEvals.first);
+    final Tuple<Integer, Double> minTup = lineSearchEvals.first.min();
+    System.out.println("MinTup: " + minTup);
+    final double minT = t[minTup.getKey()];
+    System.out.println("MinT: " + minT);
+    return minT;
   }
 
   /**
@@ -205,10 +396,16 @@ public class SlaveTask implements Task {
     for (final Pair<LongWritable, Text> examplePair : dataSet) {
       final Example example = parser.parse(examplePair.second.toString());
       examples.add(example);
-      if(++i % 2000 == 0) {
+      if (++i % 2000 == 0) {
         LOG.info("Done parsing " + i + " lines");
       }
     }
   }
 
+  private void failPerhaps() {
+    // Temporarily stop generating failure
+    // if (Math.random() < FAILURE_PROB) {
+    // throw new RuntimeException("Simulated Failure");
+    // }
+  }
 }

@@ -15,34 +15,32 @@
  */
 package com.microsoft.reef.examples.nggroup.bgdallreduce;
 
-import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
+import javax.inject.Inject;
+
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 
-import javax.inject.Inject;
-
 /**
  *
  */
-public class LineSearchReduceFunction implements
-  ReduceFunction<Pair<Vector, Integer>> {
+public class ModelReduceFunction implements
+  ReduceFunction<Pair<Integer, Vector>> {
 
   @Inject
-  public LineSearchReduceFunction() {
+  public ModelReduceFunction() {
   }
 
   @Override
-  public Pair<Vector, Integer> apply(final Iterable<Pair<Vector, Integer>> evals) {
-    Vector combinedEvaluations = null;
-    int numEx = 0;
-    for (final Pair<Vector, Integer> eval : evals) {
-      if (combinedEvaluations == null) {
-        combinedEvaluations = new DenseVector(eval.first.size());
+  public Pair<Integer, Vector> apply(final Iterable<Pair<Integer, Vector>> evals) {
+    Vector model = null;
+    int max = Integer.MIN_VALUE;
+    for (final Pair<Integer, Vector> eval : evals) {
+      if (eval.first.intValue() > max) {
+        max = eval.first.intValue();
+        model = eval.second;
       }
-      combinedEvaluations.add(eval.first);
-      numEx += eval.second;
     }
-    return new Pair<>(combinedEvaluations, numEx);
+    return new Pair<>(max, model);
   }
 }

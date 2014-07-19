@@ -37,13 +37,6 @@ import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.SVMLightParser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.ControlMessageBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.DescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.LineSearchEvaluationsReducer;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.LossAndGradientReducer;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.MinEtaBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelAndDescentDirectionBroadcaster;
-import com.microsoft.reef.examples.nggroup.bgd.operatornames.ModelBroadcaster;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.BGDControlParameters;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.EnableRampup;
@@ -52,12 +45,13 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.bgd.utils.SubConfiguration;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LineSearchEvaluationsAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LossAndGradientAllReducer;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
-import com.microsoft.reef.io.network.nggroup.impl.config.BroadcastOperatorSpec;
-import com.microsoft.reef.io.network.nggroup.impl.config.ReduceOperatorSpec;
+import com.microsoft.reef.io.network.nggroup.impl.config.AllReduceOperatorSpec;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
@@ -82,98 +76,52 @@ public class BGDDriver {
   private static final Tang TANG = Tang.Factory.getTang();
 
   private final DataLoadingService dataLoadingService;
-
   private final GroupCommDriver groupCommDriver;
-
   private final CommunicationGroupDriver allCommGroup;
-
   private final AtomicBoolean masterSubmitted = new AtomicBoolean(false);
-
   private final AtomicInteger slaveIds = new AtomicInteger(0);
-
   private String groupCommConfiguredMasterId;
-
   private final ConfigurationSerializer confSerializer;
-
   private final Map<String, RunningTask> runningTasks = new HashMap<>();
-
   private final AtomicBoolean jobComplete = new AtomicBoolean(false);
-
-  private final Codec<ArrayList<Double>> lossCodec = new SerializableCodec<ArrayList<Double>>();
-
+  private final Codec<ArrayList<Double>> lossCodec =
+    new SerializableCodec<ArrayList<Double>>();
   private final BGDControlParameters bgdControlParameters;
 
-
   @Inject
-  public BGDDriver(
-      final DataLoadingService dataLoadingService,
-      final GroupCommDriver groupCommDriver,
-      final ConfigurationSerializer confSerializer,
-      final BGDControlParameters bgdControlParameters) {
+  public BGDDriver(final DataLoadingService dataLoadingService,
+    final GroupCommDriver groupCommDriver,
+    final ConfigurationSerializer confSerializer,
+    final BGDControlParameters bgdControlParameters) {
     this.dataLoadingService = dataLoadingService;
     this.groupCommDriver = groupCommDriver;
     this.confSerializer = confSerializer;
     this.bgdControlParameters = bgdControlParameters;
-
     final int minNumOfPartitions =
-            bgdControlParameters.isRampup()
-            ? bgdControlParameters.getMinParts()
-            : dataLoadingService.getNumberOfPartitions();
-    this.allCommGroup = this.groupCommDriver.newCommunicationGroup(
-        AllCommunicationGroup.class,
-        minNumOfPartitions + 1);
+      bgdControlParameters.isRampup() ? bgdControlParameters.getMinParts()
+        : dataLoadingService.getNumberOfPartitions();
+    // The number of tasks is equal to the number of partitions
+    this.allCommGroup =
+      this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
+        minNumOfPartitions);
     LOG.info("Obtained all communication group");
-
-
-    final ReduceFunction<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReduceFunction = new LossAndGradientReduceFunction();
-    final ReduceFunction<Pair<Vector, Integer>> lineSearchReduceFunction = new LineSearchReduceFunction();
+    final ReduceFunction<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReduceFunction =
+      new LossAndGradientReduceFunction();
+    final ReduceFunction<Pair<Vector, Integer>> lineSearchReduceFunction =
+      new LineSearchReduceFunction();
     allCommGroup
-        .addBroadcast(ControlMessageBroadcaster.class,
-            BroadcastOperatorSpec
-                .newBuilder()
-                .setSenderId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .build())
-        .addBroadcast(ModelBroadcaster.class,
-            BroadcastOperatorSpec
-                .newBuilder()
-                .setSenderId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .build())
-        .addReduce(LossAndGradientReducer.class,
-            ReduceOperatorSpec
-                .newBuilder()
-                .setReceiverId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
-                .build())
-        .addBroadcast(ModelAndDescentDirectionBroadcaster.class,
-            BroadcastOperatorSpec
-                .newBuilder()
-                .setSenderId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .build())
-        .addBroadcast(DescentDirectionBroadcaster.class,
-            BroadcastOperatorSpec
-                .newBuilder()
-                .setSenderId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .build())
-        .addReduce(LineSearchEvaluationsReducer.class,
-            ReduceOperatorSpec
-                .newBuilder()
-                .setReceiverId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .setReduceFunctionClass(lineSearchReduceFunction.getClass())
-                .build())
-        .addBroadcast(MinEtaBroadcaster.class,
-            BroadcastOperatorSpec
-                .newBuilder()
-                .setSenderId("MasterTask")
-                .setDataCodecClass(SerializableCodec.class)
-                .build())
-        .finalise();
-
+      .addAllReduce(
+        LossAndGradientAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(SerializableCodec.class)
+          .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
+          .build())
+      .addAllReduce(
+        LineSearchEvaluationsAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(SerializableCodec.class)
+          .setReduceFunctionClass(lineSearchReduceFunction.getClass()).build())
+      .finalise();
     LOG.log(Level.INFO, "Added operators to allCommGroup");
   }
 
@@ -183,7 +131,8 @@ public class BGDDriver {
     public void onNext(final CompletedTask task) {
       LOG.info("Got complete task-" + task.getId());
       final byte[] retVal = task.get();
-      if (retVal != null) {
+      // Only output the result from master task
+      if (retVal != null && task.getId().equals("MasterTask")) {
         final List<Double> losses = BGDDriver.this.lossCodec.decode(retVal);
         for (final Double loss : losses) {
           System.out.println(loss);
@@ -199,9 +148,11 @@ public class BGDDriver {
         } else {
           LOG.info("Master must have closed my activ context");
         }
+        // In AllReduce context, we keep one slave task as master task
         if (task.getId().equals("MasterTask")) {
           jobComplete.set(true);
-          LOG.info("I am Master. Job complete. Closing other running tasks: " + runningTasks.values());
+          LOG.info("I am Master. Job complete. Closing other running tasks: "
+            + runningTasks.values());
           for (final RunningTask runTask : runningTasks.values()) {
             runTask.getActiveContext().close();
           }
@@ -210,7 +161,6 @@ public class BGDDriver {
         }
       }
     }
-
   }
 
   final class TaskRunningHandler implements EventHandler<RunningTask> {
@@ -222,20 +172,16 @@ public class BGDDriver {
           LOG.info("Job has not completed yet. Adding to runningTasks");
           runningTasks.put(runningTask.getId(), runningTask);
         } else {
-          LOG.info("Job has completed. Not adding to runningTasks. Closing the active context");
+          LOG
+            .info("Job has completed. Not adding to runningTasks. Closing the active context");
           runningTask.getActiveContext().close();
         }
       }
     }
-
   }
 
   final class ContextActiveHandler implements EventHandler<ActiveContext> {
 
-
-    /**
-     *
-     */
     private static final double STARTUP_FAILURE_PROB = 0.01;
 
     @Override
@@ -243,40 +189,37 @@ public class BGDDriver {
       LOG.info("Got active context-" + activeContext.getId());
       synchronized (runningTasks) {
         if (jobComplete.get()) {
-          LOG.info("Job has completed. Not submitting any task. Closing activecontext");
+          LOG
+            .info("Job has completed. Not submitting any task. Closing activecontext");
           activeContext.close();
         }
       }
-      /**
-       * The active context can be either from
-       * data loading service or after network
-       * service has loaded contexts. So check
-       * if the GroupCommDriver knows if it was
-       * configured by one of the communication
-       * groups
+      /*
+       * The active context can be either from data loading service or after
+       * network service has loaded contexts. So check if the GroupCommDriver
+       * knows if it was configured by one of the communication groups
        */
       if (groupCommDriver.configured(activeContext)) {
-        if (activeContext.getId().equals(groupCommConfiguredMasterId) && !masterTaskSubmitted()) {
-          final Configuration partialTaskConf = Configurations.merge(
-                  TaskConfiguration.CONF
-                  .set(TaskConfiguration.IDENTIFIER, "MasterTask")
-                  .set(TaskConfiguration.TASK, MasterTask.class)
-                  .build(),
-                  SubConfiguration.from(
-                          bgdControlParameters.getConfiguration(),
-                          ModelDimensions.class, Lambda.class,
-                          Eps.class, Iterations.class, EnableRampup.class));
-
+        if (activeContext.getId().equals(groupCommConfiguredMasterId)
+          && !masterTaskSubmitted()) {
+          final Configuration partialTaskConf =
+            Configurations.merge(getSlaveTaskConf("MasterTask")
+            // ,getTaskPoisonConfiguration()
+              );
           allCommGroup.addTask(partialTaskConf);
-          final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+          final Configuration taskConf =
+            groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting MasterTask conf");
           LOG.info(confSerializer.toString(taskConf));
           activeContext.submitTask(taskConf);
         } else {
-          final Configuration partialTaskConf = Configurations.merge(getSlaveTaskConf(getSlaveId(activeContext)),
-                  getTaskPoisonConfiguration());
+          final Configuration partialTaskConf =
+            Configurations.merge(getSlaveTaskConf(getSlaveId(activeContext))
+            // ,getTaskPoisonConfiguration()
+              );
           allCommGroup.addTask(partialTaskConf);
-          final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+          final Configuration taskConf =
+            groupCommDriver.getTaskConfiguration(partialTaskConf);
           LOG.info("Submitting SlaveTask conf");
           LOG.info(confSerializer.toString(taskConf));
           activeContext.submitTask(taskConf);
@@ -299,9 +242,8 @@ public class BGDDriver {
 
     private Configuration getTaskPoisonConfiguration() {
       return PoisonedConfiguration.TASK_CONF
-          .set(PoisonedConfiguration.CRASH_PROBABILITY, STARTUP_FAILURE_PROB)
-          .set(PoisonedConfiguration.CRASH_TIMEOUT, 1)
-          .build();
+        .set(PoisonedConfiguration.CRASH_PROBABILITY, STARTUP_FAILURE_PROB)
+        .set(PoisonedConfiguration.CRASH_TIMEOUT, 1).build();
     }
 
     /**
@@ -313,7 +255,8 @@ public class BGDDriver {
         final Injector injector = TANG.newInjector(contextConf);
         return injector.getNamedInstance(ContextIdentifier.class);
       } catch (final InjectionException e) {
-        throw new RuntimeException("Unable to inject context identifier from context conf", e);
+        throw new RuntimeException(
+          "Unable to inject context identifier from context conf", e);
       }
     }
 
@@ -334,16 +277,27 @@ public class BGDDriver {
   }
 
   private Configuration getSlaveTaskConf(final String taskId) {
-    return Tang.Factory.getTang()
+    // Original master task conf
+    // final Configuration partialTaskConf =
+    // Configurations.merge(
+    // TaskConfiguration.CONF
+    // .set(TaskConfiguration.IDENTIFIER, "MasterTask")
+    // .set(TaskConfiguration.TASK, MasterTask.class).build(),
+    // SubConfiguration.from(bgdControlParameters.getConfiguration(),
+    // ModelDimensions.class, Lambda.class, Eps.class,
+    // Iterations.class, EnableRampup.class));
+    // Make master task conf and slave task conf be the same
+    return Configurations.merge(
+      Tang.Factory
+        .getTang()
         .newConfigurationBuilder(
-            TaskConfiguration.CONF
-                .set(TaskConfiguration.IDENTIFIER, taskId)
-                .set(TaskConfiguration.TASK, SlaveTask.class)
-                .build())
-        .bindNamedParameter(ModelDimensions.class, Integer.toString(bgdControlParameters.getDimensions()))
+          TaskConfiguration.CONF.set(TaskConfiguration.IDENTIFIER, taskId)
+            .set(TaskConfiguration.TASK, SlaveTask.class).build())
         .bindImplementation(Parser.class, SVMLightParser.class)
-        .bindImplementation(LossFunction.class, bgdControlParameters.getLossFunction())
-        .build();
+        .bindImplementation(LossFunction.class,
+          bgdControlParameters.getLossFunction()).build(), SubConfiguration
+        .from(bgdControlParameters.getConfiguration(), ModelDimensions.class,
+          Lambda.class, Eps.class, Iterations.class, EnableRampup.class));
   }
 
   final class TaskFailedHandler implements EventHandler<FailedTask> {
@@ -352,10 +306,10 @@ public class BGDDriver {
     public void onNext(final FailedTask failedTask) {
       final String failedTaskId = failedTask.getId();
       LOG.info("Got failed Task " + failedTaskId);
-
       synchronized (runningTasks) {
         if (jobComplete.get()) {
-          LOG.info("Job has completed. Not resubmitting. Closing activecontext");
+          LOG
+            .info("Job has completed. Not resubmitting. Closing activecontext");
           final RunningTask rTask = runningTasks.remove(failedTaskId);
           if (rTask != null) {
             rTask.getActiveContext().close();
@@ -367,13 +321,13 @@ public class BGDDriver {
       }
       final ActiveContext activeContext = failedTask.getActiveContext().get();
       final Configuration partialTaskConf = getSlaveTaskConf(failedTaskId);
-      //Do not add the task back
-      //allCommGroup.addTask(partialTaskConf);
-      final Configuration taskConf = groupCommDriver.getTaskConfiguration(partialTaskConf);
+      // Do not add the task back
+      // allCommGroup.addTask(partialTaskConf);
+      final Configuration taskConf =
+        groupCommDriver.getTaskConfiguration(partialTaskConf);
       LOG.info("Submitting SlaveTask conf");
       LOG.info(confSerializer.toString(taskConf));
       activeContext.submitTask(taskConf);
     }
   }
-
 }

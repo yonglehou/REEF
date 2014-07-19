@@ -26,29 +26,31 @@ import java.util.logging.Logger;
 /**
  *
  */
-public class LossAndGradientReduceFunction implements ReduceFunction<Pair<Pair<Double,Integer>,Vector>>{
+public class LossAndGradientReduceFunction implements
+  ReduceFunction<Pair<Pair<Double, Integer>, Vector>> {
 
   private static final Logger LOG = Logger
-      .getLogger(LossAndGradientReduceFunction.class.getName());
+    .getLogger(LossAndGradientReduceFunction.class.getName());
 
   @Inject
   public LossAndGradientReduceFunction() {
   }
 
   @Override
-  public Pair<Pair<Double,Integer>, Vector> apply(final Iterable<Pair<Pair<Double,Integer>, Vector>> lags) {
+  public Pair<Pair<Double, Integer>, Vector> apply(
+    final Iterable<Pair<Pair<Double, Integer>, Vector>> lags) {
     double lossSum = 0.0;
     int numEx = 0;
     Vector combinedGradient = null;
-    for (final Pair<Pair<Double,Integer>, Vector> lag : lags) {
-      if(combinedGradient==null){
+    for (final Pair<Pair<Double, Integer>, Vector> lag : lags) {
+      if (combinedGradient == null) {
         combinedGradient = new DenseVector(lag.second.size());
       }
       lossSum += lag.first.first;
       numEx += lag.first.second;
       combinedGradient.add(lag.second);
     }
-    return new Pair<>(new Pair<>(lossSum,numEx),combinedGradient);
+    return new Pair<>(new Pair<>(lossSum, numEx), combinedGradient);
   }
 
 }
