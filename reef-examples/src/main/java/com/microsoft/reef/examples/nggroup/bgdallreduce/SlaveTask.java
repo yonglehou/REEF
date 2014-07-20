@@ -36,8 +36,11 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.bgd.utils.StepSizes;
 import com.microsoft.reef.examples.nggroup.bgd.utils.Timer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ControlMessageAllReducer;
 import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LineSearchEvaluationsAllReducer;
 import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LossAndGradientAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelDescentDirectionAllReducer;
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.Tuple;
 import com.microsoft.reef.io.data.loading.api.DataSet;
@@ -59,7 +62,10 @@ public class SlaveTask implements Task {
 
   private static final double FAILURE_PROB = 0.001;
   private final CommunicationGroupClient communicationGroupClient;
+  private final AllReducer<Pair<Integer, Pair<Integer, Boolean>>> controlMessageAllReducer;
+  private final AllReducer<Vector> modelAllReducer;
   private final AllReducer<Pair<Pair<Double, Integer>, Vector>> lossAndGradientAllReducer;
+  private final AllReducer<Pair<Vector, Vector>> modelDescentDirectionAllReducer;
   private final AllReducer<Pair<Vector, Integer>> lineSearchEvaluationsAllReducer;
 
   private final List<Example> examples = new ArrayList<>();
@@ -98,9 +104,18 @@ public class SlaveTask implements Task {
     this.ts = ts;
     communicationGroupClient =
       groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    controlMessageAllReducer =
+      (AllReducer<Pair<Integer, Pair<Integer, Boolean>>>) communicationGroupClient
+        .getAllReducer(ControlMessageAllReducer.class);
+    modelAllReducer =
+      (AllReducer<Vector>) communicationGroupClient
+        .getAllReducer(ModelAllReducer.class);
     lossAndGradientAllReducer =
       (AllReducer<Pair<Pair<Double, Integer>, Vector>>) communicationGroupClient
         .getAllReducer(LossAndGradientAllReducer.class);
+    modelDescentDirectionAllReducer =
+      (AllReducer<Pair<Vector, Vector>>) communicationGroupClient
+        .getAllReducer(ModelDescentDirectionAllReducer.class);
     lineSearchEvaluationsAllReducer =
       (AllReducer<Pair<Vector, Integer>>) communicationGroupClient
         .getAllReducer(LineSearchEvaluationsAllReducer.class);
@@ -126,8 +141,9 @@ public class SlaveTask implements Task {
       // and if the input data is required to send.
       if (curOp == 0) {
         Pair<Integer, Pair<Integer, Boolean>> recvState =
-          allreducer.apply(new Pair<Integer, Pair<Integer, Boolean>>(curIter,
-            new Pair<>(startOp, syncModel)));
+          controlMessageAllReducer
+            .apply(new Pair<Integer, Pair<Integer, Boolean>>(curIter,
+              new Pair<>(startOp, syncModel)));
         if (recvState != null) {
           syncModel = recvState.second.second.booleanValue();
           ownModel = true;
@@ -151,7 +167,7 @@ public class SlaveTask implements Task {
           if (!ownModel) {
             model = new DenseVector(new double[0]);
           }
-          recvModel = allreducer.apply(model);
+          recvModel = modelAllReducer.apply(model);
           if (recvModel != null) {
             model = recvModel;
             syncModel = false;
@@ -192,7 +208,8 @@ public class SlaveTask implements Task {
               new Pair<Vector, Vector>(new DenseVector(new double[0]),
                 new DenseVector(new double[0]));
           }
-          Pair<Vector, Vector> recvModelPair = allreducer.apply(modelPair);
+          Pair<Vector, Vector> recvModelPair =
+            modelDescentDirectionAllReducer.apply(modelPair);
           if (recvModelPair != null) {
             model = recvModelPair.first;
             descentDirection = recvModelPair.second;

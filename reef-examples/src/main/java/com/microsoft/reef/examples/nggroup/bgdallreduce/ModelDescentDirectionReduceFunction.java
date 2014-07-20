@@ -25,22 +25,23 @@ import com.microsoft.reef.io.network.util.Utils.Pair;
  *
  */
 public class ModelDescentDirectionReduceFunction implements
-  ReduceFunction<Pair<Integer, Vector>> {
+  ReduceFunction<Pair<Vector, Vector>> {
 
   @Inject
   public ModelDescentDirectionReduceFunction() {
   }
 
   @Override
-  public Pair<Integer, Vector> apply(final Iterable<Pair<Integer, Vector>> evals) {
+  public Pair<Vector, Vector> apply(final Iterable<Pair<Vector, Vector>> evals) {
     Vector model = null;
-    int max = Integer.MIN_VALUE;
-    for (final Pair<Integer, Vector> eval : evals) {
-      if (eval.first.intValue() > max) {
-        max = eval.first.intValue();
-        model = eval.second;
+    Vector descentDirection = null;
+    for (final Pair<Vector, Vector> eval : evals) {
+      if (eval.first.size() > 0 && eval.second.size() > 0) {
+        model = eval.first;
+        descentDirection = eval.second;
+        break;
       }
     }
-    return new Pair<>(max, model);
+    return new Pair<>(model, descentDirection);
   }
 }

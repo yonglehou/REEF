@@ -45,8 +45,11 @@ import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.examples.nggroup.bgd.utils.SubConfiguration;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ControlMessageAllReducer;
 import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LineSearchEvaluationsAllReducer;
 import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LossAndGradientAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelDescentDirectionAllReducer;
 import com.microsoft.reef.io.data.loading.api.DataLoadingService;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -105,17 +108,41 @@ public class BGDDriver {
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
         minNumOfPartitions);
     LOG.info("Obtained all communication group");
+    final ReduceFunction<Pair<Integer, Pair<Integer, Boolean>>> controlMessageReduceFunction =
+      new ControlMessageReduceFunction();
+    final ReduceFunction<Vector> modelReduceFunction =
+      new ModelReduceFunction();
     final ReduceFunction<Pair<Pair<Double, Integer>, Vector>> lossAndGradientReduceFunction =
       new LossAndGradientReduceFunction();
+    final ReduceFunction<Pair<Vector, Vector>> modelDescentDirectionReduceFunction =
+      new ModelDescentDirectionReduceFunction();
     final ReduceFunction<Pair<Vector, Integer>> lineSearchReduceFunction =
       new LineSearchReduceFunction();
     allCommGroup
+      .addAllReduce(
+        ControlMessageAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(SerializableCodec.class)
+          .setReduceFunctionClass(controlMessageReduceFunction.getClass())
+          .build())
+      .addAllReduce(
+        ModelAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(SerializableCodec.class)
+          .setReduceFunctionClass(modelReduceFunction.getClass()).build())
       .addAllReduce(
         LossAndGradientAllReducer.class,
         AllReduceOperatorSpec.newBuilder()
           .setDataCodecClass(SerializableCodec.class)
           .setReduceFunctionClass(lossAndGradientReduceFunction.getClass())
           .build())
+      .addAllReduce(
+        ModelDescentDirectionAllReducer.class,
+        AllReduceOperatorSpec
+          .newBuilder()
+          .setDataCodecClass(SerializableCodec.class)
+          .setReduceFunctionClass(
+            modelDescentDirectionReduceFunction.getClass()).build())
       .addAllReduce(
         LineSearchEvaluationsAllReducer.class,
         AllReduceOperatorSpec.newBuilder()
