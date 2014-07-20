@@ -289,4 +289,35 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   public Class<? extends Name<String>> getName() {
     return groupName;
   }
+  
+  //////////////////////////////////////////
+  // Add new methods for allreduce operators
+
+  public String getTaskID() {
+    return taskId;
+  }
+
+  @Override
+  public void checkIteration() {
+    // Let groupCommNetworkHandler Block topology update message
+    // Let all allreduce operaters enter iteration checking
+  }
+
+  @Override
+  public boolean isCurrentIterationFailed() {
+    // Notify user if the current iteration is failed
+    return false;
+  }
+
+  @Override
+  public boolean isNewTaskComming() {
+    // let user know if there is new tasks added after iteration update
+    return false;
+  }
+
+  @Override
+  public void updateIteration() {
+    // Update iteration counter
+    // Unblock Topology update message
+  }
 }

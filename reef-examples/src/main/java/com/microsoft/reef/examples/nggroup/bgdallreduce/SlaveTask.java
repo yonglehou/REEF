@@ -251,17 +251,20 @@ public class SlaveTask implements Task {
   }
 
   private boolean checkAndUpdate() {
+    // Still no solution to update topology at the end of an iteration
+    // Because adding new tasks is only known to few tasks and all the tasks
+    // are keeping running, it is hard to sync all these tasks and deadlock can
+    // happen, so we still let driver to decide the topology change, and notify
+    // uers here.
+    boolean isOK = true;
     communicationGroupClient.checkIteration();
     if (communicationGroupClient.isCurrentIterationFailed()) {
-      communicationGroupClient.updateTopologyAndIteration();
-      return false;
-    } else if (communicationGroupClient.isNewTaskAvailable()) {
-      // May or may not update
-      communicationGroupClient.updateTopologyAndIteration();
-      return false;
+      isOK = false;
+    } else if (communicationGroupClient.isNewTaskComming()) {
+      isOK = false;
     }
     communicationGroupClient.updateIteration();
-    return true;
+    return isOK;
   }
 
   private boolean converged(final double gradNorm) {

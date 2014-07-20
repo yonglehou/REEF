@@ -48,5 +48,10 @@ public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> 
    * @param operName
    */
   byte[] waitForTopologyChanges(Class<? extends Name<String>> operName);
+  
+  // The following two methods are used to synchronize topology update
+  // in allreduce network.
+  void blockTopologyMessage();
 
+  void unblockTopologyMessage();
 }

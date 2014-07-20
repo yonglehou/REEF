@@ -95,4 +95,18 @@ public class CommGroupNetworkHandlerImpl implements com.microsoft.reef.io.networ
     }
   }
 
+
+  @Override
+  public void blockTopologyMessage() {
+    // TODO Auto-generated method stub
+    
+  }
+
+
+  @Override
+  public void unblockTopologyMessage() {
+    // TODO Auto-generated method stub
+    
+  }
+
 }

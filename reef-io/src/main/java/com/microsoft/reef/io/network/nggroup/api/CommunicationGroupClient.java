@@ -79,4 +79,16 @@ public interface CommunicationGroupClient {
    * @return
    */
   Class<? extends Name<String>> getName();
+
+  // The following interfaces are added for allreduce operators.
+  
+  String getTaskID();
+
+  void checkIteration();
+
+  boolean isCurrentIterationFailed();
+
+  boolean isNewTaskComming();
+
+  void updateIteration();
 }
