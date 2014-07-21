@@ -108,7 +108,7 @@ public class BGDDriver {
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
         minNumOfPartitions);
     LOG.info("Obtained all communication group");
-    final ReduceFunction<Pair<Integer, Pair<Integer, Boolean>>> controlMessageReduceFunction =
+    final ReduceFunction<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> controlMessageReduceFunction =
       new ControlMessageReduceFunction();
     final ReduceFunction<Vector> modelReduceFunction =
       new ModelReduceFunction();

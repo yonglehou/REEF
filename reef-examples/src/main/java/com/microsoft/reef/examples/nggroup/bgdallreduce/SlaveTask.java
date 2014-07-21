@@ -62,7 +62,7 @@ public class SlaveTask implements Task {
 
   private static final double FAILURE_PROB = 0.001;
   private final CommunicationGroupClient communicationGroupClient;
-  private final AllReducer<Pair<Integer, Pair<Integer, Boolean>>> controlMessageAllReducer;
+  private final AllReducer<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> controlMessageAllReducer;
   private final AllReducer<Vector> modelAllReducer;
   private final AllReducer<Pair<Pair<Double, Integer>, Vector>> lossAndGradientAllReducer;
   private final AllReducer<Pair<Vector, Vector>> modelDescentDirectionAllReducer;
@@ -105,7 +105,7 @@ public class SlaveTask implements Task {
     communicationGroupClient =
       groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
     controlMessageAllReducer =
-      (AllReducer<Pair<Integer, Pair<Integer, Boolean>>>) communicationGroupClient
+      (AllReducer<Pair<Pair<Integer,Integer>, Pair<String, Boolean>>>) communicationGroupClient
         .getAllReducer(ControlMessageAllReducer.class);
     modelAllReducer =
       (AllReducer<Vector>) communicationGroupClient
@@ -128,6 +128,7 @@ public class SlaveTask implements Task {
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
+    String taskID = communicationGroupClient.getTaskID();
     Vector model = new DenseVector(dimensions);
     Vector descentDirection = null;
     int curIter = 0;
@@ -140,22 +141,20 @@ public class SlaveTask implements Task {
       // Get the current iteration, operation
       // and if the input data is required to send.
       if (curOp == 0) {
-        Pair<Integer, Pair<Integer, Boolean>> recvState =
-          controlMessageAllReducer
-            .apply(new Pair<Integer, Pair<Integer, Boolean>>(curIter,
-              new Pair<>(startOp, syncModel)));
+        Pair<Pair<Integer, Integer>, Pair<String, Boolean>> recvState =
+          controlMessageAllReducer.apply(new Pair<>(
+            new Pair<>(curIter, startOp), new Pair<>(taskID, syncModel)));
         if (recvState != null) {
           syncModel = recvState.second.second.booleanValue();
           ownModel = true;
           if (syncModel) {
-            if (curIter != recvState.first.intValue()
-              && curOp != recvState.second.first.intValue()) {
+            if (!recvState.first.second.equals(taskID)) {
               ownModel = false;
             }
           }
-          curIter = recvState.first.intValue();
+          curIter = recvState.first.first.intValue();
           // Update curOp to 1 or 2
-          curOp = recvState.second.first.intValue();
+          curOp = recvState.first.second.intValue();
         } else {
           // curOp won't change
           // Check and update at the bottom
@@ -171,7 +170,7 @@ public class SlaveTask implements Task {
           if (recvModel != null) {
             model = recvModel;
             syncModel = false;
-            ownModel = true;
+            ownModel = true; // allreduce succeeds.
           } else {
             // curIter doesn't change
             // curOp won't increase

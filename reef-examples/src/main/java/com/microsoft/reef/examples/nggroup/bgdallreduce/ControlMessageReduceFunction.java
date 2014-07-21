@@ -21,15 +21,15 @@ import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 
 public class ControlMessageReduceFunction implements
-  ReduceFunction<Pair<Integer, Pair<Integer, Boolean>>> {
+  ReduceFunction<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> {
 
   @Inject
   public ControlMessageReduceFunction() {
   }
 
   @Override
-  public Pair<Integer, Pair<Integer, Boolean>> apply(
-    final Iterable<Pair<Integer, Pair<Integer, Boolean>>> evals) {
+  public Pair<Pair<Integer, Integer>, Pair<String, Boolean>> apply(
+    final Iterable<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> evals) {
     // Find the max number of integer,
     // this is where the operation should resume.
     // If the max is changed, set sendModel to be true.
@@ -37,24 +37,30 @@ public class ControlMessageReduceFunction implements
     int maxOp = Integer.MIN_VALUE;
     int minIte = Integer.MAX_VALUE;
     int minOp = Integer.MAX_VALUE;
+    String taskID = null;
     boolean sendModel = false;
-    for (final Pair<Integer, Pair<Integer, Boolean>> eval : evals) {
-      if (maxIte < eval.first.intValue()) {
-        maxIte = eval.first.intValue();
-        maxOp = eval.second.first.intValue();
+    for (final Pair<Pair<Integer, Integer>, Pair<String, Boolean>> eval : evals) {
+      if (maxIte < eval.first.first.intValue()) {
+        maxIte = eval.first.first.intValue();
+        maxOp = eval.first.second.intValue();
+        // Task ID matches with
+        // the task which contains
+        // the max iterations and the max op
+        taskID = eval.second.first;
       }
-      if (maxIte == eval.first.intValue()) {
-        if (maxOp < eval.second.first.intValue()) {
-          maxOp = eval.second.first.intValue();
+      if (maxIte == eval.first.first.intValue()) {
+        if (maxOp < eval.first.second.intValue()) {
+          maxOp = eval.first.second.intValue();
+          taskID = eval.second.first;
         }
       }
-      if (minIte > eval.first.intValue()) {
-        minIte = eval.first.intValue();
-        minOp = eval.second.first.intValue();
+      if (minIte > eval.first.first.intValue()) {
+        minIte = eval.first.first.intValue();
+        minOp = eval.first.second.intValue();
       }
-      if (minIte == eval.first.intValue()) {
-        if (minOp > eval.second.first.intValue()) {
-          minOp = eval.second.first.intValue();
+      if (minIte == eval.first.first.intValue()) {
+        if (minOp > eval.first.second.intValue()) {
+          minOp = eval.first.second.intValue();
         }
       }
       // Update to true if any eval says its sendModel is true.
@@ -71,7 +77,7 @@ public class ControlMessageReduceFunction implements
       sendModel = true;
     }
     // If iteration and op are all equal,see which eval says true.
-    return new Pair<Integer, Pair<Integer, Boolean>>(maxIte,
-      new Pair<Integer, Boolean>(maxOp, sendModel));
+    return new Pair<Pair<Integer, Integer>, Pair<String, Boolean>>(new Pair<>(
+      maxIte, maxOp), new Pair<>(taskID, sendModel));
   }
 }
