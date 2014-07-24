@@ -106,6 +106,7 @@ public class BGDDriver {
     // The number of tasks is equal to the number of partitions
     this.allCommGroup =
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
+      // minNumOfPartitions / 2 + 1
         minNumOfPartitions);
     LOG.info("Obtained all communication group");
     final ReduceFunction<ControlMessage> controlMessageReduceFunction =
@@ -157,6 +158,7 @@ public class BGDDriver {
     @Override
     public void onNext(final CompletedTask task) {
       LOG.info("Got complete task-" + task.getId());
+      System.out.println("Got complete task-" + task.getId());
       final byte[] retVal = task.get();
       // Only output the result from master task
       if (retVal != null && task.getId().equals("MasterTask")) {

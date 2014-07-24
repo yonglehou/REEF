@@ -482,6 +482,8 @@
                                 <argument>50</argument>
                                 <argument>-lambda</argument>
                                 <argument>.0056</argument>
+                                <argument>-splits</argument>
+                                <argument>6</argument>
                             </arguments>
         				</configuration>
         			</plugin>

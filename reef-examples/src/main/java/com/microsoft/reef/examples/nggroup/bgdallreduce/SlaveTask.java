@@ -47,7 +47,6 @@ import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.impl.AllReducer;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
@@ -131,25 +130,41 @@ public class SlaveTask implements Task {
     String leadingTaskID = null;
     int curIte = 0;
     int curOp = 0;
+    boolean stop = false;
     while (true) {
       // Control message allreduce
       // Get the current iteration, operation
       // and if the input data is required to send.
-      System.out.println("SYNC ITERATION ");
+      System.out.println("SYNC ITERATION.");
+      // MasterTask decides to stop the computation
+      if (stop) {
+        if (taskID.compareTo("MasterTask") == 0) {
+          stop = true;
+        } else {
+          stop = false;
+        }
+      }
       failPerhaps(taskID);
       ControlMessage recvState =
         controlMessageAllReducer.apply(new ControlMessage(startIte, startOp,
-          taskID, syncModel));
+          taskID, syncModel, stop));
       if (recvState != null) {
         curIte = recvState.iteration;
         curOp = recvState.operation;
         leadingTaskID = recvState.taskID;
         syncModel = recvState.syncData;
-        System.out.println("GET ITERATION " + curIte + " GET OP " + curOp
-          + " SYNC MODEL " + syncModel + " LEADING TASK ID: " + leadingTaskID);
+        stop = recvState.stop;
+        // stop =
+        System.out.println("ITERATION " + curIte + " OP " + curOp
+          + " SYNC MODEL " + syncModel + " LEADING TASK ID: " + leadingTaskID
+          + " STOP: " + stop);
       } else {
+        System.out.println("SYNC FAILS");
         curIte = 0;
         curOp = 0;
+      }
+      if(stop) {
+        break;
       }
       if (curOp == 1) {
         Vector recvModel = null;
@@ -178,16 +193,17 @@ public class SlaveTask implements Task {
               + lossAndGradient.first.second);
             Vector gradient = regularizeLossAndGradient(model, lossAndGradient);
             if (converged(startIte, gradient.norm2())) {
-              break;
+              stop = true;
+            } else {
+              descentDirection = getDescentDirection(gradient);
+              startOp = 2;
+              // Continue to next op.
+              curOp = 2;
             }
-            descentDirection = getDescentDirection(gradient);
-            startOp = 2;
-            // Continue to next op.
-            curOp = 2;
           }
         }
       }
-      if (curOp == 2) {
+      if (!stop && curOp == 2) {
         Pair<Vector, Vector> recvModelPair = null;
         if (syncModel) {
           failPerhaps(taskID);
