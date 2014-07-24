@@ -135,8 +135,8 @@ public class SlaveTask implements Task {
       // Control message allreduce
       // Get the current iteration, operation
       // and if the input data is required to send.
-      failPerhaps(taskID);
       System.out.println("SYNC ITERATION ");
+      failPerhaps(taskID);
       ControlMessage recvState =
         controlMessageAllReducer.apply(new ControlMessage(startIte, startOp,
           taskID, syncModel));
@@ -154,6 +154,7 @@ public class SlaveTask implements Task {
       if (curOp == 1) {
         Vector recvModel = null;
         if (syncModel) {
+          failPerhaps(taskID);
           if (taskID.compareTo(leadingTaskID) != 0) {
             recvModel = modelAllReducer.apply(new DenseVector(new double[0]));
           } else {
@@ -167,6 +168,7 @@ public class SlaveTask implements Task {
           startIte = curIte;
           startOp = 1;
           syncModel = false;
+          failPerhaps(taskID);
           Pair<Pair<Double, Integer>, Vector> lossAndGradient =
             allreduceLossAndGradient(model);
           if (lossAndGradient != null) {
@@ -188,6 +190,7 @@ public class SlaveTask implements Task {
       if (curOp == 2) {
         Pair<Vector, Vector> recvModelPair = null;
         if (syncModel) {
+          failPerhaps(taskID);
           if (taskID.compareTo(leadingTaskID) != 0) {
             recvModelPair =
               modelDescentDirectionAllReducer
@@ -208,6 +211,7 @@ public class SlaveTask implements Task {
           startOp = 2;
           syncModel = false;
           // Line search
+          failPerhaps(taskID);
           Pair<Vector, Integer> lineSearchEvals =
             allreduceLineSearch(syncModel, model, descentDirection);
           if (lineSearchEvals != null) {

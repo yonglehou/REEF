@@ -228,7 +228,7 @@ public class AllReducer<T> implements AllReduce<T>,
     // they cannot arrive here.
     // printMsgInfo(msg, "Enter onNext.");
     if (msg.getVersion() != version) {
-      printMsgInfo(msg, "Leave onNext.");
+      printMsgInfo(msg, "WRONG VERSION.");
       return;
     }
     // Use runningLock to sync with startApplying
@@ -414,7 +414,7 @@ public class AllReducer<T> implements AllReduce<T>,
     System.out.println(getQualifiedName() + "current iteration: " + ite);
     boolean isFailed = false;
     // Update topology for the iteration
-    updateNodeTopology(ite);
+    // updateNodeTopology(ite);
     // Prepare applying
     T reducedValue = aElement;
     List<byte[]> valBytes = new LinkedList<byte[]>();
@@ -870,7 +870,7 @@ public class AllReducer<T> implements AllReduce<T>,
     int ite = iteration.get();
     System.out.println("Current iteration: " + ite);
     boolean isFailed = false;
-    updateNodeTopology(ite);
+    // updateNodeTopology(ite);
     // Data structure for allreduce
     Map<Integer, T> reducedValMap = new TreeMap<>();
     for (int i = 0; i < elements.size(); i++) {
@@ -1366,6 +1366,8 @@ public class AllReducer<T> implements AllReduce<T>,
     nextIteration.set(0);
     isNewTaskComing.set(false);
     isIterationChecking.compareAndSet(true, false);
+    // Update topology for the iteration
+    updateNodeTopology(iteration.get());
     finishWorking();
   }
 
