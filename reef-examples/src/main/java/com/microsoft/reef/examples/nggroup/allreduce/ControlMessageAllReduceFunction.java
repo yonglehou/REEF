@@ -17,28 +17,25 @@ package com.microsoft.reef.examples.nggroup.allreduce;
 
 import javax.inject.Inject;
 
-import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
-import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 
 /**
  *
  */
-public class ModelAllReduceFunction implements ReduceFunction<Vector> {
+public class ControlMessageAllReduceFunction implements ReduceFunction<Integer> {
 
   @Inject
-  public ModelAllReduceFunction() {
+  public ControlMessageAllReduceFunction() {
   }
 
   @Override
-  public Vector apply(final Iterable<Vector> elements) {
-    Vector model = null;
-    for (Vector element : elements) {
-      if (model == null) {
-        model = new DenseVector(element.size());
+  public Integer apply(final Iterable<Integer> elements) {
+    int max = Integer.MIN_VALUE;
+    for (Integer element : elements) {
+      if (max < element.intValue()) {
+        max = element.intValue();
       }
-      model.add(element);
     }
-    return model;
+    return max;
   }
 }

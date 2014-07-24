@@ -51,7 +51,8 @@ public interface CommGroupNetworkHandler extends EventHandler<GroupCommMessage> 
   
   // The following two methods are used to synchronize topology update
   // in allreduce network.
-  void blockTopologyMessage();
 
-  void unblockTopologyMessage();
+  void blockAllReduceTopoChangeMsg();
+
+  void unblockAllReduceTopoChangeMsg();
 }

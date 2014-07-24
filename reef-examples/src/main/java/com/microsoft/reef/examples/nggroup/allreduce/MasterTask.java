@@ -15,8 +15,6 @@
  */
 package com.microsoft.reef.examples.nggroup.allreduce;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Logger;
 
 import javax.inject.Inject;
@@ -25,11 +23,11 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.ControlMessageAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
-import com.microsoft.reef.io.network.nggroup.impl.AllReducer;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.annotations.Parameter;
 
@@ -42,46 +40,65 @@ public class MasterTask implements Task {
     .getLogger(MasterTask.class.getName());
 
   private final CommunicationGroupClient communicationGroupClient;
-  private final AllReducer<Vector> modelAllReducer;
+  private final AllReduce<Integer> controlMsgAllReducer;
+  private final AllReduce<Vector> modelAllReducer;
   private final int dimensions;
 
   @Inject
   public MasterTask(final GroupCommClient groupCommClient,
     @Parameter(ModelDimensions.class) final int dimensions) {
-    this.communicationGroupClient = groupCommClient
-      .getCommunicationGroup(AllCommunicationGroup.class);
-    this.modelAllReducer = (AllReducer<Vector>) communicationGroupClient
-      .getAllReducer(ModelAllReducer.class);
+    this.communicationGroupClient =
+      groupCommClient.getCommunicationGroup(AllCommunicationGroup.class);
+    this.controlMsgAllReducer =
+      communicationGroupClient.getAllReducer(ControlMessageAllReducer.class);
+    this.modelAllReducer =
+      communicationGroupClient.getAllReducer(ModelAllReducer.class);
     this.dimensions = dimensions;
   }
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    Vector model = new DenseVector(new double[] { 1, 0 });
+    final long time1 = System.currentTimeMillis();
+    Vector model = new DenseVector(new double[] { 1, 1, 1, 1 });
     Vector newModel = null;
     final int numIters = 50;
-    final long time1 = System.currentTimeMillis();
-    for (int i = 0; i < numIters; i++) {
-      System.out.println("Iter: " + i + " starts.");
-      model.set(1, i);
-      newModel = modelAllReducer.apply(model);
-      if (modelAllReducer.isLastIterationFailed()) {
-        System.out.println("Iter: " + i + " apply data fails.");
-        i = i - modelAllReducer.getNumFailedIterations();
-        newModel = null;
+    int ite = 0;
+    int op = 0;
+    while (ite < numIters) {
+      System.out.println("SYNC ITERATION ");
+      Integer recvIte = controlMsgAllReducer.apply(ite);
+      if (recvIte != null) {
+        ite = recvIte.intValue();
+        op = 1;
+        System.out.println("GET ITERATION " + ite);
       } else {
-        System.out.println("Iter: " + i + " apply data succeeds.");
-        i = (int) newModel.get(1);
+        op = 0;
       }
-      if (newModel != null) {
-        StringBuffer sb = new StringBuffer();
-        for (int j = 0; j < newModel.size(); j++) {
-          sb.append(newModel.get(j) + ",");
+      if (op == 1) {
+        System.out.println("ITERATION " + ite + " STARTS.");
+        newModel = modelAllReducer.apply(model);
+        if (newModel != null) {
+          StringBuffer sb = new StringBuffer();
+          sb.append('[');
+          for (int j = 0; j < newModel.size(); j++) {
+            sb.append(newModel.get(j) + ",");
+          }
+          sb.setCharAt(sb.length() - 1, ']');
+          System.out.println("RESULT " + sb);
+          ite++;
+        } else {
+          System.out.println("RESULT IS NULL.");
         }
-        System.out.println(sb);
-      } else {
-        System.out.println("The result is null.");
       }
+      communicationGroupClient.checkIteration();
+      if (communicationGroupClient.isCurrentIterationFailed()) {
+        System.out.println("CURRENT ITERATION FAILS.");
+      } else {
+        if (communicationGroupClient.isNewTaskComing()) {
+          System.out.println("NEW TASK IS COMING.");
+        }
+      }
+      communicationGroupClient.updateIteration();
     }
     final long time2 = System.currentTimeMillis();
     System.out.println("Allreduce vector of dimensions " + dimensions

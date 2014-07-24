@@ -21,7 +21,8 @@ import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.util.Utils.Pair;
 
 import javax.inject.Inject;
-import java.util.logging.Logger;
+
+// import java.util.logging.Logger;
 
 /**
  *
@@ -29,8 +30,8 @@ import java.util.logging.Logger;
 public class LossAndGradientReduceFunction implements
   ReduceFunction<Pair<Pair<Double, Integer>, Vector>> {
 
-  private static final Logger LOG = Logger
-    .getLogger(LossAndGradientReduceFunction.class.getName());
+  // private static final Logger LOG = Logger
+  // .getLogger(LossAndGradientReduceFunction.class.getName());
 
   @Inject
   public LossAndGradientReduceFunction() {

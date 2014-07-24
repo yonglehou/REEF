@@ -103,7 +103,7 @@ public class BGDClient {
         .setInputFormatClass(TextInputFormat.class)
         .setInputPath(input)
         .setNumberOfDesiredSplits(numSplits)
-        .setComputeRequest(computeRequest)
+        // .setComputeRequest(computeRequest)
         .setDriverConfigurationModule(EnvironmentUtils
             .addClasspath(DriverConfiguration.CONF, DriverConfiguration.GLOBAL_LIBRARIES)
             .set(DriverConfiguration.ON_CONTEXT_ACTIVE, BGDDriver.ContextActiveHandler.class)

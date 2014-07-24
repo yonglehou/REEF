@@ -72,18 +72,8 @@ public class MasterTask implements Task {
         models.get(j).set(1, i);
       }
       newModels = modelAllReducer.apply(models);
-      if (modelAllReducer.isLastIterationFailed()) {
-        System.out.println("Iter: " + i + " apply data fails.");
-        i = i - modelAllReducer.getNumFailedIterations();
-        newModels = null;
-      } else {
-        System.out.println("Iter: " + i + " apply data succeeds.");
-        System.out.println("The size of new models: " + newModels.size());
-        if(!newModels.isEmpty()) {
-          i = (int) newModels.get(0).get(1);
-        }
-      }
       if (newModels != null) {
+        System.out.println("The size of new models: " + newModels.size());
         StringBuffer sb = new StringBuffer();
         for (int j = 0; j < newModels.size(); j++) {
           sb.append('[');
@@ -93,9 +83,20 @@ public class MasterTask implements Task {
           sb.setCharAt(sb.length() - 1, ']');
         }
         System.out.println(sb);
+        if (!newModels.isEmpty()) {
+          i = (int) newModels.get(0).get(1);
+        }
+        System.out.println("Iter: " + i + " apply data succeeds.");
       } else {
-        System.out.println("The result is null.");
+        System.out.println("Iter: " + i + " apply data fails.");
       }
+      communicationGroupClient.checkIteration();
+      if (communicationGroupClient.isCurrentIterationFailed()) {
+        System.out.println("Current iteration fails.");
+      } else if (communicationGroupClient.isNewTaskComing()) {
+        System.out.println("New task is coming.");
+      }
+      communicationGroupClient.updateIteration();
     }
     final long time2 = System.currentTimeMillis();
     System.out.println("Allreduce vector of dimensions " + dimensions

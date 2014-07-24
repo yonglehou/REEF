@@ -15,6 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.api;
 
+import java.util.concurrent.ExecutionException;
+
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.group.operators.Broadcast;
 import com.microsoft.reef.io.network.group.operators.Reduce;
@@ -86,9 +88,9 @@ public interface CommunicationGroupClient {
 
   void checkIteration();
 
-  boolean isCurrentIterationFailed();
+  boolean isCurrentIterationFailed() throws UnsupportedOperationException;
 
-  boolean isNewTaskComming();
+  boolean isNewTaskComing() throws UnsupportedOperationException;
 
   void updateIteration();
 }

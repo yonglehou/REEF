@@ -35,6 +35,7 @@ import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
+import com.microsoft.reef.examples.nggroup.broadcast.parameters.ControlMessageAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
@@ -95,15 +96,21 @@ public class AllReduceDriver {
         numTotalTasks);
     LOG.info("Obtained all communication group");
 
+    final Codec<Integer> controlMsgCodec = new SerializableCodec<>();
     final Codec<Vector> modelCodec = new SerializableCodec<>();
 
-    allCommGroup.addAllReduce(
-      ModelAllReducer.class,
-      AllReduceOperatorSpec.newBuilder()
-        .setDataCodecClass(modelCodec.getClass())
-        .setReduceFunctionClass(ModelAllReduceFunction.class).build())
-      .finalise();
-
+    allCommGroup
+      .addAllReduce(
+        ModelAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(modelCodec.getClass())
+          .setReduceFunctionClass(ModelAllReduceFunction.class).build())
+      .addAllReduce(
+        ControlMessageAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(controlMsgCodec.getClass())
+          .setReduceFunctionClass(ControlMessageAllReduceFunction.class)
+          .build()).finalise();
     LOG.info("Added operators to allCommGroup");
   }
 

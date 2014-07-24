@@ -18,66 +18,65 @@ package com.microsoft.reef.examples.nggroup.bgdallreduce;
 import javax.inject.Inject;
 
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
-import com.microsoft.reef.io.network.util.Utils.Pair;
 
 public class ControlMessageReduceFunction implements
-  ReduceFunction<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> {
+  ReduceFunction<ControlMessage> {
 
   @Inject
   public ControlMessageReduceFunction() {
   }
 
   @Override
-  public Pair<Pair<Integer, Integer>, Pair<String, Boolean>> apply(
-    final Iterable<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> evals) {
-    // Find the max number of integer,
-    // this is where the operation should resume.
-    // If the max is changed, set sendModel to be true.
+  public ControlMessage apply(final Iterable<ControlMessage> evals) {
     int maxIte = Integer.MIN_VALUE;
     int maxOp = Integer.MIN_VALUE;
     int minIte = Integer.MAX_VALUE;
     int minOp = Integer.MAX_VALUE;
+    // Task ID matches with
+    // the task which contains
+    // the max iteration and the max operation
     String taskID = null;
-    boolean sendModel = false;
-    for (final Pair<Pair<Integer, Integer>, Pair<String, Boolean>> eval : evals) {
-      if (maxIte < eval.first.first.intValue()) {
-        maxIte = eval.first.first.intValue();
-        maxOp = eval.first.second.intValue();
-        // Task ID matches with
-        // the task which contains
-        // the max iterations and the max op
-        taskID = eval.second.first;
+    boolean syncData = false;
+    for (final ControlMessage eval : evals) {
+      if (maxIte < eval.iteration) {
+        maxIte = eval.iteration;
+        maxOp = eval.operation;
+        taskID = eval.taskID;
       }
-      if (maxIte == eval.first.first.intValue()) {
-        if (maxOp < eval.first.second.intValue()) {
-          maxOp = eval.first.second.intValue();
-          taskID = eval.second.first;
+      if (maxIte == eval.iteration) {
+        if (maxOp < eval.operation) {
+          maxOp = eval.operation;
+          taskID = eval.taskID;
         }
       }
-      if (minIte > eval.first.first.intValue()) {
-        minIte = eval.first.first.intValue();
-        minOp = eval.first.second.intValue();
-      }
-      if (minIte == eval.first.first.intValue()) {
-        if (minOp > eval.first.second.intValue()) {
-          minOp = eval.first.second.intValue();
+      if (maxIte == eval.iteration && maxOp < eval.operation) {
+        if (taskID.compareTo(eval.taskID) < 0) {
+          taskID = eval.taskID;
         }
       }
-      // Update to true if any eval says its sendModel is true.
-      if (!sendModel && eval.second.second) {
-        sendModel = true;
+      if (minIte > eval.iteration) {
+        minIte = eval.iteration;
+        minOp = eval.operation;
+      }
+      if (minIte == eval.iteration) {
+        if (minOp > eval.operation) {
+          minOp = eval.operation;
+        }
+      }
+      // Update to true if any eval says its syncData is true.
+      if (!syncData && eval.syncData) {
+        syncData = true;
       }
     }
-    // If not in the same iteration, definitely set sendModel to true.
+    // If not in the same iteration, definitely set syncData to true.
     if (maxIte != minIte) {
-      sendModel = true;
+      syncData = true;
     }
-    // If in the same iteration, but not the same op, set sendModel to true.
+    // If in the same iteration, but not the same op, set syncData to true.
     if (maxIte == minIte && maxOp != minOp) {
-      sendModel = true;
+      syncData = true;
     }
     // If iteration and op are all equal,see which eval says true.
-    return new Pair<Pair<Integer, Integer>, Pair<String, Boolean>>(new Pair<>(
-      maxIte, maxOp), new Pair<>(taskID, sendModel));
+    return new ControlMessage(maxIte, maxOp, taskID, syncData);
   }
 }

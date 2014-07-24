@@ -389,7 +389,7 @@
                                 <argument>-dim</argument>
                                 <argument>1000</argument>
                                 <argument>-receivers</argument>
-                                <argument>6</argument>
+                                <argument>4</argument>
                             </arguments>
         				</configuration>
         			</plugin>

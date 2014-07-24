@@ -83,7 +83,7 @@ public class BGDDriver {
   private final CommunicationGroupDriver allCommGroup;
   private final AtomicBoolean masterSubmitted = new AtomicBoolean(false);
   private final AtomicInteger slaveIds = new AtomicInteger(0);
-  private String groupCommConfiguredMasterId;
+  // private String groupCommConfiguredMasterId;
   private final ConfigurationSerializer confSerializer;
   private final Map<String, RunningTask> runningTasks = new HashMap<>();
   private final AtomicBoolean jobComplete = new AtomicBoolean(false);
@@ -108,7 +108,7 @@ public class BGDDriver {
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
         minNumOfPartitions);
     LOG.info("Obtained all communication group");
-    final ReduceFunction<Pair<Pair<Integer, Integer>, Pair<String, Boolean>>> controlMessageReduceFunction =
+    final ReduceFunction<ControlMessage> controlMessageReduceFunction =
       new ControlMessageReduceFunction();
     final ReduceFunction<Vector> modelReduceFunction =
       new ModelReduceFunction();
@@ -227,8 +227,7 @@ public class BGDDriver {
        * knows if it was configured by one of the communication groups
        */
       if (groupCommDriver.configured(activeContext)) {
-        if (activeContext.getId().equals(groupCommConfiguredMasterId)
-          && !masterTaskSubmitted()) {
+        if (!masterTaskSubmitted()) {
           final Configuration partialTaskConf =
             Configurations.merge(getSlaveTaskConf("MasterTask")
             // ,getTaskPoisonConfiguration()
@@ -253,10 +252,7 @@ public class BGDDriver {
         }
       } else {
         final Configuration contextConf = groupCommDriver.getContextConf();
-        final String contextId = contextId(contextConf);
-        if (!dataLoadingService.isDataLoadedContext(activeContext)) {
-          groupCommConfiguredMasterId = contextId;
-        }
+        // final String contextId = contextId(contextConf);
         LOG.info("Submitting GCContext conf");
         LOG.info(confSerializer.toString(contextConf));
 

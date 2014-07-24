@@ -17,6 +17,7 @@ package com.microsoft.reef.examples.nggroup.bgdallreduce;
 
 import javax.inject.Inject;
 
+import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.util.Utils.Pair;
@@ -33,8 +34,8 @@ public class ModelDescentDirectionReduceFunction implements
 
   @Override
   public Pair<Vector, Vector> apply(final Iterable<Pair<Vector, Vector>> evals) {
-    Vector model = null;
-    Vector descentDirection = null;
+    Vector model = new DenseVector(new double[0]);
+    Vector descentDirection = new DenseVector(new double[0]);
     for (final Pair<Vector, Vector> eval : evals) {
       if (eval.first.size() > 0 && eval.second.size() > 0) {
         model = eval.first;

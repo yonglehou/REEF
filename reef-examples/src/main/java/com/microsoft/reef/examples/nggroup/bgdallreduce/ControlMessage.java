@@ -15,30 +15,21 @@
  */
 package com.microsoft.reef.examples.nggroup.bgdallreduce;
 
-import javax.inject.Inject;
+import java.io.Serializable;
 
-import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
-import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
+class ControlMessage implements Serializable {
 
-/**
- *
- */
-public class ModelReduceFunction implements ReduceFunction<Vector> {
+  private static final long serialVersionUID = 1L;
 
-  @Inject
-  public ModelReduceFunction() {
-  }
+  int iteration;
+  int operation;
+  String taskID;
+  boolean syncData;
 
-  @Override
-  public Vector apply(final Iterable<Vector> evals) {
-    Vector model = new DenseVector(new double[0]);
-    for (final Vector eval : evals) {
-      if (eval.size() > 0) {
-        model = eval;
-        break;
-      }
-    }
-    return model;
+  ControlMessage(int ite, int op, String tID, boolean syncD) {
+    iteration = ite;
+    operation = op;
+    taskID = tID;
+    syncData = syncD;
   }
 }

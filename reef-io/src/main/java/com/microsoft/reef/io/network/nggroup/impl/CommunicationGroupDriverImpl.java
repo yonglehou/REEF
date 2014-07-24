@@ -442,13 +442,19 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    * @param msg
    */
   public void processMsg(final GroupCommMessage msg) {
-    LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
-        + msg.getSrcid());
-    if (!isMsgVersionOk(msg)) {
-      return;
-    }
     synchronized (topologiesLock) {
       LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      // ////////////////////////////////////////////////////////////////
+      // Bingjing: Move msg version checking to the lock
+      LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
+        + msg.getSrcid());
+      System.out.println(getQualifiedName() + "processing " + msg.getType()
+        + " from " + msg.getSrcid() + " with source version "
+        + msg.getSrcVersion());
+      if (!isMsgVersionOk(msg)) {
+        return;
+      }
+      // ////////////////////////////////////////////////////////////////////
       if (initializing.get() || msg.getType().equals(Type.UpdateTopology)) {
         LOG.info(getQualifiedName() + "waiting for all nodes to run");
         allTasksAdded.await();

@@ -621,7 +621,7 @@ public class HyperCubeTopology implements Topology {
   @Override
   public synchronized void setRunning(String taskID) {
     // Invoked by TopologyRunningTaskHandler when task is running
-    System.out.println(taskID + " is running.");
+    System.out.println(getQualifiedName() + taskID + " is running.");
     // We add the number of running tasks.
     this.numRunningTasks.incrementAndGet();
     if (!isInitialized.get()) {
@@ -629,7 +629,8 @@ public class HyperCubeTopology implements Topology {
       if (this.numRunningTasks.get() == this.minInitialTasks) {
         initializeTopology(activeTopo, taskVersionMap);
         isInitialized.set(true);
-        System.out.println("Hypercube topology is initialized!");
+        System.out.println(getQualifiedName()
+          + "hypercube topology is initialized!");
       }
     } else {
       // Once the topology is initialized,
@@ -637,13 +638,14 @@ public class HyperCubeTopology implements Topology {
       // sandbox is not null), apply adding and see which neighbor nodes are
       // modified
       if (sandBox == null) {
-        System.out.println("Copy active toopology to sandbox.");
+        System.out.println(getQualifiedName()
+          + "copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
       }
       Set<Integer> modifiedNeighbors = newTask(sandBox, taskID);
-      System.out.println("Print active Hypercube");
+      System.out.println(getQualifiedName() + "print active Hypercube");
       printHyperCube(activeTopo);
-      System.out.println("Print Hypercube in sandbox");
+      System.out.println(getQualifiedName() + "print Hypercube in sandbox");
       printHyperCube(sandBox);
       // Add this task to new tasks
       // Even this new task has the same ID which is used before
@@ -941,7 +943,7 @@ public class HyperCubeTopology implements Topology {
   @Override
   public synchronized void setFailed(final String taskID) {
     // Invoked by TopologyFailedTaskHandler when task is failed
-    System.out.println(taskID + " fails.");
+    System.out.println(getQualifiedName() + taskID + " fails.");
     // We decrease the number of running tasks.
     numRunningTasks.decrementAndGet();
     if (!isInitialized.get()) {
@@ -952,7 +954,8 @@ public class HyperCubeTopology implements Topology {
       // sandbox is not null), apply adding and see which neighbor nodes are
       // modified
       if (sandBox == null) {
-        System.out.println("Copy active toopology to sandbox.");
+        System.out.println(getQualifiedName()
+          + "copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
       }
       // There are failed tasks in the current topology
@@ -984,9 +987,9 @@ public class HyperCubeTopology implements Topology {
       // every task is notified
       deleteTask(sandBox, taskID);
       // Print and check the difference between two topologies
-      System.out.println("Print active Hypercube.");
+      System.out.println(getQualifiedName() + "print active Hypercube.");
       printHyperCube(activeTopo);
-      System.out.println("Print sandbox Hypercube.");
+      System.out.println(getQualifiedName() + "print sandbox Hypercube.");
       printHyperCube(sandBox);
       boolean isFailureSent = false;
       for (String mTaskID : modifiedNeighbors) {

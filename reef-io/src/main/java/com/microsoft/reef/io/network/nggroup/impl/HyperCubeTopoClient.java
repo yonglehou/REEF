@@ -127,7 +127,7 @@ public class HyperCubeTopoClient {
   void processNodeTopologyMsg(GroupCommMessage msg) {
     // Decode the topology data
     NodeTopology nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
-    System.out.println(nodeTopo.node.toString());
+    System.out.println(getQualifiedName() + nodeTopo.node.toString());
     // If there is an old topology agreed on the same iteration number
     // replace it.
     // The control flow in "apply" is sequential, if tasks didn't get topology

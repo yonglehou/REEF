@@ -15,6 +15,19 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
+import java.io.IOException;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+
+import javax.inject.Inject;
+
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.exception.evaluator.NetworkException;
@@ -44,13 +57,6 @@ import com.microsoft.tang.formats.ConfigurationSerializer;
 import com.microsoft.wake.EStage;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.impl.ThreadPoolStage;
-
-import javax.inject.Inject;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Logger;
 
 /**
  *
@@ -293,31 +299,94 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
   //////////////////////////////////////////
   // Add new methods for allreduce operators
 
+  @Override
   public String getTaskID() {
     return taskId;
   }
 
   @Override
   public void checkIteration() {
-    // Let groupCommNetworkHandler Block topology update message
+    // Let commGroupNetworkHandler Block topology update message
+    commGroupNetworkHandler.blockAllReduceTopoChangeMsg();
     // Let all allreduce operaters enter iteration checking
+    for (Entry<Class<? extends Name<String>>, GroupCommOperator> entry : operators
+      .entrySet()) {
+      if (entry.getValue().getClass().getName()
+        .equals(AllReducer.class.getName())) {
+        AllReducer allReducer = (AllReducer) entry.getValue();
+        allReducer.checkIteration();
+      } else {
+        System.out.println(entry.getKey().getClass().getName());
+      }
+    }
   }
 
   @Override
-  public boolean isCurrentIterationFailed() {
+  public boolean isCurrentIterationFailed()
+    throws UnsupportedOperationException {
     // Notify user if the current iteration is failed
-    return false;
+    // Invoked during checkIteration and updateIteration
+    int count = 0;
+    boolean result = false;
+    for (Entry<Class<? extends Name<String>>, GroupCommOperator> entry : operators
+      .entrySet()) {
+      if (entry.getValue().getClass().getName()
+        .equals(AllReducer.class.getName())) {
+        AllReducer allReducer = (AllReducer) entry.getValue();
+        if (count == 0) {
+          result = allReducer.isCurrentIterationFailed();
+        } else {
+          if (result != allReducer.isCurrentIterationFailed()) {
+            System.out
+              .println("The states of topologies are not synchronized.");
+          }
+        }
+        count++;
+      }
+    }
+    return result;
   }
 
   @Override
-  public boolean isNewTaskComming() {
+  public boolean isNewTaskComing() throws UnsupportedOperationException {
+    // If there is no failure,
     // let user know if there is new tasks added after iteration update
-    return false;
+    // Invoked during checkIteration and updateIteration
+    int count = 0;
+    boolean result = false;
+    for (Entry<Class<? extends Name<String>>, GroupCommOperator> entry : operators
+      .entrySet()) {
+      if (entry.getValue().getClass().getName()
+        .equals(AllReducer.class.getName())) {
+        AllReducer allReducer = (AllReducer) entry.getValue();
+        if (count == 0) {
+          result = allReducer.isNewTaskComing();
+        } else {
+          if (result != allReducer.isNewTaskComing()) {
+            System.out
+              .println("The states of topologies are not synchronized.");
+          }
+        }
+        count++;
+      }
+    }
+    return result;
   }
 
   @Override
   public void updateIteration() {
     // Update iteration counter
+    for (Entry<Class<? extends Name<String>>, GroupCommOperator> entry : operators
+      .entrySet()) {
+      if (entry.getValue().getClass().getName()
+        .equals(AllReducer.class.getName())) {
+        AllReducer allReducer = (AllReducer) entry.getValue();
+        allReducer.updateIteration();
+      } else {
+        System.out.println(entry.getKey().getClass().getName());
+      }
+    }
     // Unblock Topology update message
+    commGroupNetworkHandler.unblockAllReduceTopoChangeMsg();
   }
 }
