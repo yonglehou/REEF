@@ -15,32 +15,15 @@
  */
 package com.microsoft.reef.examples.nggroup.bgdallreduce;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.logging.Logger;
-
-import javax.inject.Inject;
-
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-
 import com.microsoft.reef.examples.nggroup.bgd.data.Example;
 import com.microsoft.reef.examples.nggroup.bgd.data.parser.Parser;
 import com.microsoft.reef.examples.nggroup.bgd.loss.LossFunction;
 import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.EnableRampup;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Iterations;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.Lambda;
-import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
+import com.microsoft.reef.examples.nggroup.bgd.parameters.*;
 import com.microsoft.reef.examples.nggroup.bgd.utils.StepSizes;
 import com.microsoft.reef.examples.nggroup.bgd.utils.Timer;
-import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ControlMessageAllReducer;
-import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LineSearchEvaluationsAllReducer;
-import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.LossAndGradientAllReducer;
-import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelAllReducer;
-import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.ModelDescentDirectionAllReducer;
+import com.microsoft.reef.examples.nggroup.bgdallreduce.operatornames.*;
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.Tuple;
 import com.microsoft.reef.io.data.loading.api.DataSet;
@@ -52,6 +35,13 @@ import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
 import com.microsoft.reef.task.Task;
 import com.microsoft.tang.annotations.Parameter;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+
+import javax.inject.Inject;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
 
 /**
  *
@@ -131,6 +121,17 @@ public class SlaveTask implements Task {
     int curIte = 0;
     int curOp = 0;
     boolean stop = false;
+
+//    while(true){
+    // (1): Synchronize Topology
+    // (2): Perform controlMessageAllReducer
+    //      if no result: continue
+    // (3): Perform lossAndGradientAllReducer
+    //      if no result: continue
+    // (4): Update model and break criterion
+//    }
+
+
     while (true) {
       // Control message allreduce
       // Get the current iteration, operation
@@ -247,6 +248,7 @@ public class SlaveTask implements Task {
 
   private boolean checkAndUpdate() {
     boolean isFailed = false;
+    communicationGroupClient.getTopologyChanges()
     communicationGroupClient.checkIteration();
     if (communicationGroupClient.isCurrentIterationFailed()) {
       isFailed = true;
