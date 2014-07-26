@@ -15,13 +15,8 @@
  */
 package com.microsoft.reef.io.network.nggroup.impl;
 
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
-import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
-import com.microsoft.tang.annotations.Name;
-import com.microsoft.wake.EventHandler;
-
-import javax.inject.Inject;
-
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.BlockingQueue;
@@ -30,6 +25,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
+
+import javax.inject.Inject;
+
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage;
+import com.microsoft.reef.io.network.proto.ReefNetworkGroupCommProtos.GroupCommMessage.Type;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.wake.EventHandler;
 
 /**
  *
@@ -45,14 +47,12 @@ public class CommGroupNetworkHandlerImpl implements
   private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyNotifications =
     new ConcurrentHashMap<>();
     
-  // Synchronize source dead and source add message processing on allreduce
+  // Synchronize SourceDead and SourceAdd message processing on allreduce
   // topologies.
-  private final Map<Class<? extends Name<String>>, GroupCommMessage> sourceAddMsgMap =
-    new ConcurrentHashMap<>();
-  private final Map<Class<? extends Name<String>>, GroupCommMessage> sourceDeadMsgMap =
+  private final Map<Class<? extends Name<String>>, GroupCommMessage> allreducerTopoMsgMap =
     new ConcurrentHashMap<>();
   private final AtomicInteger totalNumAllReducers = new AtomicInteger(0);
-  private final AtomicBoolean isAllReducerTopoChangeMsgBlocked =
+  private final AtomicBoolean isAllReducerTopoMsgBlocked =
     new AtomicBoolean(false);
 
   @Inject
@@ -100,7 +100,7 @@ public class CommGroupNetworkHandlerImpl implements
       topologyNotifications.get(operName).add(msg);
     } else if (msg.getType() == Type.SourceAdd
       || msg.getType() == Type.SourceDead) {
-      handleAllReduceTopoChangeMsg(msg);
+      handleAllReducerTopoMsg(msg);
     } else {
       operHandlers.get(operName).onNext(msg);
     }
@@ -138,62 +138,69 @@ public class CommGroupNetworkHandlerImpl implements
 
   @Override
   public synchronized void blockAllReduceTopoChangeMsg() {
-    isAllReducerTopoChangeMsgBlocked.compareAndSet(false, true);
+    isAllReducerTopoMsgBlocked.compareAndSet(false, true);
   }
 
   @Override
   public synchronized void unblockAllReduceTopoChangeMsg() {
-    handleSourceAddMsgs();
-    handleSourceDeadMsgs();
-    isAllReducerTopoChangeMsgBlocked.compareAndSet(true, false);
+    handleMsgs();
+    isAllReducerTopoMsgBlocked.compareAndSet(true, false);
   }
 
-  private synchronized void handleAllReduceTopoChangeMsg(
+  private synchronized void handleAllReducerTopoMsg(
     final GroupCommMessage msg) {
     // Accumulate the messages until all the allreducers get the same message.
     // If these messages are not processed, driver won't send new messages.
-    final Class<? extends Name<String>> operName =
-      Utils.getClass(msg.getOperatorname());
-    if (msg.getType() == Type.SourceAdd) {
-      sourceAddMsgMap.put(operName, msg);
-      if (!isAllReducerTopoChangeMsgBlocked.get()) {
-        handleSourceAddMsgs();
+
+    List<Class<? extends Name<String>>> rmKeys = new LinkedList<>();
+    boolean isOldMsg = false;
+    for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
+      .entrySet()) {
+      if (entry.getValue().getVersion() < msg.getVersion()) {
+        rmKeys.add(entry.getKey());
       }
-    } else if (msg.getType() == Type.SourceDead) {
-      sourceDeadMsgMap.put(operName, msg);
-      if (!isAllReducerTopoChangeMsgBlocked.get()) {
-        handleSourceDeadMsgs();
+      if (entry.getValue().getVersion() > msg.getVersion()) {
+        isOldMsg = true;
       }
+      if (entry.getValue().getVersion() == msg.getVersion()
+        && entry.getValue().getType() != msg.getType()) {
+        rmKeys.add(entry.getKey());
+      }
+    }
+    if (!isOldMsg) {
+      // Remove
+      for (Class<? extends Name<String>> rmKey : rmKeys) {
+        GroupCommMessage rmMsg = allreducerTopoMsgMap.remove(rmKey);
+        System.out.println("Remove msg with opername " + rmKey + " with type "
+          + rmMsg.getType() + " with version " + rmMsg.getVersion());
+      }
+      final Class<? extends Name<String>> operName =
+        Utils.getClass(msg.getOperatorname());
+      allreducerTopoMsgMap.put(operName, msg);
+      if (!isAllReducerTopoMsgBlocked.get()) {
+        handleMsgs();
+      }
+    } else {
+      System.out.println("This is an old message.");
     }
   }
 
-  private void handleSourceAddMsgs() {
-    if (sourceAddMsgMap.size() == totalNumAllReducers.get()) {
-      System.out.println("Process SourceAdd on all the allreduce topologies.");
-      for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : sourceAddMsgMap
+  private void handleMsgs() {
+    if (allreducerTopoMsgMap.size() == totalNumAllReducers.get()) {
+      System.out.println("Topo msg map size: " + allreducerTopoMsgMap.size()
+        + ", process topo messages on all the allreduce topologies.");
+      for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
         .entrySet()) {
-        operHandlers.get(entry.getKey()).onNext(entry.getValue());
+        try {
+          operHandlers.get(entry.getKey()).onNext(entry.getValue());
+        } catch (Exception e) {
+        }
       }
-      sourceAddMsgMap.clear();
+      allreducerTopoMsgMap.clear();
+      System.out.println("Topo msg map is clear.");
     } else {
-      System.out.println("SourceAdd map size: " + sourceAddMsgMap.size()
-        + ", isAllReducerTopoChangeMsgBlocked? "
-        + isAllReducerTopoChangeMsgBlocked);
-    }
-  }
-
-  private void handleSourceDeadMsgs() {
-    if (sourceDeadMsgMap.size() == totalNumAllReducers.get()) {
-      System.out.println("Process SourceDead on all the allreduce topologies.");
-      for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : sourceDeadMsgMap
-        .entrySet()) {
-        operHandlers.get(entry.getKey()).onNext(entry.getValue());
-      }
-      sourceDeadMsgMap.clear();
-    } else {
-      System.out.println("SourceDead map size: " + sourceDeadMsgMap.size()
-        + ", isAllReducerTopoChangeMsgBlocked? "
-        + isAllReducerTopoChangeMsgBlocked);
+      System.out.println("Topo msg map size: " + allreducerTopoMsgMap.size()
+        + ", isAllReducerTopoChangeMsgBlocked? " + isAllReducerTopoMsgBlocked);
     }
   }
 }

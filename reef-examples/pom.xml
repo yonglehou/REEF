@@ -483,7 +483,7 @@
                                 <argument>-lambda</argument>
                                 <argument>.0056</argument>
                                 <argument>-splits</argument>
-                                <argument>6</argument>
+                                <argument>5</argument>
                             </arguments>
         				</configuration>
         			</plugin>
