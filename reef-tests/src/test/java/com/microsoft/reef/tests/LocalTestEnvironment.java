@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,11 +39,11 @@ public final class LocalTestEnvironment implements TestEnvironment {
       final String rootFolder = System.getProperty("com.microsoft.reef.runtime.local.folder");
       if (null == rootFolder) {
         return LocalRuntimeConfiguration.CONF
-            .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, 16)
+            .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, 4)
             .build();
       } else {
         return LocalRuntimeConfiguration.CONF
-            .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, 16)
+            .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, 4)
             .set(LocalRuntimeConfiguration.RUNTIME_ROOT_FOLDER, rootFolder)
             .build();
 
@@ -61,6 +61,6 @@ public final class LocalTestEnvironment implements TestEnvironment {
 
   @Override
   public int getTestTimeout() {
-    return 30000; // 30 seconds
+    return 60000; // 1 min.
   }
 }

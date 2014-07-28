@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,9 @@ interface Container extends AutoCloseable {
    *
    * @param files the files to be added to the container.
    */
-  public void addFiles(final Iterable<File> files);
+  public void addLocalFiles(final Iterable<File> files);
+
+  public void addGlobalFiles(final File globalFolder);
 
   /**
    * @return true if the Container is currently executing, false otherwise.

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,11 +58,10 @@ public class ObjectWritableCodec<T extends Writable> implements Codec<T> {
    */
   @Override
   public byte[] encode(T writable) {
-    try (final ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
-      try (final DataOutputStream dos = new DataOutputStream(bos)) {
-        writable.write(dos);
-        return bos.toByteArray();
-      }
+    try (final ByteArrayOutputStream bos = new ByteArrayOutputStream();
+         final DataOutputStream dos = new DataOutputStream(bos)) {
+      writable.write(dos);
+      return bos.toByteArray();
     } catch (final IOException ex) {
       LOG.log(Level.SEVERE, "Cannot encode object " + writable, ex);
       throw new RemoteRuntimeException(ex);
@@ -78,12 +77,11 @@ public class ObjectWritableCodec<T extends Writable> implements Codec<T> {
    */
   @Override
   public T decode(byte[] buffer) {
-    try (final ByteArrayInputStream bis = new ByteArrayInputStream(buffer)) {
-      try (final DataInputStream dis = new DataInputStream(bis)) {
-        final T writable = this.writableClass.newInstance();
-        writable.readFields(dis);
-        return writable;
-      }
+    try (final ByteArrayInputStream bis = new ByteArrayInputStream(buffer);
+         final DataInputStream dis = new DataInputStream(bis)) {
+      final T writable = this.writableClass.newInstance();
+      writable.readFields(dis);
+      return writable;
     } catch (final IOException | InstantiationException | IllegalAccessException ex) {
       LOG.log(Level.SEVERE, "Cannot decode class " + this.writableClass, ex);
       throw new RemoteRuntimeException(ex);

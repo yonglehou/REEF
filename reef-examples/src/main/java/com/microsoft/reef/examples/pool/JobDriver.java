@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -294,7 +294,7 @@ public final class JobDriver {
   }
 
   /**
-   * Receive notification that the Task is running.
+   * Receive notification that the Evaluator has been shut down.
    */
   final class CompletedEvaluatorHandler implements EventHandler<CompletedEvaluator> {
     @Override

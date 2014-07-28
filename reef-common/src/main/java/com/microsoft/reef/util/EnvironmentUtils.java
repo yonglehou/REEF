@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,16 @@ public final class EnvironmentUtils {
    * @return A set of classpath entries as strings.
    */
   public static Set<String> getAllClasspathJars() {
-    return getAllClasspathJars("JAVA_HOME", "YARN_HOME", "HADOOP_HOME");
+    return getAllClasspathJars(
+        "JAVA_HOME",
+        "YARN_HOME",
+        "HADOOP_HOME",
+        "HADOOP_YARN_HOME",
+        "HADOOP_HDFS_HOME",
+        "HADOOP_COMMON_HOME",
+        "HADOOP_MAPRED_HOME",
+        "YARN_CONF_DIR",
+        "HADOOP_CONF_DIR");
   }
 
   /**
@@ -111,5 +120,21 @@ public final class EnvironmentUtils {
   public static ConfigurationModule addClasspath(
       final ConfigurationModule config, final OptionalParameter<String> param) {
     return addAll(config, param, getAllClasspathJars());
+  }
+
+  /**
+   * Check whether assert() statements are evaluated.
+   *
+   * @return true, if assertions are enabled. False otherwise.
+   */
+  public static boolean areAssertionsEnabled() {
+    try {
+      assert false;
+      // If we got here, the assert above can't have thrown an exception. hence, asserts must be off.
+      return false;
+    } catch (final AssertionError assertionError) {
+      // The assert above threw an exception. Asserts must be enabled.
+      return true;
+    }
   }
 }

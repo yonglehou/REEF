@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ public final class ClientManager implements EventHandler<ClientRuntimeProtocol.J
     if (!clientRID.equals(AbstractDriverRuntimeConfiguration.ClientRemoteIdentifier.NONE)) {
       remoteManager.registerHandler(clientRID, ClientRuntimeProtocol.JobControlProto.class, this);
     } else {
-      LOG.log(Level.INFO, "Not registering a handler for JobControlProto, as there is no client.");
+      LOG.log(Level.FINE, "Not registering a handler for JobControlProto, as there is no client.");
     }
   }
 

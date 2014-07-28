@@ -4,7 +4,7 @@
     <parent>
         <groupId>com.microsoft.reef</groupId>
         <artifactId>reef-project</artifactId>
-        <version>0.4-SNAPSHOT</version>
+        <version>0.7-SNAPSHOT</version>
     </parent>
     <artifactId>reef-checkpoint</artifactId>
     <name>REEF Checkpoint</name>
@@ -34,6 +34,7 @@
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>

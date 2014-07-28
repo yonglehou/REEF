@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,10 @@ import com.microsoft.tang.annotations.Name;
 import com.microsoft.tang.annotations.NamedParameter;
 import com.microsoft.tang.exceptions.BindException;
 
+/**
+ * @deprecated Runtimes are advised to create their own ConfigurationModules instead of subclassing this class.
+ */
+@Deprecated
 public abstract class AbstractDriverRuntimeConfiguration implements Builder<Configuration> {
 
   protected JavaConfigurationBuilder builder = Tang.Factory.getTang().newConfigurationBuilder();

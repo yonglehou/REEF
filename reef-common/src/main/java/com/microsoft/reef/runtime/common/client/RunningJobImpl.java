@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ public final class RunningJobImpl implements RunningJob, EventHandler<JobStatusP
     this.jobControlHandler = remoteManager.getHandler(driverRID, JobControlProto.class);
 
     this.runningJobEventHandler.onNext(this);
-    LOG.log(Level.INFO, "Instantiated 'RunningJobImpl'");
+    LOG.log(Level.FINE, "Instantiated 'RunningJobImpl'");
   }
 
   @Override

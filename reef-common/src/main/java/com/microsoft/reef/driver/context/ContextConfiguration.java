@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,26 @@
  */
 package com.microsoft.reef.driver.context;
 
-import com.microsoft.reef.driver.task.TaskConfigurationOptions;
-import com.microsoft.reef.task.events.TaskStart;
-import com.microsoft.reef.task.events.TaskStop;
 import com.microsoft.reef.annotations.Provided;
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Public;
+import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.evaluator.context.ContextMessageHandler;
 import com.microsoft.reef.evaluator.context.ContextMessageSource;
 import com.microsoft.reef.evaluator.context.events.ContextStart;
 import com.microsoft.reef.evaluator.context.events.ContextStop;
 import com.microsoft.tang.formats.*;
+import com.microsoft.reef.evaluator.context.parameters.*;
+import com.microsoft.reef.runtime.common.evaluator.DefaultDriverConnection;
+import com.microsoft.reef.runtime.common.evaluator.DriverConnection;
+import com.microsoft.reef.task.events.TaskStart;
+import com.microsoft.reef.task.events.TaskStop;
+import com.microsoft.tang.annotations.Name;
+import com.microsoft.tang.annotations.NamedParameter;
 import com.microsoft.wake.EventHandler;
 
 /**
- * A ConfigurationModule for EvaluatorContext Configuration.
+ * A ConfigurationModule for Context Configuration.
  */
 @Public
 @DriverSide
@@ -37,7 +42,7 @@ import com.microsoft.wake.EventHandler;
 public class ContextConfiguration extends ConfigurationModuleBuilder {
 
   /**
-   * The identifier of the context.
+   * The identifier of the Context.
    */
   public static final RequiredParameter<String> IDENTIFIER = new RequiredParameter<>();
 
@@ -73,15 +78,26 @@ public class ContextConfiguration extends ConfigurationModuleBuilder {
   public static final OptionalImpl<ContextMessageHandler> ON_MESSAGE = new OptionalImpl<>();
 
   /**
+   * Implementation for reconnecting to driver after driver restart
+   */
+  public static final OptionalImpl<DriverConnection> ON_DRIVER_RECONNECT = new OptionalImpl<>();
+
+  /**
    * A ConfigurationModule for context.
    */
   public static final ConfigurationModule CONF = new ContextConfiguration()
-      .bindNamedParameter(ContextConfigurationOptions.ContextIdentifier.class, IDENTIFIER)
-      .bindSetEntry(ContextConfigurationOptions.StartHandlers.class, ON_CONTEXT_STARTED)
-      .bindSetEntry(ContextConfigurationOptions.StopHandlers.class, ON_CONTEXT_STOP)
-      .bindSetEntry(ContextConfigurationOptions.ContextMessageSources.class, ON_SEND_MESSAGE)
-      .bindSetEntry(ContextConfigurationOptions.ContextMessageHandlers.class, ON_MESSAGE)
+      .bindNamedParameter(ContextIdentifier.class, IDENTIFIER)
+      .bindNamedParameter(DriverReconnect.class, ON_DRIVER_RECONNECT)
+      .bindSetEntry(ContextStartHandlers.class, ON_CONTEXT_STARTED)
+      .bindSetEntry(ContextStopHandlers.class, ON_CONTEXT_STOP)
+      .bindSetEntry(ContextMessageSources.class, ON_SEND_MESSAGE)
+      .bindSetEntry(ContextMessageHandlers.class, ON_MESSAGE)
       .bindSetEntry(TaskConfigurationOptions.StartHandlers.class, ON_TASK_STARTED)
       .bindSetEntry(TaskConfigurationOptions.StopHandlers.class, ON_TASK_STOP)
       .build();
+
+  @NamedParameter(doc = "House the implementation for re-connecting to driver after driver restart",
+          default_classes = DefaultDriverConnection.class)
+  public static final class DriverReconnect implements Name<DriverConnection> {
+  }
 }

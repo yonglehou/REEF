@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 201 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ public final class EvaluatorResourceManagerErrorHandler implements EventHandler<
   @Inject
   EvaluatorResourceManagerErrorHandler(final Evaluators evaluators) {
     this.evaluators = evaluators;
-    LOG.log(Level.INFO, "Instantiated 'EvaluatorResourceManagerErrorHandler'");
+    LOG.log(Level.FINE, "Instantiated 'EvaluatorResourceManagerErrorHandler'");
   }
 
   @Override

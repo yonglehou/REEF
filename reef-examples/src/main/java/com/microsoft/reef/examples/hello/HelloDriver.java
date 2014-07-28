@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ public final class HelloDriver {
   @Inject
   public HelloDriver(final EvaluatorRequestor requestor) {
     this.requestor = requestor;
-    LOG.log(Level.INFO, "Instantiated 'HelloDriver'");
+    LOG.log(Level.FINE, "Instantiated 'HelloDriver'");
   }
 
   /**

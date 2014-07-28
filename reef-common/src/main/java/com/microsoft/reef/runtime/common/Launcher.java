@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import com.microsoft.reef.runtime.common.launch.REEFMessageCodec;
 import com.microsoft.reef.runtime.common.launch.parameters.ClockConfigurationPath;
 import com.microsoft.reef.runtime.common.launch.parameters.ErrorHandlerRID;
 import com.microsoft.reef.runtime.common.launch.parameters.LaunchID;
+import com.microsoft.reef.util.EnvironmentUtils;
+import com.microsoft.reef.util.logging.LoggingSetup;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.JavaConfigurationBuilder;
@@ -35,60 +37,52 @@ import java.util.Collection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * The main entrance point into any REEF process. It is mostly instantiating LaunchClass and calling .run() on it.
+ */
 public final class Launcher {
-  public final static String[] LOGGING_PROPERTIES = {
-      "java.util.logging.config.file",
-      "java.util.logging.config.class"
-  };
+
   private final static Logger LOG = Logger.getLogger(Launcher.class.getName());
+
+  static {
+    LoggingSetup.setupCommonsLogging();
+  }
 
   private Launcher() {
   }
 
   /**
-   * Logs the currently running threads.
+   * Parse command line options of the launcher.
    *
-   * @param prefix put before the comma-separated list of threads
-   * @param level  the level used for the log entry
+   * @param args Command line as passed into main().
+   * @return TANG configuration object.
    */
+  private static Configuration processCommandLine(
+      final String[] args) throws BindException, IOException, InjectionException {
 
-  private static void logThreads(final String prefix, final Level level) {
-    final StringBuilder sb = new StringBuilder(prefix);
-    for (final Thread t : Thread.getAllStackTraces().keySet()) {
-      sb.append(t.getName());
-      sb.append(", ");
-    }
-    LOG.log(level, sb.toString());
-  }
+    final JavaConfigurationBuilder commandLineBuilder =
+        Tang.Factory.getTang().newConfigurationBuilder();
 
-  /**
-   * Parses the command line options of the launcher.
-   *
-   * @param args
-   * @return
-   * @throws BindException
-   * @throws IOException
-   * @throws InjectionException
-   */
-  private static Configuration processCommandLine(final String[] args) throws BindException, IOException, InjectionException {
-    final JavaConfigurationBuilder commandLineBuilder = Tang.Factory.getTang().newConfigurationBuilder();
-    final CommandLine cl = new CommandLine(commandLineBuilder);
-    cl.registerShortNameOfClass(ClockConfigurationPath.class);
-    cl.registerShortNameOfClass(ErrorHandlerRID.class);
-    cl.registerShortNameOfClass(LaunchID.class);
-    cl.processCommandLine(args);
-    // Bind the wake error handler
-    commandLineBuilder.bindNamedParameter(RemoteConfiguration.ErrorHandler.class, REEFErrorHandler.class);
-    commandLineBuilder.bindNamedParameter(RemoteConfiguration.ManagerName.class, "REEF_LAUNCHER");
-    // Bind the wake codec
-    commandLineBuilder.bindNamedParameter(RemoteConfiguration.MessageCodec.class, REEFMessageCodec.class);
-    return commandLineBuilder.build();
+    new CommandLine(commandLineBuilder)
+        .registerShortNameOfClass(ClockConfigurationPath.class)
+        .registerShortNameOfClass(ErrorHandlerRID.class)
+        .registerShortNameOfClass(LaunchID.class)
+        .processCommandLine(args);
+
+    return commandLineBuilder
+        // Bind the wake error handler
+        .bindNamedParameter(RemoteConfiguration.ErrorHandler.class, REEFErrorHandler.class)
+        .bindNamedParameter(RemoteConfiguration.ManagerName.class, "REEF_LAUNCHER")
+            // Bind the wake codec
+        .bindNamedParameter(RemoteConfiguration.MessageCodec.class, REEFMessageCodec.class)
+        .build();
   }
 
   private static void fail(final String msg, final Throwable t) {
     LOG.log(Level.SEVERE, msg, t);
     throw new RuntimeException(msg, t);
   }
+
 
   /**
    * Launches a REEF client process (Driver or Evaluator).
@@ -97,33 +91,32 @@ public final class Launcher {
    * @throws Exception
    */
   public static void main(final String[] args) {
-    LOG.log(Level.FINEST, "Launcher started");
-    Injector injector = null;
+    LOG.log(Level.FINE, "Launcher started with user name [{0}]", System.getProperty("user.name"));
 
+    LOG.log(Level.FINE, "Launcher started. Assertions are {0} in this process.",
+        EnvironmentUtils.areAssertionsEnabled() ? "ENABLED" : "DISABLED");
+    Injector injector = null;
     try {
       injector = Tang.Factory.getTang().newInjector(processCommandLine(args));
     } catch (final BindException | IOException | InjectionException e) {
       fail("Error in parsing the command line", e);
     }
 
-    LaunchClass lc = null;
-    try {
-      lc = injector.getInstance(LaunchClass.class);
-    } catch (final InjectionException e) {
-      fail("Exception in creating the launcher", e);
+    try (final LaunchClass lc = injector.getInstance(LaunchClass.class)) {
+      LOG.log(Level.FINE, "Launcher starting");
+      lc.run();
+      LOG.log(Level.FINE, "Launcher exiting");
+    } catch (final Throwable throwable) {
+      fail("Unable to run LaunchClass", throwable);
     }
 
-    lc.run();
+    LOG.log(Level.FINEST, "Threads running after Launcher.close(): {0}",
+        Thread.getAllStackTraces().keySet());
 
-    try {
-      lc.close();
-    } catch (final Exception e) {
-      fail("Exception in closing the launcher", e);
-    }
-    LOG.log(Level.FINEST, "Launcher exiting");
-    logThreads("Threads running after Launcher.close(): ", Level.FINEST);
     System.exit(0);
-    logThreads("Threads running after System.exit(): ", Level.FINEST);
+
+    LOG.log(Level.FINEST, "Threads running after System.exit(): {0}",
+        Thread.getAllStackTraces().keySet());
   }
 
   /**
@@ -131,15 +124,28 @@ public final class Launcher {
    * command line parameters. Currently used only to pass logging configuration to child JVMs processes.
    *
    * @param vargs     List of command line parameters to append to.
-   * @param propNames Array of property names.
+   * @param copyNull  create an empty parameter if the property is missing in current process.
+   * @param propNames property names.
    */
-  public static void propagateProperties(final Collection<String> vargs, final String[] propNames) {
+  public static void propagateProperties(
+      final Collection<String> vargs, final boolean copyNull, final String... propNames) {
     for (final String propName : propNames) {
       final String propValue = System.getProperty(propName);
-      if (!(propValue == null || propValue.isEmpty())) {
+      if (propValue == null || propValue.isEmpty()) {
+        if (copyNull) {
+          vargs.add("-D" + propName);
+        }
+      } else {
         vargs.add(String.format("-D%s=%s", propName, propValue));
       }
     }
   }
 
+  /**
+   * Same as above, but with copyNull == false by default.
+   */
+  public static void propagateProperties(
+      final Collection<String> vargs, final String... propNames) {
+    propagateProperties(vargs, false, propNames);
+  }
 }

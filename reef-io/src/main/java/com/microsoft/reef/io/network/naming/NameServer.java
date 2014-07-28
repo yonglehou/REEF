@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,8 +65,8 @@ public class NameServer implements Stage {
     transport = new NettyMessagingTransport(NetUtils.getLocalAddress(), port, null, new SyncStage<TransportEvent>(new NamingServerHandler(handler, codec)));
     this.port = transport.getListeningPort();
     idToAddrMap = Collections.synchronizedMap(new HashMap<Identifier, InetSocketAddress> ());
-    
-    LOG.log(Level.INFO, "NameServer starting, listening at port " + this.port);
+
+    LOG.log(Level.FINE, "NameServer starting, listening at port " + this.port);
   }
 
   private EventHandler<NamingMessage> createEventHandler(Codec<NamingMessage> codec) {

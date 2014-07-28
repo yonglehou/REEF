@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,13 +43,18 @@ public final class RunningTaskImpl implements RunningTask {
   private final EvaluatorManager evaluatorManager;
   private final EvaluatorContext evaluatorContext;
   private final String taskId;
+  private final TaskRepresenter taskRepresenter;
 
-  public RunningTaskImpl(final EvaluatorManager evaluatorManager, final String taskId, final EvaluatorContext evaluatorContext) {
+  public RunningTaskImpl(final EvaluatorManager evaluatorManager,
+                         final String taskId,
+                         final EvaluatorContext evaluatorContext,
+                         final TaskRepresenter taskRepresenter) {
     LOG.log(Level.FINEST, "INIT: TaskRuntime id[" + taskId + "] on evaluator id[" + evaluatorManager.getId() + "]");
 
     this.evaluatorManager = evaluatorManager;
     this.evaluatorContext = evaluatorContext;
     this.taskId = taskId;
+    this.taskRepresenter = taskRepresenter;
   }
 
 
@@ -64,8 +69,8 @@ public final class RunningTaskImpl implements RunningTask {
   }
 
   @Override
-  public final void onNext(final byte[] message) {
-    LOG.log(Level.FINEST, "MESSAGE: TaskRuntime id[" + taskId + "] on evaluator id[" + evaluatorManager.getId() + "]");
+  public void send(final byte[] message) {
+    LOG.log(Level.FINEST, "MESSAGE: Task id[" + taskId + "] on evaluator id[" + evaluatorManager.getId() + "]");
 
     final ContextControlProto contextControlProto = ContextControlProto.newBuilder()
         .setTaskMessage(ByteString.copyFrom(message))
@@ -78,15 +83,22 @@ public final class RunningTaskImpl implements RunningTask {
   public void close() {
     LOG.log(Level.FINEST, "CLOSE: TaskRuntime id[" + taskId + "] on evaluator id[" + evaluatorManager.getId() + "]");
 
-    final ContextControlProto contextControlProto = ContextControlProto.newBuilder()
-        .setStopTask(StopTaskProto.newBuilder().build())
-        .build();
-    this.evaluatorManager.sendContextControlMessage(contextControlProto);
+    if (this.taskRepresenter.isNotRunning()) {
+      LOG.log(Level.FINE, "Ignoring call to .close() because the task is no longer RUNNING.");
+    } else {
+      final ContextControlProto contextControlProto = ContextControlProto.newBuilder()
+          .setStopTask(StopTaskProto.newBuilder().build())
+          .build();
+      this.evaluatorManager.sendContextControlMessage(contextControlProto);
+    }
   }
 
   @Override
   public void close(final byte[] message) {
     LOG.log(Level.FINEST, "CLOSE: TaskRuntime id[" + taskId + "] on evaluator id[" + evaluatorManager.getId() + "] with message.");
+    if (this.taskRepresenter.isNotRunning()) {
+      throw new RuntimeException("Trying to send a message to a Task that is no longer RUNNING.");
+    }
 
     final ContextControlProto contextControlProto = ContextControlProto.newBuilder()
         .setStopTask(StopTaskProto.newBuilder().build())

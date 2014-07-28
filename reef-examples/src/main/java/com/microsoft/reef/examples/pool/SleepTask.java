@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ public class SleepTask implements Task {
    */
   @Override
   public byte[] call(final byte[] memento) {
-    LOG.log(Level.INFO, "Task started: sleep for: {0} msec.", this.delay);
+    LOG.log(Level.FINE, "Task started: sleep for: {0} msec.", this.delay);
     final long ts = System.currentTimeMillis();
     for (long period = this.delay; period > 0; period -= System.currentTimeMillis() - ts) {
       try {
@@ -58,6 +58,7 @@ public class SleepTask implements Task {
         LOG.log(Level.FINEST, "Interrupted: {0}", ex);
       }
     }
+    LOG.log(Level.FINE, "Task finished after {0} msec.", System.currentTimeMillis() - ts);
     return null;
   }
 }

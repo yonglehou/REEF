@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,6 @@ import javax.inject.Inject;
 public class LocalDriverRuntimeConfiguration extends AbstractDriverRuntimeConfiguration {
   @Inject
   public LocalDriverRuntimeConfiguration() {
-    super(ResourceManager.LocalResourceLaunchHandler.class, ResourceManager.LocalResourceReleaseHandler.class, ResourceManager.LocalResourceRequestHandler.class);
+    super(LocalResourceLaunchHandler.class, LocalResourceReleaseHandler.class, LocalResourceRequestHandler.class);
   }
 }

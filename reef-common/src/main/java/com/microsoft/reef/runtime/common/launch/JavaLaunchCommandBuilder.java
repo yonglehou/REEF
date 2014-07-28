@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,11 @@
  */
 package com.microsoft.reef.runtime.common.launch;
 
-
 import com.microsoft.reef.runtime.common.Launcher;
 import com.microsoft.reef.runtime.common.launch.parameters.ClockConfigurationPath;
 import com.microsoft.reef.runtime.common.launch.parameters.ErrorHandlerRID;
 import com.microsoft.reef.runtime.common.launch.parameters.LaunchID;
-import com.microsoft.reef.runtime.common.utils.JavaUtils;
+import com.microsoft.reef.util.EnvironmentUtils;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
@@ -29,21 +28,23 @@ import java.util.Collection;
 import java.util.List;
 
 public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
-  private String stderr_path = null;
-  private String stdout_path = null;
+  private static final String DEFAULT_JAVA_PATH = System.getenv("JAVA_HOME") + "/bin/" +  "java";
+  private String stderrPath = null;
+  private String stdoutPath = null;
   private String errorHandlerRID = null;
   private String launchID = null;
   private int megaBytes = 0;
   private String evaluatorConfigurationPath = null;
   private String javaPath = null;
   private String classPath = null;
+  private Boolean assertionsEnabled = null;
 
   @Override
   public List<String> build() {
     return new ArrayList<String>() {{
 
       if (javaPath == null || javaPath.isEmpty()) {
-        add(JavaUtils.getJavaBinary());
+        add(DEFAULT_JAVA_PATH);
       } else {
         add(javaPath);
       }
@@ -53,12 +54,19 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
       // Set Xmx based on am memory size
       add("-Xmx" + megaBytes + "m");
 
-      add("-classpath");
-      add(classPath != null ? classPath : JavaUtils.getClasspath());
+      if ((assertionsEnabled != null && assertionsEnabled)
+          || EnvironmentUtils.areAssertionsEnabled()) {
+        add("-ea");
+      }
 
-      // add("-Xdebug -Xnoagent -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000");
+      if (classPath != null && !classPath.isEmpty()) {
+        add("-classpath");
+        add(classPath);
+      }
 
-      Launcher.propagateProperties(this, Launcher.LOGGING_PROPERTIES);
+      Launcher.propagateProperties(this, true, "proc_reef");
+      Launcher.propagateProperties(this, false,
+          "java.util.logging.config.file", "java.util.logging.config.class");
 
       add(Launcher.class.getName());
 
@@ -69,14 +77,14 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
       add("-" + ClockConfigurationPath.SHORT_NAME);
       add(evaluatorConfigurationPath);
 
-      if (stdout_path != null && !stdout_path.isEmpty()) {
+      if (stdoutPath != null && !stdoutPath.isEmpty()) {
         add("1>");
-        add(stdout_path);
+        add(stdoutPath);
       }
 
-      if (stderr_path != null && !stderr_path.isEmpty()) {
+      if (stderrPath != null && !stderrPath.isEmpty()) {
         add("2>");
-        add(stderr_path);
+        add(stderrPath);
       }
     }};
   }
@@ -107,21 +115,21 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
 
   @Override
   public JavaLaunchCommandBuilder setStandardOut(final String standardOut) {
-    this.stdout_path = standardOut;
+    this.stdoutPath = standardOut;
     return this;
   }
 
   @Override
   public JavaLaunchCommandBuilder setStandardErr(final String standardErr) {
-    this.stderr_path = standardErr;
+    this.stderrPath = standardErr;
     return this;
   }
 
   /**
-   * Set the path to the java executable. Will default to a heauristic search if not set.
+   * Set the path to the java executable. Will default to a heuristic search if not set.
    *
    * @param path
-   * @return
+   * @return this
    */
   public JavaLaunchCommandBuilder setJavaPath(final String path) {
     this.javaPath = path;
@@ -138,4 +146,15 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
     return this;
   }
 
+  /**
+   * Enable or disable assertions on the child process.
+   * If not set, the setting is taken from the JVM that executes the code.
+   *
+   * @param assertionsEnabled
+   * @return this
+   */
+  public JavaLaunchCommandBuilder enableAssertions(final boolean assertionsEnabled) {
+    this.assertionsEnabled = assertionsEnabled;
+    return this;
+  }
 }

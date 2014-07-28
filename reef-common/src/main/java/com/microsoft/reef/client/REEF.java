@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import com.microsoft.tang.annotations.DefaultImplementation;
 @DefaultImplementation(REEFImplementation.class)
 public interface REEF extends AutoCloseable {
 
-  static final String REEF_VERSION = "0.3-SNAPSHOT";
+  static final String REEF_VERSION = "0.6-SNAPSHOT";
 
   /**
    * Close the resourcemanager connection.

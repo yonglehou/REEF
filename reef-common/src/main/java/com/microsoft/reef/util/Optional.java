@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,31 +15,39 @@
  */
 package com.microsoft.reef.util;
 
+import net.jcip.annotations.Immutable;
+import net.jcip.annotations.ThreadSafe;
+
 import java.io.Serializable;
 
 /**
  * Represents an optional value. Loosely based on
  * <a href="http://download.java.net/jdk8/docs/api/java/util/Optional.html"></a>The Java 8 version</a>, but filtered for
  * Java 7 compatibility.
- *
- * @param <T>
  */
+@Immutable
+@ThreadSafe
 public final class Optional<T> implements Serializable {
 
   private static final long serialVersionUID = 42L;
+
   private final T value;
+  private final String valueStr;
+  private final int valueHash;
 
   private Optional(final T value) {
     this.value = value;
+    this.valueStr = "Optional:{" + value + '}';
+    this.valueHash = value.hashCode();
   }
 
   private Optional() {
     this.value = null;
+    this.valueStr = "OptionalvNothing";
+    this.valueHash = 0;
   }
 
   /**
-   * @param value
-   * @param <T>
    * @return An Optional with the given value.
    * @throws NullPointerException if the value is null
    */
@@ -51,7 +59,6 @@ public final class Optional<T> implements Serializable {
   }
 
   /**
-   * @param <T>
    * @return an Optional with no value.
    */
   public static <T> Optional<T> empty() {
@@ -59,8 +66,6 @@ public final class Optional<T> implements Serializable {
   }
 
   /**
-   * @param value
-   * @param <T>
    * @return An optional representing the given value, or an empty Optional.
    */
   public static <T> Optional<T> ofNullable(final T value) {
@@ -98,26 +103,23 @@ public final class Optional<T> implements Serializable {
   }
 
   @Override
-  public boolean equals(final Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+  public boolean equals(final Object obj) {
 
-    final Optional optional = (Optional) o;
+    if (this == obj) return true;
 
-    if (value != null ? !value.equals(optional.value) : optional.value != null) return false;
+    if (obj == null || getClass() != obj.getClass()) return false;
 
-    return true;
+    final Optional that = (Optional) obj;
+    return this.value == that.value || (this.value != null && this.value.equals(that.value));
   }
 
   @Override
   public int hashCode() {
-    return value != null ? value.hashCode() : 0;
+    return this.valueHash;
   }
 
   @Override
   public String toString() {
-    return "Optional{" +
-        "value=" + value +
-        '}';
+    return this.valueStr;
   }
 }

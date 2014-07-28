@@ -1,5 +1,5 @@
 /**
- * Copyright (C) 2013 Microsoft Corporation
+ * Copyright (C) 2014 Microsoft Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.microsoft.reef.tests.fail.task;
 
 import com.microsoft.reef.task.Task;
@@ -56,12 +55,8 @@ public final class FailTaskStart implements Task, EventHandler<TaskStart> {
 
   @Override
   public void onNext(final TaskStart event) throws SimulatedTaskFailure {
-    // synchronized (this) {
-    //   this.isRunning = false;
-    //   this.notify();
-    // }
     final SimulatedTaskFailure ex = new SimulatedTaskFailure("FailTaskStart.send() invoked.");
-    LOG.log(Level.FINE, "FailTaskStart.send() invoked: {0}", ex);
+    LOG.log(Level.FINE, "FailTaskStart.onNext() invoked: {0}", ex);
     throw ex;
   }
 }
