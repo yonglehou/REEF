@@ -66,7 +66,7 @@ public class CommGroupNetworkHandlerImpl implements
     // Count the total number of allreducers.
     if (operHandler.getClass().getName().equals(AllReducer.class.getName())) {
       totalNumAllReducers.incrementAndGet();
-      System.out.println("Current total number of AllReducers: "
+      printLog("Current total number of AllReducers: "
         + totalNumAllReducers.get());
     }
   }
@@ -84,7 +84,7 @@ public class CommGroupNetworkHandlerImpl implements
       + msg.getSrcid() + " with source version: " + msg.getSrcVersion()
       + " with target id: " + msg.getDestid() + " with target version: "
       + msg.getVersion());
-    System.out.println("Get msg with type: " + msg.getType() + " with src id: "
+    printLog("Get msg with type: " + msg.getType() + " with src id: "
       + msg.getSrcid() + " with source version: " + msg.getSrcVersion()
       + " with target id: " + msg.getDestid() + " with target version: "
       + msg.getVersion());
@@ -171,7 +171,7 @@ public class CommGroupNetworkHandlerImpl implements
       // Remove
       for (Class<? extends Name<String>> rmKey : rmKeys) {
         GroupCommMessage rmMsg = allreducerTopoMsgMap.remove(rmKey);
-        System.out.println("Remove msg with opername " + rmKey + " with type "
+        printLog("Remove msg with opername " + rmKey + " with type "
           + rmMsg.getType() + " with version " + rmMsg.getVersion());
       }
       final Class<? extends Name<String>> operName =
@@ -181,13 +181,13 @@ public class CommGroupNetworkHandlerImpl implements
         handleMsgs();
       }
     } else {
-      System.out.println("This is an old message.");
+      printLog("Discard an old message.");
     }
   }
 
   private void handleMsgs() {
     if (allreducerTopoMsgMap.size() == totalNumAllReducers.get()) {
-      System.out.println("Topo msg map size: " + allreducerTopoMsgMap.size()
+      printLog("Topo msg map size: " + allreducerTopoMsgMap.size()
         + ", process topo messages on all the allreduce topologies.");
       for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
         .entrySet()) {
@@ -197,10 +197,14 @@ public class CommGroupNetworkHandlerImpl implements
         }
       }
       allreducerTopoMsgMap.clear();
-      System.out.println("Topo msg map is clear.");
+      printLog("Topo msg map is clear.");
     } else {
-      System.out.println("Topo msg map size: " + allreducerTopoMsgMap.size()
+      printLog("Topo msg map size: " + allreducerTopoMsgMap.size()
         + ", isAllReducerTopoChangeMsgBlocked? " + isAllReducerTopoMsgBlocked);
     }
+  }
+
+  private void printLog(String log) {
+    System.out.println("CommGroupNetworkHandler - " + log);
   }
 }

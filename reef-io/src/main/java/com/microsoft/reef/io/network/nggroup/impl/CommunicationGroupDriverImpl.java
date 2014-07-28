@@ -443,14 +443,14 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    */
   public void processMsg(final GroupCommMessage msg) {
     synchronized (topologiesLock) {
-      LOG.info(getQualifiedName() + "Acquired topologiesLock");
+      LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
+        + msg.getSrcid() + " with source version " + msg.getSrcVersion());
       // ////////////////////////////////////////////////////////////////
       // Bingjing: Move msg version checking to the lock
-      LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
-        + msg.getSrcid());
-      System.out.println(getQualifiedName() + "processing " + msg.getType()
+      System.out.println(getQualifiedName() + "Processing " + msg.getType()
         + " from " + msg.getSrcid() + " with source version "
         + msg.getSrcVersion());
+      // //////////////////////////////////////////////////////////////////////
       if (!isMsgVersionOk(msg)) {
         return;
       }
@@ -460,6 +460,11 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         allTasksAdded.await();
         initializing.compareAndSet(true, false);
       }
+      // /////////////////////////////////////////////////////
+      if (!isMsgVersionOk(msg)) {
+        return;
+      }
+      // ///////////////////////////////////////////////////////
       queNProcessMsg(msg);
     }
     LOG.info(getQualifiedName() + "Released topologiesLock");

@@ -32,6 +32,7 @@ import com.microsoft.wake.IdentifierFactory;
 import com.microsoft.wake.remote.Codec;
 
 import javax.inject.Inject;
+
 import java.util.List;
 
 
@@ -105,5 +106,11 @@ public class AllReduceOp<T> extends SenderReceiverBase implements AllReduce<T> {
 		}
 		return result;
 	}
+
+  @Override
+  public List<T> apply(List<T> elements) throws InterruptedException,
+    NetworkException {
+    throw new UnsupportedOperationException();
+  }
 
 }

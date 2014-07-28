@@ -35,8 +35,6 @@ import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ControlMessageAllReducer;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;

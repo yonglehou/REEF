@@ -23,8 +23,6 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ControlMessageAllReducer;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
@@ -63,6 +61,7 @@ public class SlaveTask implements Task {
     int ite = 0;
     int op = 0;
     while (ite < numIters) {
+      checkAndUpdate();
       if (Math.random() < 0.1) {
         System.out.println("Simulated Failure");
         throw new RuntimeException("Simulated Failure");
@@ -92,19 +91,15 @@ public class SlaveTask implements Task {
           System.out.println("RESULT IS NULL.");
         }
       }
-      communicationGroupClient.checkIteration();
-      if (communicationGroupClient.isCurrentIterationFailed()) {
-        System.out.println("CURRENT ITERATION FAILS.");
-      } else {
-        if (communicationGroupClient.isNewTaskComing()) {
-          System.out.println("NEW TASK IS COMING.");
-        }
-      }
-      communicationGroupClient.updateIteration();
     }
     final long time2 = System.currentTimeMillis();
     System.out.println("Allreduce vector of dimensions " + dimensions
       + " took " + (time2 - time1) / (numIters * 1000.0) + " secs");
     return null;
+  }
+
+  private void checkAndUpdate() {
+    communicationGroupClient.checkIteration();
+    communicationGroupClient.updateIteration();
   }
 }

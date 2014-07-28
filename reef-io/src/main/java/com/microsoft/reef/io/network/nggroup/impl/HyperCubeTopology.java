@@ -247,9 +247,8 @@ public class HyperCubeTopology implements Topology {
       topo.dimensionLevel = updateDimensionLevel(topo.hyperCubeNodeMaxID);
       nodeID = topo.hyperCubeNodeMaxID;
     }
-    System.out.println(getQualifiedName() + "Adding hyper cube node " + taskID
-      + " with node id " + nodeID + " at the dimension level: "
-      + topo.dimensionLevel);
+    printLog("Adding hyper cube node " + taskID + " with node id " + nodeID
+      + " at the dimension level: " + topo.dimensionLevel);
     return addHyperCubeNode(taskID, nodeID, topo.hyperCubeNodeMaxID,
       topo.dimensionLevel, topo.taskMap, topo.nodeMap);
   }
@@ -403,8 +402,7 @@ public class HyperCubeTopology implements Topology {
             findAllOtherNodesInZone(neighborID, moduloBase, maxNodeID, nodeMap);
           int[] op = null;
           for (int id : nodeIDsInZone) {
-            System.out.println("Node " + id + " in the zone where "
-              + neighborID + " is.");
+            printLog("Node " + id + " in the zone where " + neighborID + " is.");
             op = nodeMap.get(id).getNeighborOpList().get(i).get(0);
             // Add sending
             op[0] = nodeID;
@@ -621,7 +619,7 @@ public class HyperCubeTopology implements Topology {
   @Override
   public synchronized void setRunning(String taskID) {
     // Invoked by TopologyRunningTaskHandler when task is running
-    System.out.println(getQualifiedName() + taskID + " is running.");
+    printLog(taskID + " is running.");
     // We add the number of running tasks.
     this.numRunningTasks.incrementAndGet();
     if (!isInitialized.get()) {
@@ -629,8 +627,7 @@ public class HyperCubeTopology implements Topology {
       if (this.numRunningTasks.get() == this.minInitialTasks) {
         initializeTopology(activeTopo, taskVersionMap);
         isInitialized.set(true);
-        System.out.println(getQualifiedName()
-          + "hypercube topology is initialized!");
+        printLog("Hypercube topology is initialized!");
       }
     } else {
       // Once the topology is initialized,
@@ -638,14 +635,13 @@ public class HyperCubeTopology implements Topology {
       // sandbox is not null), apply adding and see which neighbor nodes are
       // modified
       if (sandBox == null) {
-        System.out.println(getQualifiedName()
-          + "copy active toopology to sandbox.");
+        printLog("Copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
       }
       Set<Integer> modifiedNeighbors = newTask(sandBox, taskID);
-      System.out.println(getQualifiedName() + "print active Hypercube");
+      printLog("Print active Hypercube");
       printHyperCube(activeTopo);
-      System.out.println(getQualifiedName() + "print Hypercube in sandbox");
+      printLog("Print Hypercube in sandbox");
       printHyperCube(sandBox);
       // Add this task to new tasks
       // Even this new task has the same ID which is used before
@@ -660,7 +656,7 @@ public class HyperCubeTopology implements Topology {
         String mTaskID = sandBox.nodeMap.get(mNodeID).getTaskID();
         if (!failedTaskNeighbors.contains(mTaskID)
           && !newTaskNeighbors.contains(mTaskID) && !newTasks.contains(mTaskID)) {
-          System.out.println("New task neighbor: " + mTaskID);
+          printLog("New task neighbor: " + mTaskID);
           // The version number is a number agreed bwtween driver-task
           // communication
           sendMsg(Utils.bldVersionedGCM(groupName, operName, Type.SourceAdd,
@@ -684,7 +680,6 @@ public class HyperCubeTopology implements Topology {
     int ite = iteration.get();
     for (Entry<Integer, HyperCubeNode> entry : topo.nodeMap.entrySet()) {
       node = entry.getValue();
-      System.out.println("Send topology setup msg to " + node.getTaskID());
       try {
         // The base iteration and the new iteration are the same.
         sendTopology(node, topo, taskVersionMap, Type.TopologySetup, ite, ite,
@@ -716,8 +711,7 @@ public class HyperCubeTopology implements Topology {
     }
     TopoStruct sandbox = new TopoStruct();
     if (topo == null) {
-      System.out.println("topo is null");
-      LOG.info("topo is null");
+      printLog("Active topology is null");
     }
     sandbox.hyperCubeNodeMaxID = topo.hyperCubeNodeMaxID;
     sandbox.dimensionLevel = topo.dimensionLevel;
@@ -776,9 +770,9 @@ public class HyperCubeTopology implements Topology {
   }
 
   private void sendMsg(GroupCommMessage gcm) {
-    System.out.println(getQualifiedName() + "sendMsg " + gcm.getType()
-      + " from " + gcm.getSrcid() + " with version " + gcm.getSrcVersion()
-      + " to " + gcm.getDestid() + " with version " + gcm.getVersion());
+    printLog(getQualifiedName() + "Send msg " + gcm.getType() + " from "
+      + gcm.getSrcid() + " with version " + gcm.getSrcVersion() + " to "
+      + gcm.getDestid() + " with version " + gcm.getVersion());
     senderStage.onNext(gcm);
   }
 
@@ -943,7 +937,7 @@ public class HyperCubeTopology implements Topology {
   @Override
   public synchronized void setFailed(final String taskID) {
     // Invoked by TopologyFailedTaskHandler when task is failed
-    System.out.println(getQualifiedName() + taskID + " fails.");
+    printLog(taskID + " fails.");
     // We decrease the number of running tasks.
     numRunningTasks.decrementAndGet();
     if (!isInitialized.get()) {
@@ -954,8 +948,7 @@ public class HyperCubeTopology implements Topology {
       // sandbox is not null), apply adding and see which neighbor nodes are
       // modified
       if (sandBox == null) {
-        System.out.println(getQualifiedName()
-          + "copy active toopology to sandbox.");
+        printLog("Copy active toopology to sandbox.");
         sandBox = copyTopology(activeTopo);
       }
       // There are failed tasks in the current topology
@@ -987,16 +980,16 @@ public class HyperCubeTopology implements Topology {
       // every task is notified
       deleteTask(sandBox, taskID);
       // Print and check the difference between two topologies
-      System.out.println(getQualifiedName() + "print active Hypercube.");
+      printLog("Print active Hypercube.");
       printHyperCube(activeTopo);
-      System.out.println(getQualifiedName() + "print sandbox Hypercube.");
+      printLog("Print sandbox Hypercube.");
       printHyperCube(sandBox);
       boolean isFailureSent = false;
       for (String mTaskID : modifiedNeighbors) {
         // If neither don't contain this task ID
         if (!newTasks.contains(mTaskID) && !newTaskNeighbors.contains(mTaskID)
           && !failedTaskNeighbors.contains(mTaskID)) {
-          System.out.println("Failed task neighbor: " + mTaskID);
+          printLog("Failed task neighbor: " + mTaskID);
           // Send failure message
           // The version is a number agreed in driver-task communication
           sendMsg(Utils.bldVersionedGCM(groupName, operName, Type.SourceDead,
@@ -1033,15 +1026,14 @@ public class HyperCubeTopology implements Topology {
     // there could cause problem in the code.
     // We assume there would only be AllReduce operator in the user code.
     if (msg.getSrcVersion() != getNodeVersion(msg.getSrcid())) {
-      System.out.println(getQualifiedName() + "processing " + msg.getType()
-        + " from " + msg.getSrcid() + " with version " + msg.getSrcVersion()
-        + ". But current version is " + getNodeVersion(msg.getSrcid()));
+      printLog("Processing " + msg.getType() + " from " + msg.getSrcid()
+        + " with version " + msg.getSrcVersion() + ". But current version is "
+        + getNodeVersion(msg.getSrcid()));
       return;
     }
     int iteration = getIterationInBytes(Utils.getData(msg));
-    System.out.println(getQualifiedName() + "processing " + msg.getType()
-      + " from " + msg.getSrcid() + " with version " + msg.getSrcVersion()
-      + " with iteration " + iteration);
+    printLog("Processing " + msg.getType() + " from " + msg.getSrcid()
+      + " with version " + msg.getSrcVersion() + " with iteration " + iteration);
     if (msg.getType().equals(Type.SourceDead)) {
       taskReports.put(msg.getSrcid(), iteration);
       processNeighborUpdate();
@@ -1066,13 +1058,13 @@ public class HyperCubeTopology implements Topology {
 
   private void processNeighborUpdate() {
     // Check if all the task reports include all the failed neighbors
-    System.out.println("Process neighbor update.");
-    if (this.numRunningTasks.get() < this.minInitialTasks) {
+    printLog("Process neighbor update.");
+    if (numRunningTasks.get() < minInitialTasks) {
       // We don't process the neighbor update if we haven't got the
       // minimum number of running tasks.
       // Because the driver stop processing the message when the number of tasks
       // is less than the number of intial tasks, no message can arrive here.
-      System.out.println("The current number of tasks is lower than"
+      printLog("The current number of tasks is lower than"
         + " the number of running tasks required.");
       return;
     }
@@ -1090,7 +1082,6 @@ public class HyperCubeTopology implements Topology {
     int maxIteration = Integer.MIN_VALUE;
     Integer taskIteration = null;
     for (String taskID : failedTaskNeighbors) {
-      System.out.println("Current failed task neighbor: " + taskID);
       taskIteration = taskReports.get(taskID);
       if (taskIteration != null) {
         if (minIteration > taskIteration.intValue()) {
@@ -1100,6 +1091,7 @@ public class HyperCubeTopology implements Topology {
           maxIteration = taskIteration.intValue();
         }
       } else {
+        printLog("No report from current failed task neighbor: " + taskID);
         allContained = false;
         break;
       }
@@ -1107,7 +1099,6 @@ public class HyperCubeTopology implements Topology {
     if (allContained) {
       // Check if all the task reports include all the new task neighbors
       for (String taskID : newTaskNeighbors) {
-        System.out.println("Current new task neighbor: " + taskID);
         taskIteration = taskReports.get(taskID);
         if (taskIteration != null) {
           if (minIteration > taskIteration.intValue()) {
@@ -1117,6 +1108,7 @@ public class HyperCubeTopology implements Topology {
             maxIteration = taskIteration.intValue();
           }
         } else {
+          printLog("No report from current new task neighbor: " + taskID);
           allContained = false;
           break;
         }
@@ -1132,14 +1124,14 @@ public class HyperCubeTopology implements Topology {
       }
       // If yes, calculate which iteration the new topology is for
       activeTopo = sandBox;
-      if (activeTopo == null) {
-        System.out.println("null activeTopo 1");
-      }
+      // if (activeTopo == null) {
+      //  System.out.println("null activeTopo 1");
+      // }
       // Set the internal agreed iteration number for updating the topology.
       int baseIteration = minIteration;
       int newIteration = maxIteration + 1;
       iteration.set(newIteration);
-      System.out.println("baseIteration: " + baseIteration + ", newIteration: "
+      printLog("baseIteration: " + baseIteration + ", newIteration: "
         + newIteration + ", total number of nodes in new topology: "
         + activeTopo.nodeMap.size());
       // Because all tasks are blocked when there is failures.
@@ -1177,7 +1169,7 @@ public class HyperCubeTopology implements Topology {
         } catch (Exception e) {
           e.printStackTrace();
           LOG.log(Level.WARNING, "", e);
-          System.out.println("Fail to send the topology setup");
+          printLog("Fail to send the topology setup");
         }
       }
       // Clean related data structures
@@ -1188,7 +1180,7 @@ public class HyperCubeTopology implements Topology {
       isFailed.set(false);
       sandBox = null;
     } else {
-      System.out.println("Waiting for the arrival of more task reports.");
+      printLog("Waiting for the arrival of more task reports.");
     }
   }
 
@@ -1217,9 +1209,20 @@ public class HyperCubeTopology implements Topology {
         sb1.append("|");
         sb2.append("|");
       }
-      System.out.println(sb1);
-      System.out.println(sb2);
+      printLog(sb1.toString());
+      printLog(sb2.toString());
     }
+  }
+
+  @Override
+  public boolean isRunning(String taskId) {
+    // This method is not invoked.
+    printLog("Is topology running?");
+    return false;
+  }
+
+  private void printLog(String log) {
+    System.out.println(getQualifiedName() + log);
   }
 
   public static void main(String[] args) {
@@ -1244,12 +1247,5 @@ public class HyperCubeTopology implements Topology {
     // topo.addTask("task-1", 1);
     // topo.addTask("task-2", 2);
     // topo.printHyperCube();
-  }
-
-  @Override
-  public boolean isRunning(String taskId) {
-    // This method is not invoked.
-    System.out.println("Is topology running?");
-    return false;
   }
 }

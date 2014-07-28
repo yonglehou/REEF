@@ -23,8 +23,6 @@ import com.microsoft.reef.examples.nggroup.bgd.math.DenseVector;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ControlMessageAllReducer;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
@@ -58,13 +56,14 @@ public class MasterTask implements Task {
 
   @Override
   public byte[] call(final byte[] memento) throws Exception {
-    final long time1 = System.currentTimeMillis();
     Vector model = new DenseVector(new double[] { 1, 1, 1, 1 });
     Vector newModel = null;
     final int numIters = 50;
     int ite = 0;
     int op = 0;
+    final long time1 = System.currentTimeMillis();
     while (ite < numIters) {
+      checkAndUpdate();
       System.out.println("SYNC ITERATION ");
       Integer recvIte = controlMsgAllReducer.apply(ite);
       if (recvIte != null) {
@@ -90,19 +89,15 @@ public class MasterTask implements Task {
           System.out.println("RESULT IS NULL.");
         }
       }
-      communicationGroupClient.checkIteration();
-      if (communicationGroupClient.isCurrentIterationFailed()) {
-        System.out.println("CURRENT ITERATION FAILS.");
-      } else {
-        if (communicationGroupClient.isNewTaskComing()) {
-          System.out.println("NEW TASK IS COMING.");
-        }
-      }
-      communicationGroupClient.updateIteration();
     }
     final long time2 = System.currentTimeMillis();
     System.out.println("Allreduce vector of dimensions " + dimensions
       + " took " + (time2 - time1) / (numIters * 1000.0) + " secs");
     return null;
+  }
+
+  private void checkAndUpdate() {
+    communicationGroupClient.checkIteration();
+    communicationGroupClient.updateIteration();
   }
 }

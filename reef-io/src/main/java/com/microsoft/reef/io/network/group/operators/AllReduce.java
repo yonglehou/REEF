@@ -48,6 +48,16 @@ public interface AllReduce<T> extends GroupCommOperator{
   T apply(T aElement) throws InterruptedException, NetworkException;
 
   /**
+   * Apply the operation on a list of elements
+   * 
+   * @param elements
+   * @return
+   * @throws InterruptedException
+   * @throws NetworkException
+   */
+  List<T> apply(List<T> elements) throws InterruptedException, NetworkException;
+
+  /**
    * Apply the operation on element.
    * 
    * @param element

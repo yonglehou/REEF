@@ -32,17 +32,19 @@ import com.microsoft.reef.driver.evaluator.EvaluatorRequestor;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.TaskConfiguration;
 import com.microsoft.reef.evaluator.context.parameters.ContextIdentifier;
+import com.microsoft.reef.examples.nggroup.allreduce.ControlMessageAllReduceFunction;
+import com.microsoft.reef.examples.nggroup.allreduce.ControlMessageAllReducer;
+import com.microsoft.reef.examples.nggroup.allreduce.ModelAllReduceFunction;
+import com.microsoft.reef.examples.nggroup.allreduce.ModelAllReducer;
 import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
-import com.microsoft.reef.examples.nggroup.broadcast.parameters.ModelAllReducer;
 import com.microsoft.reef.examples.nggroup.broadcast.parameters.NumberOfReceivers;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupDriver;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommDriver;
 import com.microsoft.reef.io.network.nggroup.impl.config.AllReduceOperatorSpec;
 import com.microsoft.reef.io.serialization.Codec;
 import com.microsoft.reef.io.serialization.SerializableCodec;
-import com.microsoft.reef.poison.PoisonedConfiguration;
 import com.microsoft.tang.Configuration;
 import com.microsoft.tang.Injector;
 import com.microsoft.tang.Tang;
@@ -95,13 +97,21 @@ public class AllReduceDriver {
         numTotalTasks);
     LOG.info("Obtained all communication group");
 
+    final Codec<Integer> controlMsgCodec = new SerializableCodec<>();
     final Codec<Vector> modelCodec = new SerializableCodec<>();
 
-    allCommGroup.addAllReduce(
-      ModelAllReducer.class,
-      AllReduceOperatorSpec.newBuilder()
-        .setDataCodecClass(modelCodec.getClass())
-        .setReduceFunctionClass(ModelAllReduceFunction.class).build())
+    allCommGroup
+      .addAllReduce(
+        ControlMessageAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(controlMsgCodec.getClass())
+          .setReduceFunctionClass(ControlMessageAllReduceFunction.class)
+          .build())
+      .addAllReduce(
+        ModelAllReducer.class,
+        AllReduceOperatorSpec.newBuilder()
+          .setDataCodecClass(modelCodec.getClass())
+          .setReduceFunctionClass(ModelAllReduceFunction.class).build())
       .finalise();
 
     LOG.info("Added operators to allCommGroup");

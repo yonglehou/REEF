@@ -122,17 +122,17 @@ public class SlaveTask implements Task {
     int curOp = 0;
     boolean stop = false;
 
-//    while(true){
+    // while(true){
     // (1): Synchronize Topology
     // (2): Perform controlMessageAllReducer
-    //      if no result: continue
+    // if no result: continue
     // (3): Perform lossAndGradientAllReducer
-    //      if no result: continue
+    // if no result: continue
     // (4): Update model and break criterion
-//    }
-
+    // }
 
     while (true) {
+      checkAndUpdate();
       // Control message allreduce
       // Get the current iteration, operation
       // and if the input data is required to send.
@@ -146,9 +146,12 @@ public class SlaveTask implements Task {
         }
       }
       failPerhaps(taskID);
-      ControlMessage recvState =
-        controlMessageAllReducer.apply(new ControlMessage(startIte, startOp,
-          taskID, syncModel, stop));
+      ControlMessage recvState = null;
+      try (Timer t = new Timer("Control Message AllReduce")) {
+        recvState =
+          controlMessageAllReducer.apply(new ControlMessage(startIte, startOp,
+            taskID, syncModel, stop));
+      }
       if (recvState != null) {
         curIte = recvState.iteration;
         curOp = recvState.operation;
@@ -164,17 +167,19 @@ public class SlaveTask implements Task {
         curIte = 0;
         curOp = 0;
       }
-      if(stop) {
+      if (stop) {
         break;
       }
       if (curOp == 1) {
         Vector recvModel = null;
         if (syncModel) {
           failPerhaps(taskID);
-          if (taskID.compareTo(leadingTaskID) != 0) {
-            recvModel = modelAllReducer.apply(new DenseVector(new double[0]));
-          } else {
-            recvModel = modelAllReducer.apply(model);
+          try (Timer t = new Timer("Model AllReduce")) {
+            if (taskID.compareTo(leadingTaskID) != 0) {
+              recvModel = modelAllReducer.apply(new DenseVector(new double[0]));
+            } else {
+              recvModel = modelAllReducer.apply(model);
+            }
           }
         }
         if (!syncModel || recvModel != null) {
@@ -208,15 +213,17 @@ public class SlaveTask implements Task {
         Pair<Vector, Vector> recvModelPair = null;
         if (syncModel) {
           failPerhaps(taskID);
-          if (taskID.compareTo(leadingTaskID) != 0) {
-            recvModelPair =
-              modelDescentDirectionAllReducer
-                .apply(new Pair<Vector, Vector>(new DenseVector(new double[0]),
+          try (Timer t = new Timer("Model And Descent Direction AllReduce")) {
+            if (taskID.compareTo(leadingTaskID) != 0) {
+              recvModelPair =
+                modelDescentDirectionAllReducer.apply(new Pair<Vector, Vector>(
+                  new DenseVector(new double[0]),
                   new DenseVector(new double[0])));
-          } else {
-            recvModelPair =
-              modelDescentDirectionAllReducer.apply(new Pair<>(model,
-                descentDirection));
+            } else {
+              recvModelPair =
+                modelDescentDirectionAllReducer.apply(new Pair<>(model,
+                  descentDirection));
+            }
           }
         }
         if (!syncModel || recvModelPair != null) {
@@ -238,7 +245,7 @@ public class SlaveTask implements Task {
           }
         }
       }
-      checkAndUpdate();
+      // checkAndUpdate();
     }
     for (final Double loss : losses) {
       System.out.println(loss);
@@ -248,7 +255,6 @@ public class SlaveTask implements Task {
 
   private boolean checkAndUpdate() {
     boolean isFailed = false;
-    communicationGroupClient.getTopologyChanges()
     communicationGroupClient.checkIteration();
     if (communicationGroupClient.isCurrentIterationFailed()) {
       isFailed = true;
@@ -262,9 +268,13 @@ public class SlaveTask implements Task {
   }
 
   private Pair<Pair<Double, Integer>, Vector> allreduceLossAndGradient(
-    Vector model) throws NetworkException, InterruptedException {
-    Pair<Pair<Double, Integer>, Vector> lossAndGradient =
-      lossAndGradientAllReducer.apply(computeLossAndGradient(model));
+    final Vector model) throws NetworkException, InterruptedException {
+    Pair<Pair<Double, Integer>, Vector> localLossAndGradient =
+      computeLossAndGradient(model);
+    Pair<Pair<Double, Integer>, Vector> lossAndGradient = null;
+    try (Timer t = new Timer("Loss And Gradient AllReduce")) {
+      lossAndGradient = lossAndGradientAllReducer.apply(localLossAndGradient);
+    }
     return lossAndGradient;
   }
 
@@ -287,7 +297,6 @@ public class SlaveTask implements Task {
   private Vector regularizeLossAndGradient(Vector model,
     final Pair<Pair<Double, Integer>, Vector> lossAndGradient) {
     Vector gradient = null;
-    // Why timer?
     // try (Timer t = new Timer("Regularize(Loss) + Regularize(Gradient)")) {
     final double loss =
       regularizeLoss(lossAndGradient.first.first, lossAndGradient.first.second,
@@ -328,9 +337,13 @@ public class SlaveTask implements Task {
   private Pair<Vector, Integer> allreduceLineSearch(boolean sendModel,
     Vector model, Vector descentDirection) throws NetworkException,
     InterruptedException {
-    Pair<Vector, Integer> lineSearchEvals =
-      lineSearchEvaluationsAllReducer
-        .apply(lineSearch(model, descentDirection));
+    Pair<Vector, Integer> localLineSearchEvals =
+      lineSearch(model, descentDirection);
+    Pair<Vector, Integer> lineSearchEvals = null;
+    try (Timer t = new Timer("LineSearch AllReduce")) {
+      lineSearchEvals =
+        lineSearchEvaluationsAllReducer.apply(localLineSearchEvals);
+    }
     return lineSearchEvals;
   }
 
@@ -368,11 +381,12 @@ public class SlaveTask implements Task {
 
   private void updateModel(Vector model, Vector descentDirection,
     final Pair<Vector, Integer> lineSearchEvals) {
-    try (Timer t = new Timer("GetDescentDirection + FindMinEta + UpdateModel")) {
-      minEta = findMinEta(model, descentDirection, lineSearchEvals);
-      descentDirection.scale(minEta);
-      model.add(descentDirection);
-    }
+    // try (Timer t = new
+    // Timer("GetDescentDirection + FindMinEta + UpdateModel")) {
+    minEta = findMinEta(model, descentDirection, lineSearchEvals);
+    descentDirection.scale(minEta);
+    model.add(descentDirection);
+    // }
     System.out.println("New Model: " + model);
   }
 
