@@ -460,7 +460,8 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
         allTasksAdded.await();
         initializing.compareAndSet(true, false);
       }
-      // /////////////////////////////////////////////////////
+      // /////////////////////////////////////////////////////////
+      // Bingjing: Check again
       if (!isMsgVersionOk(msg)) {
         return;
       }

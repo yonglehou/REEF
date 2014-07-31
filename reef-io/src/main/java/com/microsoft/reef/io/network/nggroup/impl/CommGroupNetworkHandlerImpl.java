@@ -80,16 +80,12 @@ public class CommGroupNetworkHandlerImpl implements
 
   @Override
   public void onNext(final GroupCommMessage msg) {
-    LOG.info("Get msg with type: " + msg.getType() + " with src id: "
-      + msg.getSrcid() + " with source version: " + msg.getSrcVersion()
-      + " with target id: " + msg.getDestid() + " with target version: "
-      + msg.getVersion());
-    printLog("Get msg with type: " + msg.getType() + " with src id: "
-      + msg.getSrcid() + " with source version: " + msg.getSrcVersion()
-      + " with target id: " + msg.getDestid() + " with target version: "
-      + msg.getVersion());
     final Class<? extends Name<String>> operName =
       Utils.getClass(msg.getOperatorname());
+    printLog(Utils.simpleName(operName) + " get message with type: "
+      + msg.getType() + " with source id: " + msg.getSrcid()
+      + " with source version: " + msg.getSrcVersion() + " with target id: "
+      + msg.getDestid() + " with target version: " + msg.getVersion());
     if (msg.getType() == Type.TopologyUpdated) {
       LOG.info("Got TopologyUpdate msg for " + operName
         + ". Adding to respective queue");
@@ -102,7 +98,10 @@ public class CommGroupNetworkHandlerImpl implements
       || msg.getType() == Type.SourceDead) {
       handleAllReducerTopoMsg(msg);
     } else {
-      operHandlers.get(operName).onNext(msg);
+      EventHandler<GroupCommMessage> operHandler = operHandlers.get(operName);
+      if (operHandler != null) {
+        operHandler.onNext(msg);
+      }
     }
   }
 
@@ -206,5 +205,6 @@ public class CommGroupNetworkHandlerImpl implements
 
   private void printLog(String log) {
     System.out.println("CommGroupNetworkHandler - " + log);
+    LOG.info("CommGroupNetworkHandler - " + log);
   }
 }

@@ -770,9 +770,9 @@ public class HyperCubeTopology implements Topology {
   }
 
   private void sendMsg(GroupCommMessage gcm) {
-    printLog(getQualifiedName() + "Send msg " + gcm.getType() + " from "
-      + gcm.getSrcid() + " with version " + gcm.getSrcVersion() + " to "
-      + gcm.getDestid() + " with version " + gcm.getVersion());
+    printLog("Send msg " + gcm.getType() + " from " + gcm.getSrcid()
+      + " with version " + gcm.getSrcVersion() + " to " + gcm.getDestid()
+      + " with version " + gcm.getVersion());
     senderStage.onNext(gcm);
   }
 
@@ -1226,26 +1226,10 @@ public class HyperCubeTopology implements Topology {
   }
 
   public static void main(String[] args) {
-    HyperCubeTopology topo = new HyperCubeTopology(null, null, null, null, 5);
-    topo.newTask(null, "task-0");
-    topo.newTask(null, "task-1");
-    topo.newTask(null, "task-2");
-    topo.newTask(null, "task-3");
-    topo.newTask(null, "task-4");
-    topo.newTask(null, "task-5");
-    topo.newTask(null, "task-6");
-    topo.newTask(null, "task-7");
-    // topo.addTask("task-8");
-    // topo.printHyperCube();
-    // topo.removeTask("task-0");
-    // topo.printHyperCube();
-    // topo.removeTask("task-1");
-    // topo.printHyperCube();
-    // topo.removeTask("task-2");
-    // topo.removeTask("task-3");
+    HyperCubeTopology topo = new HyperCubeTopology(null, null, null, null, 128);
+    for (int i = 0; i < 128; i++) {
+      topo.newTask(null, "task-" + i);
+    }
     topo.printHyperCube(null);
-    // topo.addTask("task-1", 1);
-    // topo.addTask("task-2", 2);
-    // topo.printHyperCube();
   }
 }

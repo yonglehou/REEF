@@ -50,7 +50,7 @@ public class ControlMessageReduceFunction implements
           taskID = eval.taskID;
         }
       }
-      if (maxIte == eval.iteration && maxOp < eval.operation) {
+      if (maxIte == eval.iteration && maxOp == eval.operation) {
         if (taskID.compareTo(eval.taskID) < 0) {
           taskID = eval.taskID;
         }

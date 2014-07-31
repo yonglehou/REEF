@@ -430,7 +430,6 @@ public class SlaveTask implements Task {
   }
 
   private void failPerhaps(String taskID) {
-    // Temporarily stop generating failure
     if (Math.random() < FAILURE_PROB && taskID.compareTo("MasterTask") != 0) {
       System.out.println("Simulated Failure");
       throw new RuntimeException("Simulated Failure");

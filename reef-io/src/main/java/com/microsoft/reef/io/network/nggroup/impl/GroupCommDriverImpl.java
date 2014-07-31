@@ -134,27 +134,39 @@ public class GroupCommDriverImpl implements GroupCommDriver {
         },
         new LoggingEventHandler<Exception>());
     this.netService.registerId(idFac.getNewInstance(driverId));
-    this.senderStage = new ThreadPoolStage<>(
-        "SrcCtrlMsgSender", new EventHandler<GroupCommMessage>() {
-      @Override
-      public void onNext(final GroupCommMessage srcCtrlMsg) {
-
-        final Identifier id = GroupCommDriverImpl.this.idFac.getNewInstance(srcCtrlMsg.getDestid());
-
-        final Connection<GroupCommMessage> link = GroupCommDriverImpl.this.netService.newConnection(id);
-        try {
-          LOG.info("Sending source ctrl msg " + srcCtrlMsg.getType() + " for " + srcCtrlMsg.getSrcid() + " to " + id);
-//          LOG.info("Opening connection to " + id);
-          link.open();
-//          LOG.info("Writing data to " + id);
-          link.write(srcCtrlMsg);
-        } catch (final NetworkException e) {
-          LOG.log(Level.WARNING, "Unable to send ctrl task msg to parent " + id, e);
-          throw new RuntimeException("Unable to send ctrl task msg to parent " + id, e);
-        }
-      }
-    }, 5);
-
+    this.senderStage =
+      new ThreadPoolStage<>("SrcCtrlMsgSender",
+        new EventHandler<GroupCommMessage>() {
+          @Override
+          public void onNext(final GroupCommMessage srcCtrlMsg) {
+            final Identifier id =
+              GroupCommDriverImpl.this.idFac.getNewInstance(srcCtrlMsg
+                .getDestid());
+            try {
+              printMsgInfo("Send source ctrl msg", srcCtrlMsg);
+              final Connection<GroupCommMessage> link =
+                GroupCommDriverImpl.this.netService.newConnection(id);
+              // LOG.info("Opening connection to " + id);
+              link.open();
+              // LOG.info("Writing data to " + id);
+              link.write(srcCtrlMsg);
+              printMsgInfo("Succeed sending source ctrl msg", srcCtrlMsg);
+            } catch (final Throwable t) {
+              printMsgInfo("Fail to send source ctrl msg", srcCtrlMsg);
+              LOG.log(Level.INFO, "Unable to send ctrl task msg to parent "
+                + id, t);
+              throw new RuntimeException(
+                "Unable to send ctrl task msg to parent " + id, t);
+            }
+          }
+        }, 5);
+  }
+  
+  private void printMsgInfo(String cmd, GroupCommMessage msg) {
+    LOG.info(cmd + " for operator " + msg.getOperatorname() + " with type "
+      + msg.getType() + " from " + msg.getSrcid() + " with source version "
+      + msg.getVersion() + " to " + msg.getDestid() + " with target version "
+      + msg.getVersion());
   }
 
   @Override

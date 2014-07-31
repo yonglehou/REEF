@@ -87,8 +87,8 @@ public class AllReduceDriver {
     this.numberOfReceivers = numberOfReceivers;
     this.numberOfAllocatedEvaluators = new AtomicInteger(numberOfReceivers + 1);
 
-    int numTotalTasks = (numberOfReceivers + 1) / 2 + 1;
-    // int numTotalTasks = numberOfReceivers + 1;
+    // int numTotalTasks = (numberOfReceivers + 1) / 2 + 1;
+    int numTotalTasks = numberOfReceivers + 1;
     this.allCommGroup =
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
         numTotalTasks);
