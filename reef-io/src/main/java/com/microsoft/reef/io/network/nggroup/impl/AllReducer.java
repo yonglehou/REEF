@@ -478,27 +478,30 @@ public class AllReducer<T> implements AllReduce<T>,
           nodeTaskMap, taskVersionMap, selfID, version, ite, commID, iteComm);
       printLog("Finish applying dimension " + i + ". is failed? " + isFailed);
       if (!isFailed) {
-        vals.add(reducedValue);
-        while (!valBytes.isEmpty()) {
-          byte[] bytes = valBytes.removeFirst();
+        if (!valBytes.isEmpty()) {
+          vals.add(reducedValue);
+          // Remove all elements in valBytes
+          while (!valBytes.isEmpty()) {
+            byte[] bytes = valBytes.removeFirst();
+            long time1 = System.currentTimeMillis();
+            T val = dataCodec.decode(bytes);
+            long time2 = System.currentTimeMillis();
+            printLog("Data decode - byte length " + bytes.length
+              + ", took (ms) " + (time2 - time1));
+            vals.add(val);
+          }
           long time1 = System.currentTimeMillis();
-          T val = dataCodec.decode(bytes);
+          reducedValue = reduceFunction.apply(vals);
           long time2 = System.currentTimeMillis();
-          printLog("Data decode - byte length " + bytes.length + ", took (ms) "
+          printLog("Reduce on dimension  " + i + ", took (ms) "
             + (time2 - time1));
-          printMemUsage();
-          vals.add(val);
+          // Reset
+          vals.clear();
         }
-        long time1 = System.currentTimeMillis();
-        reducedValue = reduceFunction.apply(vals);
-        long time2 = System.currentTimeMillis();
-        printLog("Reduce on dimension  " + i + ", took (ms) " + (time2 - time1));
-        printMemUsage();
-        // Reset
-        valBytes.clear();
-        vals.clear();
       } else {
-        valBytes.clear();
+        if (!valBytes.isEmpty()) {
+          valBytes.clear();
+        }
         break;
       }
     }
@@ -540,7 +543,6 @@ public class AllReducer<T> implements AllReduce<T>,
         long time2 = System.currentTimeMillis();
         printLog("Data encode - byte length " + bytes.length + ", took (ms) "
           + (time2 - time1));
-        printMemUsage();
         if (bytes.length > SMALL_MSG_SIZE) {
           printLog("Send data sending request");
           sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -571,12 +573,14 @@ public class AllReducer<T> implements AllReduce<T>,
             dataRecvd = true;
           } else if (dataInfo[0] == 1) {
             // If data info is 1
+            cleanMem();
             // Send a message with data info -1 to ack the sending request
             printLog("Send data sending request ack.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
               taskVersionMap.get(taskID), iteComm, new byte[] { -1 });
           } else if (dataInfo[0] == -1) {
             // If data info is -1
+            cleanMem();
             // Send the data and set send to true
             printLog("Send full data.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -654,14 +658,16 @@ public class AllReducer<T> implements AllReduce<T>,
     GroupCommMessage msg =
       Utils.bldVersionedGCM(groupName, operName, msgType, selfID, srcVersion,
         taskID, tgtVersion, bytes);
-    senderStage.onNext(msg);
-    // try {
-    // printMsgInfo(msg, "Send the message in main.");
-    // sender.send(msg);
-    // } catch (Exception e) {
-    // printMsgInfo(msg, "Fail to send the message in main.");
-    // e.printStackTrace();
-    // }
+    // senderStage.onNext(msg);
+    try {
+      printMsgInfo(msg, "Send the message in main");
+      sender.send(msg);
+      printMsgInfo(msg, "Succeed sending the message in main");
+    } catch (Throwable t) {
+      printMsgInfo(msg, "Fail to send the message in main");
+      t.printStackTrace(System.out);
+      LOG.log(Level.INFO, "Fail to send the message in main", t);
+    }
   }
 
   private byte[] putIterationToBytes(int iteration) {
@@ -1292,7 +1298,7 @@ public class AllReducer<T> implements AllReduce<T>,
     LOG.info(getQualifiedName() + log);
   }
   
-  private void printMemUsage() {
+  private void printMem() {
     long totalMem = Runtime.getRuntime().totalMemory();
     long freeMem = Runtime.getRuntime().freeMemory();
     long usedMem = totalMem - freeMem;
@@ -1301,6 +1307,17 @@ public class AllReducer<T> implements AllReduce<T>,
         + freeMem + " Used memory (bytes): " + usedMem);
     LOG.info("Total Memory (bytes): " + totalMem + " Free Memory (bytes): "
       + freeMem + " Used memory (bytes): " + usedMem);
+  }
+
+  private void cleanMem() {
+    // Try to clean the memory and prepare for large messge sending and
+    // receiving. Not a good strategy but sometimes it helps...
+    printMem();
+    long time1 = System.currentTimeMillis();
+    System.gc();
+    long time2 = System.currentTimeMillis();
+    printLog("Clean Memory (ms): " + (time2 - time1));
+    printMem();
   }
 
   private String getQualifiedName() {

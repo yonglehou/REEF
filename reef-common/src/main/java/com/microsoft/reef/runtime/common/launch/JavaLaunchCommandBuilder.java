@@ -53,6 +53,7 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
       add("-XX:PermSize=128m");
       add("-XX:MaxPermSize=128m");
       // Set Xmx based on am memory size
+      add("-Xms" + megaBytes + "m");
       add("-Xmx" + megaBytes + "m");
 
       if ((assertionsEnabled != null && assertionsEnabled)
