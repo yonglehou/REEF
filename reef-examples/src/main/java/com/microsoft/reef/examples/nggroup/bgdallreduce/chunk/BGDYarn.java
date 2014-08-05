@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgdallreduce;
+package com.microsoft.reef.examples.nggroup.bgdallreduce.chunk;
 
 import com.microsoft.reef.client.LauncherStatus;
 import com.microsoft.reef.runtime.yarn.client.YarnClientConfiguration;
@@ -29,9 +29,7 @@ public class BGDYarn {
     final Configuration runtimeConfiguration =
       YarnClientConfiguration.CONF.set(YarnClientConfiguration.JVM_HEAP_SLACK,
         0.1).build();
-    final LauncherStatus result =
-      bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-"
-        + "BGDYarn");
+    final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDYarn");
     System.out.println("Result: " + result.toString());
   }
 }

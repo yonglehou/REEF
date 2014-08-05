@@ -17,17 +17,17 @@ package com.microsoft.reef.examples.nggroup.bgdallreduce;
 
 import java.io.Serializable;
 
-class ControlMessage implements Serializable {
+public class ControlMessage implements Serializable {
 
   private static final long serialVersionUID = 1L;
 
-  int iteration;
-  int operation;
-  String taskID;
-  boolean syncData;
-  boolean stop;
+  public int iteration;
+  public int operation;
+  public String taskID;
+  public boolean syncData;
+  public boolean stop;
 
-  ControlMessage(int ite, int op, String tID, boolean syncD, boolean stp) {
+  public ControlMessage(int ite, int op, String tID, boolean syncD, boolean stp) {
     iteration = ite;
     operation = op;
     taskID = tID;

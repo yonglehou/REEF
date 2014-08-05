@@ -13,25 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.microsoft.reef.examples.nggroup.bgdallreduce;
+package com.microsoft.reef.examples.nggroup.bgdallreduce.chunk;
 
 import com.microsoft.reef.client.LauncherStatus;
-import com.microsoft.reef.runtime.yarn.client.YarnClientConfiguration;
+import com.microsoft.reef.runtime.local.client.LocalRuntimeConfiguration;
 import com.microsoft.tang.Configuration;
 
 /**
- * Runs BGD on the YARN runtime.
+ * Runs BGD on the local runtime.
  */
-public class BGDYarn {
+public class BGDLocal {
+  private static final String NUM_LOCAL_THREADS = "20";
 
   public static void main(final String[] args) throws Exception {
     final BGDClient bgdClient = BGDClient.fromCommandLine(args);
-    final Configuration runtimeConfiguration =
-      YarnClientConfiguration.CONF.set(YarnClientConfiguration.JVM_HEAP_SLACK,
-        0.1).build();
-    final LauncherStatus result =
-      bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-"
-        + "BGDYarn");
+    final Configuration runtimeConfiguration = LocalRuntimeConfiguration.CONF
+        .set(LocalRuntimeConfiguration.NUMBER_OF_THREADS, NUM_LOCAL_THREADS)
+        .build();
+    final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDLocal");
     System.out.println("Result: " + result.toString());
   }
 }
