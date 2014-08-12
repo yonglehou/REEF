@@ -29,9 +29,11 @@ import com.microsoft.tang.annotations.Parameter;
 public class BGDLossType {
 
   private final Class<? extends LossFunction> lossFunction;
+  private String lossFunctionStr;
 
   @Inject
   public BGDLossType(@Parameter(LossFunctionType.class) final String lossFunctionStr) {
+    this.lossFunctionStr = lossFunctionStr;
     switch(lossFunctionStr) {
     case "logLoss":
       this.lossFunction = LogisticLossFunction.class;
@@ -53,5 +55,9 @@ public class BGDLossType {
    */
   public Class<? extends LossFunction> getLossFunction() {
     return lossFunction;
+  }
+  
+  public String getLossFunctionString() {
+    return lossFunctionStr;
   }
 }

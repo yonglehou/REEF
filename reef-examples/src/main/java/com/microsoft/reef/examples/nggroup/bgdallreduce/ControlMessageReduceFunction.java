@@ -32,6 +32,8 @@ public class ControlMessageReduceFunction implements
     int maxOp = Integer.MIN_VALUE;
     int minIte = Integer.MAX_VALUE;
     int minOp = Integer.MAX_VALUE;
+    int numRunningTasks = 0;
+    int fullIteration = -1;
     boolean stop = false;
     // Task ID matches with
     // the task which contains
@@ -71,6 +73,11 @@ public class ControlMessageReduceFunction implements
       if (!stop && eval.stop) {
         stop = true;
       }
+      numRunningTasks += eval.numRunningTasks;
+      if ((eval.fullIteration != -1 && fullIteration == -1)
+        || (eval.fullIteration != -1 && fullIteration != -1 && eval.fullIteration > fullIteration)) {
+        fullIteration = eval.fullIteration;
+      }
     }
     // If not in the same iteration, definitely set syncData to true.
     if (maxIte != minIte) {
@@ -81,6 +88,7 @@ public class ControlMessageReduceFunction implements
       syncData = true;
     }
     // If iteration and op are all equal,see which eval says true.
-    return new ControlMessage(maxIte, maxOp, taskID, syncData, stop);
+    return new ControlMessage(maxIte, maxOp, taskID, syncData, stop,
+      numRunningTasks, fullIteration);
   }
 }

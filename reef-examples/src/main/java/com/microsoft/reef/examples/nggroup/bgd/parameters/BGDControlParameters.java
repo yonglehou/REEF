@@ -67,6 +67,7 @@ public class BGDControlParameters {
               .bindNamedParameter(Iterations.class, Integer.toString(iters))
               .bindNamedParameter(EnableRampup.class, Boolean.toString(rampup))
               .bindNamedParameter(MinParts.class, Integer.toString(minParts))
+              .bindNamedParameter(LossFunctionType.class, lossType.getLossFunctionString())
               .build();
   }
 

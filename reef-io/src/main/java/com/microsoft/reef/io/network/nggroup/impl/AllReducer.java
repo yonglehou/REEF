@@ -464,6 +464,7 @@ public class AllReducer<T> implements AllReduce<T>,
     int ite = iteration.get();
     int commID = iteCommID.get();
     printLog("Current allreduce iteration: " + ite + " comm ID: " + commID);
+    printMem();
     // Prepare applying
     T reducedValue = aElement;
     LinkedList<byte[]> valBytes = new LinkedList<byte[]>();
@@ -530,7 +531,6 @@ public class AllReducer<T> implements AllReduce<T>,
         + "]");
       byte[] bytes = null;
       boolean dataSent = false;
-      boolean dataRecving = false;
       boolean dataRecvd = false;
       if (op[1] == 1 || op[1] == 2) {
         // Send data to other tasks
@@ -571,20 +571,14 @@ public class AllReducer<T> implements AllReduce<T>,
             valBytes.add(recvBytes);
             printLog("Receive byte data with length " + recvBytes.length);
             dataRecvd = true;
-            dataRecving = false;
           } else if (dataInfo[0] == 1) {
             // If data info is 1
-            cleanMem();
             // Send a message with data info -1 to ack the sending request
             printLog("Send data sending request ack.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
               taskVersionMap.get(taskID), iteComm, new byte[] { -1 });
-            dataRecving = true;
           } else if (dataInfo[0] == -1) {
             // If data info is -1
-            if (!dataRecving) {
-              cleanMem();
-            }
             // Send the data and set send to true
             printLog("Send full data.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -857,17 +851,18 @@ public class AllReducer<T> implements AllReduce<T>,
       finishWorking();
       return null;
     }
-    int ite = iteration.get();
-    int commID = iteCommID.get();
-    printLog("Current allreduce (reducescatter) iteration: " + ite
-      + " commID: " + commID);
-    boolean isFailed = false;
-    // updateNodeTopology(ite);
     // Data structure for allreduce
     Map<Integer, T> reducedValMap = new TreeMap<>();
     for (int i = 0; i < elements.size(); i++) {
       reducedValMap.put(i, elements.get(i));
     }
+    int ite = iteration.get();
+    int commID = iteCommID.get();
+    boolean isFailed = false;
+    // updateNodeTopology(ite);
+    printLog("Current allreduce (reducescatter) iteration: " + ite
+      + " commID: " + commID);
+    printMem();
     printLog("Num of chunks of ReduceScatter + Allgather (start): "
       + reducedValMap.size());
     // Data structure to collect allreduce results
@@ -882,6 +877,7 @@ public class AllReducer<T> implements AllReduce<T>,
       commID++;
       printLog("Current allreduce (allgather) iteration: " + ite + " commID: "
         + commID);
+      printMem();
       isFailed =
         allGather(reducedValMap, node.getNeighborOpList(), nodeTaskMap,
           taskVersionMap, dataCodec, reduceFunction, selfID, node.getNodeID(),
@@ -983,7 +979,6 @@ public class AllReducer<T> implements AllReduce<T>,
         + op[1] + "]");
       byte[][] byteArray = null;
       boolean dataSent = false;
-      boolean dataRecving = false;
       boolean dataRecvd = false;
       // Send data to other tasks
       // A byte is used for data info
@@ -1045,20 +1040,14 @@ public class AllReducer<T> implements AllReduce<T>,
             int byteLen = getRsAgDataFromMsg(valByteMap, msg);
             printLog("Receive byte data with length " + byteLen);
             dataRecvd = true;
-            dataRecving = false;
           } else if (dataInfo[0] == 1) {
             // If data info is 1
-            cleanMem();
             // Send a message with data info -1 to ack the sending request
             printLog("Send data sending request ack.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
               taskVersionMap.get(taskID), iteComm, new byte[] { -1 });
-            dataRecving = true;
           } else if (dataInfo[0] == -1) {
             // If data info is -1
-            if (!dataRecving) {
-              cleanMem();
-            }
             // Send the data and set send to true
             printLog("Send full data.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -1228,7 +1217,6 @@ public class AllReducer<T> implements AllReduce<T>,
         + "]");
       byte[][] byteArray = null;
       boolean dataSent = false;
-      boolean dataRecving = false;
       boolean dataRecvd = false;
       // Send data to other tasks
       // A byte is used for data info
@@ -1283,20 +1271,14 @@ public class AllReducer<T> implements AllReduce<T>,
             int byteLen = getRsAgDataFromMsg(valByteMap, msg);
             printLog("Receive byte data with length " + byteLen);
             dataRecvd = true;
-            dataRecving = false;
           } else if (dataInfo[0] == 1) {
             // If data info is 1
-            cleanMem();
             // Send a message with data info -1 to ack the sending request
             printLog("Send data sending request ack.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
               taskVersionMap.get(taskID), iteComm, new byte[] { -1 });
-            dataRecving = true;
           } else if (dataInfo[0] == -1) {
             // If data info is -1
-            if (!dataRecving) {
-              cleanMem();
-            }
             // Send the data and set send to true
             printLog("Send full data.");
             sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -1360,7 +1342,7 @@ public class AllReducer<T> implements AllReduce<T>,
   private void cleanMem() {
     // Try to clean the memory and prepare for large messge sending and
     // receiving. Not a good strategy but sometimes it helps...
-    printMem();
+    // printMem();
     // long time1 = System.currentTimeMillis();
     // System.gc();
     // long time2 = System.currentTimeMillis();

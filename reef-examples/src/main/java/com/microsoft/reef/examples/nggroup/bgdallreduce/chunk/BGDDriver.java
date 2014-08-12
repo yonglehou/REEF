@@ -112,8 +112,9 @@ public class BGDDriver {
     // The number of tasks is equal to the number of partitions
     this.allCommGroup =
       this.groupCommDriver.newCommunicationGroup(AllCommunicationGroup.class,
-      // minNumOfPartitions / 2 + 1
-        minNumOfPartitions);
+        2
+       // minNumOfPartitions
+        );
     LOG.info("Obtained all communication group");
     final ReduceFunction<ControlMessage> controlMessageReduceFunction =
       new ControlMessageReduceFunction();

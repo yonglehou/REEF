@@ -42,9 +42,21 @@ import org.apache.hadoop.io.Text;
 
 import javax.inject.Inject;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.logging.Logger;
 
 /**
@@ -69,7 +81,7 @@ public class SlaveTask implements Task {
   private final StepSizes ts;
 
   private final int dimensions;
-  private final int numChunks = 50;
+  private final int numChunks = 5;
   private double minEta = 0;
   private final double lambda;
   private final int maxIters;
@@ -126,6 +138,14 @@ public class SlaveTask implements Task {
     int curIte = 0;
     int curOp = 0;
     boolean stop = false;
+    int numRunningTasks = 0;
+    // Rampup control
+    final int numTotalTasks = 5;
+    int fullIteration = -1;
+    // Model recorder
+    boolean evaluateModel = true;
+    Set<Integer> modelSet = new TreeSet<>();
+    final int recordInterval = 5;
 
     // while(true){
     // (1): Synchronize Topology
@@ -137,165 +157,262 @@ public class SlaveTask implements Task {
     // }
 
     while (true) {
-      checkAndUpdate();
-      // Control message allreduce
-      // Get the current iteration, operation
-      // and if the input data is required to send.
-      System.out.println("SYNC ITERATION.");
-      // MasterTask decides to stop the computation
-      if (stop) {
-        if (taskID.compareTo("MasterTask") == 0) {
-          stop = true;
+      DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+      Date date = new Date();
+      try (Timer timer =
+        new Timer(dateFormat.format(date) + " " + taskID + " ITERATION")) {
+        checkAndUpdate();
+        // Control message allreduce
+        // Get the current iteration, operation
+        // and if the input data is required to send.
+        System.out.println("SYNC ITERATION.");
+        // MasterTask decides to stop the computation
+        if (stop) {
+          if (taskID.compareTo("MasterTask") == 0) {
+            stop = true;
+          } else {
+            stop = false;
+          }
+        }
+        failPerhaps(taskID);
+        ControlMessage recvState = null;
+        try (Timer t = new Timer("Control Message AllReduce")) {
+          recvState =
+            controlMessageAllReducer.apply(new ControlMessage(startIte,
+              startOp, taskID, syncModel, stop, 1, fullIteration));
+        }
+        if (recvState != null) {
+          curIte = recvState.iteration;
+          curOp = recvState.operation;
+          leadingTaskID = recvState.taskID;
+          syncModel = recvState.syncData;
+          stop = recvState.stop;
+          numRunningTasks = recvState.numRunningTasks;
+          
+          if (fullIteration == -1) {
+            fullIteration = recvState.fullIteration;
+          }
+          
+          System.out.println(taskID + " ITERATION " + curIte + " OP " + curOp
+            + " SYNC MODEL " + syncModel + " LEADING TASK ID: " + leadingTaskID
+            + " STOP: " + stop + " NUM RUNNING TASKS: " + numRunningTasks
+            + " FULL ITERATION " + fullIteration);
         } else {
-          stop = false;
+          System.out.println(taskID + " ITERATION SYNC FAILS");
+          curIte = 0;
+          curOp = 0;
+          numRunningTasks = 0;
         }
-      }
-      failPerhaps(taskID);
-      ControlMessage recvState = null;
-      try (Timer t = new Timer("Control Message AllReduce")) {
-        recvState =
-          controlMessageAllReducer.apply(new ControlMessage(startIte, startOp,
-            taskID, syncModel, stop));
-      }
-      if (recvState != null) {
-        curIte = recvState.iteration;
-        curOp = recvState.operation;
-        leadingTaskID = recvState.taskID;
-        syncModel = recvState.syncData;
-        stop = recvState.stop;
-        // stop =
-        System.out.println("ITERATION " + curIte + " OP " + curOp
-          + " SYNC MODEL " + syncModel + " LEADING TASK ID: " + leadingTaskID
-          + " STOP: " + stop);
-      } else {
-        System.out.println("SYNC FAILS");
-        curIte = 0;
-        curOp = 0;
-      }
-      if (stop) {
-        break;
-      }
-      if (curOp == 1) {
-        Vector recvModel = null;
-        if (syncModel) {
-          List<Vector> recvModelList = null;
-          if (taskID.compareTo(leadingTaskID) != 0) {
-            List<Vector> emptyModelList = new LinkedList<>();
-            emptyModelList.add(new DenseVector(new double[0]));
-            try (Timer t = new Timer("Model AllReduce (Empty)")) {
-              failPerhaps(taskID);
-              recvModelList = modelAllReducer.apply(emptyModelList);
-            }
-            if (recvModelList != null) {
-              recvModel = copyVectorFromList(recvModelList);
-            } else {
-              recvModel = null;
-            }
-          } else {
-            List<Vector> modelList = copyVectorToList(model, numChunks);
-            try (Timer t = new Timer("Model AllReduce (Full)")) {
-              failPerhaps(taskID);
-              recvModelList = modelAllReducer.apply(modelList);
-            }
-            if (recvModelList != null) {
-              // Here model is recvModel
-              recvModel = model;
-            } else {
-              recvModel = null;
-            }
-          }
+        if (stop) {
+          break;
         }
-        if (!syncModel || recvModel != null) {
-          if (recvModel != null) {
-            model = recvModel;
-          }
-          startIte = curIte;
-          startOp = 1;
-          syncModel = false;
-          failPerhaps(taskID);
-          Pair<Pair<Double, Integer>, Vector> lossAndGradient =
-            allreduceLossAndGradient(model);
-          if (lossAndGradient != null) {
-            System.out.println("LOSS: " + lossAndGradient.first.first
-              + " #EX: " + lossAndGradient.first.second);
-            System.out.println("GRADIENT: " + lossAndGradient.second + " #EX: "
-              + lossAndGradient.first.second);
-            Vector gradient = regularizeLossAndGradient(model, lossAndGradient);
-            if (converged(startIte, gradient.norm2())) {
-              stop = true;
+        if (curOp == 1) {
+          Vector recvModel = null;
+          if (syncModel) {
+            List<Vector> recvModelList = null;
+            if (taskID.compareTo(leadingTaskID) != 0) {
+              List<Vector> emptyModelList = new LinkedList<>();
+              emptyModelList.add(new DenseVector(new double[0]));
+              try (Timer t = new Timer("Model AllReduce (Empty)")) {
+                failPerhaps(taskID);
+                recvModelList = modelAllReducer.apply(emptyModelList);
+              }
+              if (recvModelList != null) {
+                recvModel = copyVectorFromList(recvModelList);
+              } else {
+                recvModel = null;
+              }
             } else {
-              descentDirection = getDescentDirection(gradient);
-              startOp = 2;
-              // Continue to next op.
-              curOp = 2;
+              List<Vector> modelList = copyVectorToList(model, numChunks);
+              try (Timer t = new Timer("Model AllReduce (Full)")) {
+                failPerhaps(taskID);
+                recvModelList = modelAllReducer.apply(modelList);
+              }
+              if (recvModelList != null) {
+                // Here model is recvModel
+                recvModel = model;
+              } else {
+                recvModel = null;
+              }
             }
           }
-        }
-      }
-      if (!stop && curOp == 2) {
-        Pair<Vector, Vector> recvModelPair = null;
-        if (syncModel) {
-          List<Pair<Vector, Vector>> recvModelPairList = null;
-          if (taskID.compareTo(leadingTaskID) != 0) {
-            List<Pair<Vector, Vector>> emptyModePairlList = new LinkedList<>();
-            emptyModePairlList.add(new Pair<Vector, Vector>(new DenseVector(
-              new double[0]), new DenseVector(new double[0])));
-            try (Timer t =
-              new Timer("Model And Descent Direction AllReduce (Empty)")) {
-              failPerhaps(taskID);
-              recvModelPairList =
-                modelDescentDirectionAllReducer.apply(emptyModePairlList);
+          if (!syncModel || recvModel != null) {
+            if (recvModel != null) {
+              model = recvModel;
             }
-            if (recvModelPairList != null) {
-              recvModelPair = copyModelPairFromList(recvModelPairList);
-            } else {
-              recvModelPair = null;
-            }
-          } else {
-            List<Vector> modelList = copyVectorToList(model, numChunks);
-            List<Vector> descentDirectionList =
-              copyVectorToList(descentDirection, numChunks);
-            List<Pair<Vector, Vector>> modelPairList =
-              createModelPairList(modelList, descentDirectionList);
-            try (Timer t =
-              new Timer("Model And Descent Direction AllReduce (Full)")) {
-              failPerhaps(taskID);
-              recvModelPairList =
-                modelDescentDirectionAllReducer.apply(modelPairList);
-            }
-            if (recvModelPairList != null) {
-              recvModelPair = new Pair<>(model, descentDirection);
-            } else {
-              recvModelPair = null;
-            }
-          }
-        }
-        if (!syncModel || recvModelPair != null) {
-          if (recvModelPair != null) {
-            model = recvModelPair.first;
-            descentDirection = recvModelPair.second;
-          }
-          startIte = curIte;
-          startOp = 2;
-          syncModel = false;
-          // Line search
-          failPerhaps(taskID);
-          // AllReduce with fixed-sized data, no need to chunk
-          Pair<Vector, Integer> lineSearchEvals =
-            allreduceLineSearch(model, descentDirection);
-          if (lineSearchEvals != null) {
-            updateModel(model, descentDirection, lineSearchEvals);
-            startIte++;
+            startIte = curIte;
             startOp = 1;
+            syncModel = false;
+            failPerhaps(taskID);
+            Pair<Pair<Double, Integer>, Vector> lossAndGradient =
+              allreduceLossAndGradient(model);
+            if (lossAndGradient != null) {
+              System.out.println("LOSS: " + lossAndGradient.first.first
+                + " #EX: " + lossAndGradient.first.second);
+              System.out.println("GRADIENT: " + lossAndGradient.second
+                + " #EX: " + lossAndGradient.first.second);
+              Vector gradient =
+                regularizeLossAndGradient(model, lossAndGradient);
+              if (converged(startIte, gradient.norm2(), fullIteration)) {
+                stop = true;
+              } else {
+                descentDirection = getDescentDirection(gradient);
+                startOp = 2;
+                // Continue to next op.
+                curOp = 2;
+              }
+            }
           }
         }
+        if (!stop && curOp == 2) {
+          Pair<Vector, Vector> recvModelPair = null;
+          if (syncModel) {
+            List<Pair<Vector, Vector>> recvModelPairList = null;
+            if (taskID.compareTo(leadingTaskID) != 0) {
+              List<Pair<Vector, Vector>> emptyModePairlList =
+                new LinkedList<>();
+              emptyModePairlList.add(new Pair<Vector, Vector>(new DenseVector(
+                new double[0]), new DenseVector(new double[0])));
+              try (Timer t =
+                new Timer("Model And Descent Direction AllReduce (Empty)")) {
+                failPerhaps(taskID);
+                recvModelPairList =
+                  modelDescentDirectionAllReducer.apply(emptyModePairlList);
+              }
+              if (recvModelPairList != null) {
+                recvModelPair = copyModelPairFromList(recvModelPairList);
+              } else {
+                recvModelPair = null;
+              }
+            } else {
+              List<Vector> modelList = copyVectorToList(model, numChunks);
+              List<Vector> descentDirectionList =
+                copyVectorToList(descentDirection, numChunks);
+              List<Pair<Vector, Vector>> modelPairList =
+                createModelPairList(modelList, descentDirectionList);
+              try (Timer t =
+                new Timer("Model And Descent Direction AllReduce (Full)")) {
+                failPerhaps(taskID);
+                recvModelPairList =
+                  modelDescentDirectionAllReducer.apply(modelPairList);
+              }
+              if (recvModelPairList != null) {
+                recvModelPair = new Pair<>(model, descentDirection);
+              } else {
+                recvModelPair = null;
+              }
+            }
+          }
+          if (!syncModel || recvModelPair != null) {
+            if (recvModelPair != null) {
+              model = recvModelPair.first;
+              descentDirection = recvModelPair.second;
+            }
+            startIte = curIte;
+            startOp = 2;
+            syncModel = false;
+            // Line search
+            failPerhaps(taskID);
+            // AllReduce with fixed-sized data, no need to chunk
+            Pair<Vector, Integer> lineSearchEvals =
+              allreduceLineSearch(model, descentDirection);
+            if (lineSearchEvals != null) {
+              updateModel(model, descentDirection, lineSearchEvals);
+              
+              // Write model
+              try (Timer t = new Timer("Write Model")) {
+                writeModel(taskID, evaluateModel, startIte, recordInterval,
+                  modelSet, model);
+              }
+              
+              // Check if the current iteration is the full iteration
+              // Record the first time all tasks are present in one iteration
+              if (numRunningTasks == numTotalTasks && fullIteration == -1) {
+                fullIteration = startIte;
+              }
+              
+              startIte++;
+              startOp = 1;
+            }
+          }
+        }
+        // checkAndUpdate();
       }
-      // checkAndUpdate();
     }
     for (final Double loss : losses) {
-      System.out.println(loss);
+      System.out.println(taskID + " LOSS " + loss);
+    }
+    
+    // Note: this part is not Fault Tolerant
+    // Evaluate Model
+    if (evaluateModel) {
+      TreeMap<Integer, Double> lossMap = new TreeMap<>();
+      for (int i = 1; i < fullIteration + maxIters; i += recordInterval) {
+        if (taskID.compareTo("MasterTask") != 0) {
+          model = modelAllReducer.apply(new DenseVector(new double[0]));
+        } else {
+          // Read model
+          model = readModel(taskID, i);
+          model = modelAllReducer.apply(model);
+        }
+        if (model.size() != 0) {
+          Pair<Pair<Double, Integer>, Vector> lossAndGradient =
+            allreduceLossAndGradient(model);
+          final double loss =
+            regularizeLoss(lossAndGradient.first.first,
+              lossAndGradient.first.second, model);
+
+          lossMap.put(i, loss);
+        }
+      }
+      for (Entry<Integer, Double> entry : lossMap.entrySet()) {
+        System.out.println(taskID + " MODEL " + entry.getKey()
+          + " EVALUATION LOSS: " + entry.getValue());
+      }
     }
     return lossCodec.encode(losses);
+  }
+
+  private void writeModel(String taskID, boolean evaluateModel, int iteration,
+    int recordInterval, Set<Integer> modelSet, Vector model) {
+    if (taskID.compareTo("MasterTask") == 0 && evaluateModel
+      && iteration % recordInterval == 1) {
+      modelSet.add(iteration);
+      try {
+        DataOutputStream dout =
+          new DataOutputStream(new FileOutputStream(new File("Model_"
+            + iteration)));
+        dout.writeInt(model.size());
+        double[] doubles = ((DenseVector) model).getValues();
+        for (int i = 0; i < doubles.length; i++) {
+          dout.writeDouble(doubles[i]);
+        }
+        dout.flush();
+        dout.close();
+      } catch (Exception e) {
+        e.printStackTrace(System.out);
+      }
+    }
+  }
+
+  private Vector readModel(String taskID, int iteration) {
+    if (taskID.compareTo("MasterTask") == 0) {
+      try {
+        DataInputStream din =
+          new DataInputStream(new FileInputStream(
+            new File("Model_" + iteration)));
+        int modelSize = din.readInt();
+        double[] doubles = new double[modelSize];
+        for (int i = 0; i < modelSize; i++) {
+          doubles[i] = din.readDouble();
+        }
+        din.close();
+        return new DenseVector(doubles);
+      } catch (Exception e) {
+        e.printStackTrace(System.out);
+      }
+    }
+    return new DenseVector(new double[0]);
   }
 
   private Vector copyVectorFromList(List<Vector> vectorList) {
@@ -379,8 +496,13 @@ public class SlaveTask implements Task {
     return isFailed;
   }
 
-  private boolean converged(final int iteration, final double gradNorm) {
-    return iteration >= maxIters || Math.abs(gradNorm) <= 1e-3;
+  private boolean converged(final int iteration, final double gradNorm,
+    final int fullIteration) {
+    if (fullIteration != -1 && (iteration - fullIteration + 1) > maxIters) {
+      return true;
+    }
+    return false;
+    // return iteration >= maxIters || Math.abs(gradNorm) <= 1e-3;
   }
 
   private Pair<Pair<Double, Integer>, Vector> allreduceLossAndGradient(
@@ -584,9 +706,11 @@ public class SlaveTask implements Task {
   }
 
   private void failPerhaps(String taskID) {
+    /*
     if (Math.random() < FAILURE_PROB && taskID.compareTo("MasterTask") != 0) {
       System.out.println("Simulated Failure");
       throw new RuntimeException("Simulated Failure");
     }
+    */
   }
 }

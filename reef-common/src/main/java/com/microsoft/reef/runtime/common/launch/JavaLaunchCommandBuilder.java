@@ -52,6 +52,11 @@ public final class JavaLaunchCommandBuilder implements LaunchCommandBuilder {
 
       add("-XX:PermSize=128m");
       add("-XX:MaxPermSize=128m");
+      
+      //-XX:NewRatio=1 -XX:SurvivorRatio=98
+      add("-XX:NewRatio=1");
+      add("-XX:SurvivorRatio=18");
+      
       // Set Xmx based on am memory size
       add("-Xms" + megaBytes + "m");
       add("-Xmx" + megaBytes + "m");

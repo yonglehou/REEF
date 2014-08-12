@@ -26,12 +26,17 @@ public class ControlMessage implements Serializable {
   public String taskID;
   public boolean syncData;
   public boolean stop;
+  public int numRunningTasks;
+  public int fullIteration;
 
-  public ControlMessage(int ite, int op, String tID, boolean syncD, boolean stp) {
+  public ControlMessage(int ite, int op, String tID, boolean syncD,
+    boolean stp, int numTasks, int fullIte) {
     iteration = ite;
     operation = op;
     taskID = tID;
     syncData = syncD;
     stop = stp;
+    numRunningTasks = numTasks;
+    fullIteration = fullIte;
   }
 }

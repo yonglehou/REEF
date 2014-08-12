@@ -1227,7 +1227,7 @@ public class HyperCubeTopology implements Topology {
 
   public static void main(String[] args) {
     HyperCubeTopology topo = new HyperCubeTopology(null, null, null, null, 128);
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 1; i++) {
       topo.newTask(null, "task-" + i);
     }
     topo.printHyperCube(null);
