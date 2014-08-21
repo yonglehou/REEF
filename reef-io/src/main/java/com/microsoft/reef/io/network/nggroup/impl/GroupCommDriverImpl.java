@@ -22,7 +22,6 @@ import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.FailedTask;
 import com.microsoft.reef.driver.task.RunningTask;
-import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.Connection;
 import com.microsoft.reef.io.network.Message;
 import com.microsoft.reef.io.network.group.impl.GCMCodec;

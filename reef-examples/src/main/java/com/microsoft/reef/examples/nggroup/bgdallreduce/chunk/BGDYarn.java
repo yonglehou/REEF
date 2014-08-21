@@ -28,7 +28,7 @@ public class BGDYarn {
     final BGDClient bgdClient = BGDClient.fromCommandLine(args);
     final Configuration runtimeConfiguration =
       YarnClientConfiguration.CONF.set(YarnClientConfiguration.JVM_HEAP_SLACK,
-        0.1).build();
+        0.2).build();
     final LauncherStatus result = bgdClient.run(runtimeConfiguration, System.getProperty("user.name") + "-" + "BGDYarn");
     System.out.println("Result: " + result.toString());
   }

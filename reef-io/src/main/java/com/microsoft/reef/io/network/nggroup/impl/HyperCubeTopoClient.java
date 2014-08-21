@@ -106,7 +106,7 @@ public class HyperCubeTopoClient {
     }
   }
 
-  void waitForNewNodeTopology() {
+  NodeTopology waitForNewNodeTopology() {
     // Wait for the data
     GroupCommMessage msg = null;
     do {
@@ -121,13 +121,12 @@ public class HyperCubeTopoClient {
         e.printStackTrace();
       }
     } while (msg == null);
-    processNodeTopologyMsg(msg);
+    return processNodeTopologyMsg(msg);
   }
 
-  void processNodeTopologyMsg(GroupCommMessage msg) {
+  NodeTopology processNodeTopologyMsg(GroupCommMessage msg) {
     // Decode the topology data
     NodeTopology nodeTopo = decodeNodeTopologyFromBytes(Utils.getData(msg));
-    System.out.println(getQualifiedName() + nodeTopo.node.toString());
     // If there is an old topology agreed on the same iteration number
     // replace it.
     // The control flow in "apply" is sequential, if tasks didn't get topology
@@ -136,7 +135,10 @@ public class HyperCubeTopoClient {
     // It is also same to the driver, if the driver didn't get a message from
     // the task for the current source dead/add situation, it won't generate
     // next message to this task.
+    printLog("Store node topology with the new iteration "
+      + nodeTopo.newIteration + " " + nodeTopo.node.toString());
     nodeTopoMap.put(nodeTopo.newIteration, nodeTopo);
+    return nodeTopo;
   }
 
   private NodeTopology decodeNodeTopologyFromBytes(byte[] bytes) {
@@ -179,7 +181,11 @@ public class HyperCubeTopoClient {
   }
 
   NodeTopology getNodeTopology(int iteration) {
-    return nodeTopoMap.get(iteration);
+    NodeTopology nodeTopo = nodeTopoMap.get(iteration);
+    if (nodeTopo != null) {
+      printLog("Get topology with iteration " + iteration);
+    }
+    return nodeTopo;
   }
 
   List<Integer> removeOldNodeTopologies(int iteration) {
@@ -195,13 +201,13 @@ public class HyperCubeTopoClient {
     return rmKeys;
   }
 
-  NodeTopology getNewestNodeTopology() {
-    Entry<Integer, NodeTopology> lastEntry = nodeTopoMap.lastEntry();
-    if (lastEntry != null) {
-      return lastEntry.getValue();
-    }
-    return null;
-  }
+  // NodeTopology getNewestNodeTopology() {
+  // Entry<Integer, NodeTopology> lastEntry = nodeTopoMap.lastEntry();
+  // if (lastEntry != null) {
+  // return lastEntry.getValue();
+  // }
+  // return null;
+  // }
 
   private void printMsgInfo(GroupCommMessage msg, String cmd) {
     System.out.println(getQualifiedName() + "Get " + msg.getType()
@@ -213,5 +219,9 @@ public class HyperCubeTopoClient {
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + ":" + Utils.simpleName(operName) + ":"
       + selfID + ":TopoClient:" + version + " - ";
+  }
+
+  private void printLog(String log) {
+    System.out.println(getQualifiedName() + log);
   }
 }

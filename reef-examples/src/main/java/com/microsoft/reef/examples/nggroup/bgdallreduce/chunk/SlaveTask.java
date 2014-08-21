@@ -82,6 +82,12 @@ public class SlaveTask implements Task {
 
   private final int dimensions;
   private final int numChunks = 5;
+  private final int numTotalTasks = 5;
+  private final boolean evaluateModel = false;
+  private final int recordInterval = 5;
+  // Model ID recorder
+  private Set<Integer> modelSet = new TreeSet<>();
+  
   private double minEta = 0;
   private final double lambda;
   private final int maxIters;
@@ -139,13 +145,13 @@ public class SlaveTask implements Task {
     int curOp = 0;
     boolean stop = false;
     int numRunningTasks = 0;
-    // Rampup control
-    final int numTotalTasks = 5;
+    // Ramp up control
     int fullIteration = -1;
-    // Model recorder
-    boolean evaluateModel = true;
-    Set<Integer> modelSet = new TreeSet<>();
-    final int recordInterval = 5;
+
+    // Data loading
+    if (examples.isEmpty()) {
+      loadData();
+    }
 
     // while(true){
     // (1): Synchronize Topology
@@ -165,7 +171,7 @@ public class SlaveTask implements Task {
         // Control message allreduce
         // Get the current iteration, operation
         // and if the input data is required to send.
-        System.out.println("SYNC ITERATION.");
+        System.out.println(taskID + " SYNC ITERATION.");
         // MasterTask decides to stop the computation
         if (stop) {
           if (taskID.compareTo("MasterTask") == 0) {
@@ -319,10 +325,9 @@ public class SlaveTask implements Task {
             if (lineSearchEvals != null) {
               updateModel(model, descentDirection, lineSearchEvals);
               
-              // Write model
-              try (Timer t = new Timer("Write Model")) {
-                writeModel(taskID, evaluateModel, startIte, recordInterval,
-                  modelSet, model);
+              // Write model if model evaluation is enabled
+              try (Timer t = new Timer(taskID + " Write Model")) {
+                writeModel(taskID, startIte, model);
               }
               
               // Check if the current iteration is the full iteration
@@ -343,8 +348,8 @@ public class SlaveTask implements Task {
       System.out.println(taskID + " LOSS " + loss);
     }
     
-    // Note: this part is not Fault Tolerant
-    // Evaluate Model
+    // Note: this part is not FAULT TOLERANT
+    // Model Evaluation
     if (evaluateModel) {
       TreeMap<Integer, Double> lossMap = new TreeMap<>();
       for (int i = 1; i < fullIteration + maxIters; i += recordInterval) {
@@ -373,8 +378,7 @@ public class SlaveTask implements Task {
     return lossCodec.encode(losses);
   }
 
-  private void writeModel(String taskID, boolean evaluateModel, int iteration,
-    int recordInterval, Set<Integer> modelSet, Vector model) {
+  private void writeModel(String taskID, int iteration, Vector model) {
     if (taskID.compareTo("MasterTask") == 0 && evaluateModel
       && iteration % recordInterval == 1) {
       modelSet.add(iteration);
@@ -498,7 +502,7 @@ public class SlaveTask implements Task {
 
   private boolean converged(final int iteration, final double gradNorm,
     final int fullIteration) {
-    if (fullIteration != -1 && (iteration - fullIteration + 1) > maxIters) {
+    if (fullIteration != -1 && (iteration - fullIteration + 1) >= maxIters) {
       return true;
     }
     return false;
@@ -706,11 +710,9 @@ public class SlaveTask implements Task {
   }
 
   private void failPerhaps(String taskID) {
-    /*
     if (Math.random() < FAILURE_PROB && taskID.compareTo("MasterTask") != 0) {
       System.out.println("Simulated Failure");
       throw new RuntimeException("Simulated Failure");
     }
-    */
   }
 }

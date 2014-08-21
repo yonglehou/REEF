@@ -204,7 +204,7 @@ public class CommGroupNetworkHandlerImpl implements
   }
 
   private void printLog(String log) {
-    System.out.println("CommGroupNetworkHandler - " + log);
-    LOG.info("CommGroupNetworkHandler - " + log);
+    // System.out.println("CommGroupNetworkHandler - " + log);
+    // LOG.info("CommGroupNetworkHandler - " + log);
   }
 }

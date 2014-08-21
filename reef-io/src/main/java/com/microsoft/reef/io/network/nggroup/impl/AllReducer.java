@@ -68,7 +68,7 @@ public class AllReducer<T> implements AllReduce<T>,
     .getLogger(AllReducer.class.getName());
   // private static final byte[] EmptyByteArr = new byte[0];
 
-  private static final int SMALL_MSG_SIZE = 1024;
+  private static final int SMALL_MSG_SIZE = 104857600;
 
   private final Class<? extends Name<String>> groupName;
   private final Class<? extends Name<String>> operName;
@@ -344,9 +344,10 @@ public class AllReducer<T> implements AllReduce<T>,
       printMsgInfo(msg, "Process the msg in idle.");
       // This message won't be generated unless Source add/dead
       // are processed. Once this message is received, process immediately.
-      getNewNodeTopologyInIdle(msg, topoClient, iteration.get());
+      NodeTopology nodeTopo =
+        getNewNodeTopologyInIdle(msg, topoClient, iteration.get());
       // Check if there is failure in the current topology
-      examineNodeTopologyFailure();
+      examineNodeTopologyFailure(nodeTopo);
       isTopoUpdating.set(false);
     }
     return true;
@@ -355,7 +356,8 @@ public class AllReducer<T> implements AllReduce<T>,
   private void initializeNodeTopologyInIdle(GroupCommMessage msg,
     HyperCubeTopoClient topoClient) {
     // topoClient.waitForNewNodeTopology();
-    getNewNodeTopologyInIdle(msg, topoClient, iteration.get());
+    NodeTopology nodeTopo =
+      getNewNodeTopologyInIdle(msg, topoClient, iteration.get());
     // NodeTopology nodeTopo = topoClient.getNewestNodeTopology();
     // This should not be null
     // node = nodeTopo.node;
@@ -366,26 +368,26 @@ public class AllReducer<T> implements AllReduce<T>,
     // AllReducer doesn't have the topology at the beginning
     // This can be considered as failure
     isCurrentIterationFailed.set(true);
-    nextIteration.set(topoClient.getNewestNodeTopology().newIteration);
+    nextIteration.set(nodeTopo.newIteration);
     isNewTaskComing.set(false);
     printLog("Node topology is initialized. Next iteration is "
       + nextIteration.get());
   }
 
-  private void getNewNodeTopologyInIdle(GroupCommMessage msg,
+  private NodeTopology getNewNodeTopologyInIdle(GroupCommMessage msg,
     HyperCubeTopoClient topoClient, int currentIteration) {
-    topoClient.processNodeTopologyMsg(msg);
+    NodeTopology nodeTopo = topoClient.processNodeTopologyMsg(msg);
     printLog("The current iteration (in idle): " + currentIteration
       + ", the base iteration of topology got from the driver: "
-      + topoClient.getNewestNodeTopology().baseIteration
+      + nodeTopo.baseIteration
       + ", the new iteration of topology got from the driver: "
-      + topoClient.getNewestNodeTopology().newIteration + ", is failed? "
-      + topoClient.getNewestNodeTopology().isFailed);
+      + nodeTopo.newIteration + ", is failed? " + nodeTopo.isFailed);
+    return nodeTopo;
   }
 
-  private void examineNodeTopologyFailure() {
-    boolean isFailed = topoClient.getNewestNodeTopology().isFailed;
-    int newIteration = topoClient.getNewestNodeTopology().newIteration;
+  private void examineNodeTopologyFailure(NodeTopology nodeTopo) {
+    boolean isFailed = nodeTopo.isFailed;
+    int newIteration = nodeTopo.newIteration;
     if (isFailed) {
       // if (!isCurrentIterationFailed.get()) {
       isCurrentIterationFailed.set(true);
@@ -486,14 +488,14 @@ public class AllReducer<T> implements AllReduce<T>,
             long time1 = System.currentTimeMillis();
             T val = dataCodec.decode(bytes);
             long time2 = System.currentTimeMillis();
-            printLog("Data decode - byte length " + bytes.length
+            printDetails("Data decode - byte length " + bytes.length
               + ", took (ms) " + (time2 - time1));
             vals.add(val);
           }
           long time1 = System.currentTimeMillis();
           reducedValue = reduceFunction.apply(vals);
           long time2 = System.currentTimeMillis();
-          printLog("Reduce on dimension  " + i + ", took (ms) "
+          printDetails("Reduce on dimension  " + i + ", took (ms) "
             + (time2 - time1));
           // Reset
           vals.clear();
@@ -508,7 +510,6 @@ public class AllReducer<T> implements AllReduce<T>,
     if (isFailed) {
       // Mark the current iteration as failed
       reducedValue = null;
-      examineNodeTopologyFailure();
     } else {
       // If this "apply" operation succeed
       // increase commID
@@ -541,8 +542,8 @@ public class AllReducer<T> implements AllReduce<T>,
         long time1 = System.currentTimeMillis();
         bytes = dataCodec.encode(reducedValue);
         long time2 = System.currentTimeMillis();
-        printLog("Data encode - byte length " + bytes.length + ", took (ms) "
-          + (time2 - time1));
+        printDetails("Data encode - byte length " + bytes.length
+          + ", took (ms) " + (time2 - time1));
         if (bytes.length > SMALL_MSG_SIZE) {
           printLog("Send data sending request");
           sendMsg(Type.AllReduce, selfID, version, taskID,
@@ -591,7 +592,9 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceDead, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          examineNodeTopologyFailure(nodeTopo);
           return true;
         } else if (msg.getType() == Type.SourceAdd) {
           // Source Add message from the driver
@@ -599,10 +602,11 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceAdd, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          examineNodeTopologyFailure(nodeTopo);
           // Check if there is failure in the current topology
-          boolean isFailed = topoClient.getNewestNodeTopology().isFailed;
-          if (isFailed) {
+          if (nodeTopo.isFailed) {
             return true;
           } else {
             // Continue receiving
@@ -634,21 +638,22 @@ public class AllReducer<T> implements AllReduce<T>,
       } else {
         sb.setCharAt(sb.length() - 1, '.');
       }
-      printLog("Current new topology with iteration " + iteration
+      printLog("Update node topology " + node.toString()
+        + ". Current new topology with iteration " + iteration
         + ". Remove topologies with iterations: " + sb);
     }
   }
 
-  private void waitForNewNodeTopology(HyperCubeTopoClient topoClient,
+  private NodeTopology waitForNewNodeTopology(HyperCubeTopoClient topoClient,
     int currentIteration, Type msgType) {
     printLog("Waiting for the new topology after getting " + msgType + ".");
-    topoClient.waitForNewNodeTopology();
+    NodeTopology nodeTopo = topoClient.waitForNewNodeTopology();
     printLog("The current iteration: " + currentIteration
       + ", the base iteration of topology got from the driver: "
-      + topoClient.getNewestNodeTopology().baseIteration
+      + nodeTopo.baseIteration
       + ", the new iteration of topology got from the driver: "
-      + topoClient.getNewestNodeTopology().newIteration + ", is failed? "
-      + topoClient.getNewestNodeTopology().isFailed);
+      + nodeTopo.newIteration + ", is failed? " + nodeTopo.isFailed);
+    return nodeTopo;
   }
 
   private void sendMsg(Type msgType, String selfID, int srcVersion,
@@ -805,7 +810,7 @@ public class AllReducer<T> implements AllReduce<T>,
     } else {
       sb.setCharAt(sb.length() - 1, '.');
     }
-    printLog("Remove msg in dataMap from iteration: " + sb);
+    printDetails("Remove msg in dataMap from iteration: " + sb);
   }
 
   private LinkedList<GroupCommMessage> getMsgList(int iteration, int commID,
@@ -863,7 +868,7 @@ public class AllReducer<T> implements AllReduce<T>,
     printLog("Current allreduce (reducescatter) iteration: " + ite
       + " commID: " + commID);
     printMem();
-    printLog("Num of chunks of ReduceScatter + Allgather (start): "
+    printDetails("Num of chunks of ReduceScatter + Allgather (start): "
       + reducedValMap.size());
     // Data structure to collect allreduce results
     List<T> reducedVals = null;
@@ -885,11 +890,10 @@ public class AllReducer<T> implements AllReduce<T>,
     }
     if (isFailed) {
       reducedVals = null;
-      examineNodeTopologyFailure();
     } else {
       // Remove the reduced vals in the map and put to the list.
       // Keep the order.
-      printLog("Num of chunks of ReduceScatter + Allgather (end): "
+      printDetails("Num of chunks of ReduceScatter + Allgather (end): "
         + reducedValMap.size());
       reducedVals = new ArrayList<>(reducedValMap.size());
       for (Entry<Integer, T> entry : reducedValMap.entrySet()) {
@@ -927,7 +931,8 @@ public class AllReducer<T> implements AllReduce<T>,
       printLog("Finish ReduceScatter at dimension " + i + ". is failed? "
         + isFailed);
       if (!isFailed) {
-        printLog("ReduceScatter num of chunks received: " + valByteMap.size());
+        printDetails("ReduceScatter num of chunks received: "
+          + valByteMap.size());
         // Apply on each chunk ID
         while (!valByteMap.isEmpty()) {
           Entry<Integer, LinkedList<byte[]>> entry =
@@ -1007,7 +1012,7 @@ public class AllReducer<T> implements AllReduce<T>,
         }
         byte[] chunkIDBytes = putChunkIDsToBytes(chunkIDs);
         byteLen += chunkIDBytes.length;
-        printLog("ReduceScatter num of chunks sent: " + chunkIDs.size()
+        printDetails("ReduceScatter num of chunks sent: " + chunkIDs.size()
           + ", byte length: " + byteLen);
         byteList.addFirst(chunkIDBytes);
         // The size of iteration ID, communication ID and data info
@@ -1059,7 +1064,9 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceDead, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          examineNodeTopologyFailure(nodeTopo);
           // Return isFailed
           return true;
         } else if (msg.getType() == Type.SourceAdd) {
@@ -1067,10 +1074,11 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceAdd, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          examineNodeTopologyFailure(nodeTopo);
           // Check if there is failure in the current topology
-          boolean isFailed = topoClient.getNewestNodeTopology().isFailed;
-          if (isFailed) {
+          if (nodeTopo.isFailed) {
             return true;
           } else {
           }
@@ -1169,7 +1177,7 @@ public class AllReducer<T> implements AllReduce<T>,
         + isFailed);
       if (!isFailed) {
         // Apply each chunk received
-        printLog("Allgather num of chunks received: " + valByteMap.size());
+        printDetails("Allgather num of chunks received: " + valByteMap.size());
         while (!valByteMap.isEmpty()) {
           Entry<Integer, LinkedList<byte[]>> entry =
             valByteMap.pollFirstEntry();
@@ -1236,7 +1244,7 @@ public class AllReducer<T> implements AllReduce<T>,
         }
         byte[] chunkIDBytes = putChunkIDsToBytes(chunkIDs);
         byteLen += chunkIDBytes.length;
-        printLog("AllGather num of chunks sent: " + chunkIDs.size()
+        printDetails("AllGather num of chunks sent: " + chunkIDs.size()
           + ", byte length: " + byteLen);
         byteList.addFirst(chunkIDBytes);
         // The size of iteration ID, communication ID and data info
@@ -1290,7 +1298,9 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceDead, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceDead);
+          examineNodeTopologyFailure(nodeTopo);
           return true;
         } else if (msg.getType() == Type.SourceAdd) {
           // Ask driver, send source add message
@@ -1298,10 +1308,11 @@ public class AllReducer<T> implements AllReduce<T>,
           sendMsg(Type.SourceAdd, selfID, version, driverID, version,
             putIterationToBytes(iteration));
           // Get the new topology
-          waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, iteration, Type.SourceAdd);
+          examineNodeTopologyFailure(nodeTopo);
           // Check if there is failure in the current topology
-          boolean isFailed = topoClient.getNewestNodeTopology().isFailed;
-          if (isFailed) {
+          if (nodeTopo.isFailed) {
             return true;
           } else {
           }
@@ -1313,30 +1324,32 @@ public class AllReducer<T> implements AllReduce<T>,
   }
 
   private void printMsgInfo(GroupCommMessage msg, String cmd) {
-    System.out.println(getQualifiedName() + "MSG " + msg.getType() + " from "
-      + msg.getSrcid() + " with source version " + msg.getSrcVersion() + " to "
-      + msg.getDestid() + " with target version " + msg.getVersion() + ". "
-      + cmd);
-    LOG.info(getQualifiedName() + "MSG " + msg.getType() + " from "
-      + msg.getSrcid() + " with source version " + msg.getSrcVersion() + " to "
-      + msg.getDestid() + " with target version " + msg.getVersion() + ". "
-      + cmd);
+    // System.out.println(getQualifiedName() + "MSG " + msg.getType() + " from "
+    // + msg.getSrcid() + " with source version " + msg.getSrcVersion() + " to "
+    // + msg.getDestid() + " with target version " + msg.getVersion() + ". "
+    // + cmd);
+    // LOG.info(getQualifiedName() + "MSG " + msg.getType() + " from "
+    // msg.getSrcid() + " with source version " + msg.getSrcVersion() + " to "
+    // msg.getDestid() + " with target version " + msg.getVersion() + ". "
+    // cmd);
   }
 
   private void printLog(String log) {
-    System.out.println(getQualifiedName() + log);
-    LOG.info(getQualifiedName() + log);
+    // System.out.println(getQualifiedName() + log);
+    // LOG.info(getQualifiedName() + log);
+  }
+
+  private void printDetails(String log) {
+    // System.out.println(getQualifiedName() + log);
+    // LOG.info(getQualifiedName() + log);
   }
 
   private void printMem() {
-    long totalMem = Runtime.getRuntime().totalMemory();
-    long freeMem = Runtime.getRuntime().freeMemory();
-    long usedMem = totalMem - freeMem;
-    System.out
-      .println("Total Memory (bytes): " + totalMem + " Free Memory (bytes): "
-        + freeMem + " Used memory (bytes): " + usedMem);
-    LOG.info("Total Memory (bytes): " + totalMem + " Free Memory (bytes): "
-      + freeMem + " Used memory (bytes): " + usedMem);
+    // long totalMem = Runtime.getRuntime().totalMemory();
+    // long freeMem = Runtime.getRuntime().freeMemory();
+    // long usedMem = totalMem - freeMem;
+    // printLog("Total Memory (bytes): " + totalMem + " Free Memory (bytes): "
+    // + freeMem + " Used memory (bytes): " + usedMem);
   }
 
   private void cleanMem() {
@@ -1381,13 +1394,15 @@ public class AllReducer<T> implements AllReduce<T>,
         } else if (msg.getType() == Type.SourceDead) {
           sendMsg(Type.SourceDead, selfID, version, driverID, version,
             putIterationToBytes(ite));
-          waitForNewNodeTopology(topoClient, ite, Type.SourceDead);
-          examineNodeTopologyFailure();
-        } else if (msg.getType() == Type.SourceDead) {
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, ite, Type.SourceDead);
+          examineNodeTopologyFailure(nodeTopo);
+        } else if (msg.getType() == Type.SourceAdd) {
           sendMsg(Type.SourceAdd, selfID, version, driverID, version,
             putIterationToBytes(ite));
-          waitForNewNodeTopology(topoClient, ite, Type.SourceAdd);
-          examineNodeTopologyFailure();
+          NodeTopology nodeTopo =
+            waitForNewNodeTopology(topoClient, ite, Type.SourceAdd);
+          examineNodeTopologyFailure(nodeTopo);
         }
       } catch (InterruptedException e) {
         // If exception happens, ignore and continue processing next msg.
@@ -1420,6 +1435,10 @@ public class AllReducer<T> implements AllReduce<T>,
     isIterationChecking.compareAndSet(true, false);
     // Update topology for the iteration
     updateNodeTopology(iteration.get());
+    finishWorking();
+  }
+
+  public synchronized void noUpdateIteration() {
     finishWorking();
   }
 

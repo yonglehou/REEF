@@ -1130,6 +1130,13 @@ public class HyperCubeTopology implements Topology {
       // Set the internal agreed iteration number for updating the topology.
       int baseIteration = minIteration;
       int newIteration = maxIteration + 1;
+      // If newIteration is less than or equal to the current iteration value,
+      // this means some topology has been sent out for this iteration. So you
+      // cannot send another topology for the iteration. newIteration
+      // has to be the one next to the current iteration number.
+      if (iteration.get() >= newIteration) {
+        newIteration = iteration.get() + 1;
+      }
       iteration.set(newIteration);
       printLog("baseIteration: " + baseIteration + ", newIteration: "
         + newIteration + ", total number of nodes in new topology: "
@@ -1190,28 +1197,28 @@ public class HyperCubeTopology implements Topology {
   }
 
   private void printHyperCube(TopoStruct topo) {
-    if (topo == null) {
-      topo = activeTopo;
-    }
-    HyperCubeNode node = null;
-    for (Entry<Integer, HyperCubeNode> entry : topo.nodeMap.entrySet()) {
-      node = entry.getValue();
-      List<List<int[]>> opList = entry.getValue().getNeighborOpList();
-      StringBuffer sb1 = new StringBuffer();
-      StringBuffer sb2 = new StringBuffer();
-      sb1.append(node.getNodeID() + ":|");
-      sb2.append(node.getNodeID() + ":|");
-      for (List<int[]> opDimList : opList) {
-        for (int[] op : opDimList) {
-          sb1.append(op[0] + " ");
-          sb2.append(op[1] + " ");
-        }
-        sb1.append("|");
-        sb2.append("|");
-      }
-      printLog(sb1.toString());
-      printLog(sb2.toString());
-    }
+    // if (topo == null) {
+    // topo = activeTopo;
+    // }
+    // HyperCubeNode node = null;
+    // for (Entry<Integer, HyperCubeNode> entry : topo.nodeMap.entrySet()) {
+    // node = entry.getValue();
+    // List<List<int[]>> opList = entry.getValue().getNeighborOpList();
+    // StringBuffer sb1 = new StringBuffer();
+    // StringBuffer sb2 = new StringBuffer();
+    // sb1.append(node.getNodeID() + ":|");
+    // sb2.append(node.getNodeID() + ":|");
+    // for (List<int[]> opDimList : opList) {
+    // for (int[] op : opDimList) {
+    // sb1.append(op[0] + " ");
+    // sb2.append(op[1] + " ");
+    // }
+    // sb1.append("|");
+    // sb2.append("|");
+    // }
+    // printLog(sb1.toString());
+    // printLog(sb2.toString());
+    // }
   }
 
   @Override

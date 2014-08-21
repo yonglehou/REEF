@@ -389,4 +389,21 @@ public class CommunicationGroupClientImpl implements com.microsoft.reef.io.netwo
     // Unblock Topology update message
     commGroupNetworkHandler.unblockAllReduceTopoChangeMsg();
   }
+  
+  @Override
+  public void noUpdateIteration() {
+    // No update iteration
+    for (Entry<Class<? extends Name<String>>, GroupCommOperator> entry : operators
+      .entrySet()) {
+      if (entry.getValue().getClass().getName()
+        .equals(AllReducer.class.getName())) {
+        AllReducer allReducer = (AllReducer) entry.getValue();
+        allReducer.noUpdateIteration();
+      } else {
+        System.out.println(entry.getKey().getClass().getName());
+      }
+    }
+    // Unblock Topology update message
+    commGroupNetworkHandler.unblockAllReduceTopoChangeMsg();
+  }
 }

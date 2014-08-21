@@ -442,29 +442,19 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    * @param msg
    */
   public void processMsg(final GroupCommMessage msg) {
+    printMsgInfo(msg, "get");
     synchronized (topologiesLock) {
-      LOG.info(getQualifiedName() + "processing " + msg.getType() + " from "
-        + msg.getSrcid() + " with source version " + msg.getSrcVersion());
-      // ////////////////////////////////////////////////////////////////
-      // Bingjing: Move msg version checking to the lock
-      System.out.println(getQualifiedName() + "Processing " + msg.getType()
-        + " from " + msg.getSrcid() + " with source version "
-        + msg.getSrcVersion());
-      // //////////////////////////////////////////////////////////////////////
-      if (!isMsgVersionOk(msg)) {
-        return;
-      }
-      // ////////////////////////////////////////////////////////////////////
       if (initializing.get() || msg.getType().equals(Type.UpdateTopology)) {
         LOG.info(getQualifiedName() + "waiting for all nodes to run");
         allTasksAdded.await();
         initializing.compareAndSet(true, false);
       }
       // /////////////////////////////////////////////////////////
-      // Bingjing: Check again
+      // Bingjing: Move msg version checking to the lock
       if (!isMsgVersionOk(msg)) {
         return;
       }
+      printMsgInfo(msg, "processing");
       // ///////////////////////////////////////////////////////
       queNProcessMsg(msg);
     }
@@ -485,5 +475,13 @@ public class CommunicationGroupDriverImpl implements CommunicationGroupDriver {
    */
   private String getQualifiedName() {
     return Utils.simpleName(groupName) + " - ";
+  }
+  
+  private void printMsgInfo(final GroupCommMessage msg, String cmd) {
+    LOG.info(getQualifiedName() + cmd + " " + msg.getType() + " from "
+      + msg.getSrcid() + " with source version " + msg.getSrcVersion());
+    System.out.println(getQualifiedName() + cmd + " " + msg.getType()
+      + " from " + msg.getSrcid() + " with source version "
+      + msg.getSrcVersion());
   }
 }

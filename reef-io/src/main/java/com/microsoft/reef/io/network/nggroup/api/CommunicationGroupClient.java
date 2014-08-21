@@ -93,4 +93,6 @@ public interface CommunicationGroupClient {
   boolean isNewTaskComing() throws UnsupportedOperationException;
 
   void updateIteration();
+  
+  void noUpdateIteration();
 }
