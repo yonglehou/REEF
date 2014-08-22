@@ -24,6 +24,7 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
+import com.microsoft.reef.io.network.group.operators.AllReduceResult;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.task.Task;
@@ -57,7 +58,6 @@ public class MasterTask implements Task {
   @Override
   public byte[] call(final byte[] memento) throws Exception {
     Vector model = new DenseVector(new double[] { 1, 1, 1, 1 });
-    Vector newModel = null;
     final int numIters = 50;
     int ite = 0;
     int op = 0;
@@ -65,9 +65,9 @@ public class MasterTask implements Task {
     while (ite < numIters) {
       checkAndUpdate();
       System.out.println("SYNC ITERATION ");
-      Integer recvIte = controlMsgAllReducer.apply(ite);
-      if (recvIte != null) {
-        ite = recvIte.intValue();
+      AllReduceResult<Integer> recvIte = controlMsgAllReducer.apply(ite);
+      if (!recvIte.isEmpty()) {
+        ite = recvIte.getValue().intValue();
         op = 1;
         System.out.println("GET ITERATION " + ite);
       } else {
@@ -75,12 +75,12 @@ public class MasterTask implements Task {
       }
       if (op == 1) {
         System.out.println("ITERATION " + ite + " STARTS.");
-        newModel = modelAllReducer.apply(model);
-        if (newModel != null) {
+        AllReduceResult<Vector> newModel = modelAllReducer.apply(model);
+        if (!newModel.isEmpty()) {
           StringBuffer sb = new StringBuffer();
           sb.append('[');
-          for (int j = 0; j < newModel.size(); j++) {
-            sb.append(newModel.get(j) + ",");
+          for (int j = 0; j < newModel.getValue().size(); j++) {
+            sb.append(newModel.getValue().get(j) + ",");
           }
           sb.setCharAt(sb.length() - 1, ']');
           System.out.println("RESULT " + sb);

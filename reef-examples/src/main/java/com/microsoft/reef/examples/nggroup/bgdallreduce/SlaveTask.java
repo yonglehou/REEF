@@ -28,6 +28,7 @@ import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.Tuple;
 import com.microsoft.reef.io.data.loading.api.DataSet;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
+import com.microsoft.reef.io.network.group.operators.AllReduceResult;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.io.network.util.Utils.Pair;
@@ -120,11 +121,12 @@ public class SlaveTask implements Task {
     Vector model = new DenseVector(dimensions);
     Vector descentDirection = null;
     int startIte = 1;
-    int startOp = 1; // Op for the start of computation, be 1 or 2.
+    // Op for the start of computation
+    Operation startOp = Operation.ComputeGradient;
     boolean syncModel = false;
     String leadingTaskID = null;
     int curIte = 0;
-    int curOp = 0;
+    Operation curOp = Operation.No;
     boolean stop = false;
     int numRunningTasks = 0;
 
@@ -159,24 +161,24 @@ public class SlaveTask implements Task {
           }
         }
         failPerhaps(taskID);
-        ControlMessage recvState = null;
+        AllReduceResult<ControlMessage> recvState = null;
         try (Timer t = new Timer("Control Message AllReduce")) {
           recvState =
             controlMessageAllReducer.apply(new ControlMessage(startIte,
               startOp, taskID, syncModel, stop, 1, fullIteration));
         }
-        if (recvState != null) {
-          curIte = recvState.iteration;
-          curOp = recvState.operation;
-          leadingTaskID = recvState.taskID;
-          syncModel = recvState.syncData;
-          stop = recvState.stop;
-          numRunningTasks = recvState.numRunningTasks;
-          
+        if (!recvState.isEmpty()) {
+          curIte = recvState.getValue().iteration;
+          curOp = recvState.getValue().operation;
+          leadingTaskID = recvState.getValue().taskID;
+          syncModel = recvState.getValue().syncData;
+          stop = recvState.getValue().stop;
+          numRunningTasks = recvState.getValue().numRunningTasks;
+
           if (fullIteration == -1) {
-            fullIteration = recvState.fullIteration;
+            fullIteration = recvState.getValue().fullIteration;
           }
-     
+
           System.out.println(taskID + " ITERATION " + curIte + " OP " + curOp
             + " SYNC MODEL " + syncModel + " LEADING TASK ID: " + leadingTaskID
             + " STOP: " + stop + " NUM RUNNING TASKS: " + numRunningTasks
@@ -184,14 +186,14 @@ public class SlaveTask implements Task {
         } else {
           System.out.println(taskID + " ITERATION SYNC FAILS");
           curIte = 0;
-          curOp = 0;
+          curOp = Operation.No;
           numRunningTasks = 0;
         }
         if (stop) {
           break;
         }
-        if (curOp == 1) {
-          Vector recvModel = null;
+        if (curOp == Operation.ComputeGradient) {
+          AllReduceResult<Vector> recvModel = null;
           if (syncModel) {
             failPerhaps(taskID);
             try (Timer t = new Timer("Model AllReduce")) {
@@ -203,12 +205,12 @@ public class SlaveTask implements Task {
               }
             }
           }
-          if (!syncModel || recvModel != null) {
-            if (recvModel != null) {
-              model = recvModel;
+          if (!syncModel || (recvModel != null && !recvModel.isEmpty())) {
+            if (recvModel != null && !recvModel.isEmpty()) {
+              model = recvModel.getValue();
             }
             startIte = curIte;
-            startOp = 1;
+            startOp = Operation.ComputeGradient;
             syncModel = false;
             failPerhaps(taskID);
             Pair<Pair<Double, Integer>, Vector> lossAndGradient =
@@ -224,15 +226,15 @@ public class SlaveTask implements Task {
                 stop = true;
               } else {
                 descentDirection = getDescentDirection(gradient);
-                startOp = 2;
+                startOp = Operation.DoLineSearch;
                 // Continue to next op.
-                curOp = 2;
+                curOp = Operation.DoLineSearch;
               }
             }
           }
         }
-        if (!stop && curOp == 2) {
-          Pair<Vector, Vector> recvModelPair = null;
+        if (!stop && curOp == Operation.DoLineSearch) {
+          AllReduceResult<Pair<Vector, Vector>> recvModelPair = null;
           if (syncModel) {
             failPerhaps(taskID);
             try (Timer t = new Timer("Model And Descent Direction AllReduce")) {
@@ -248,13 +250,13 @@ public class SlaveTask implements Task {
               }
             }
           }
-          if (!syncModel || recvModelPair != null) {
-            if (recvModelPair != null) {
-              model = recvModelPair.first;
-              descentDirection = recvModelPair.second;
+          if (!syncModel || (recvModelPair != null && !recvModelPair.isEmpty())) {
+            if (recvModelPair != null && !recvModelPair.isEmpty()) {
+              model = recvModelPair.getValue().first;
+              descentDirection = recvModelPair.getValue().second;
             }
             startIte = curIte;
-            startOp = 2;
+            startOp = Operation.DoLineSearch;
             syncModel = false;
             // Line search
             failPerhaps(taskID);
@@ -270,7 +272,7 @@ public class SlaveTask implements Task {
               }
               
               startIte++;
-              startOp = 1;
+              startOp = Operation.ComputeGradient;
             }
           }
         }
@@ -306,11 +308,15 @@ public class SlaveTask implements Task {
     final Vector model) throws NetworkException, InterruptedException {
     Pair<Pair<Double, Integer>, Vector> localLossAndGradient =
       computeLossAndGradient(model);
-    Pair<Pair<Double, Integer>, Vector> lossAndGradient = null;
+    AllReduceResult<Pair<Pair<Double, Integer>, Vector>> lossAndGradient = null;
     try (Timer t = new Timer("Loss And Gradient AllReduce")) {
       lossAndGradient = lossAndGradientAllReducer.apply(localLossAndGradient);
     }
-    return lossAndGradient;
+    if (lossAndGradient.isEmpty()) {
+      return null;
+    } else {
+      return lossAndGradient.getValue();
+    }
   }
 
   private Pair<Pair<Double, Integer>, Vector> computeLossAndGradient(
@@ -374,12 +380,16 @@ public class SlaveTask implements Task {
     InterruptedException {
     Pair<Vector, Integer> localLineSearchEvals =
       lineSearch(model, descentDirection);
-    Pair<Vector, Integer> lineSearchEvals = null;
+    AllReduceResult<Pair<Vector, Integer>> lineSearchEvals = null;
     try (Timer t = new Timer("LineSearch AllReduce")) {
       lineSearchEvals =
         lineSearchEvaluationsAllReducer.apply(localLineSearchEvals);
     }
-    return lineSearchEvals;
+    if (lineSearchEvals.isEmpty()) {
+      return null;
+    } else {
+      return lineSearchEvals.getValue();
+    }
   }
 
   /**
@@ -465,11 +475,9 @@ public class SlaveTask implements Task {
   }
 
   private void failPerhaps(String taskID) {
-    /*
     if (Math.random() < FAILURE_PROB && taskID.compareTo("MasterTask") != 0) {
       System.out.println("Simulated Failure");
       throw new RuntimeException("Simulated Failure");
     }
-    */
   }
 }

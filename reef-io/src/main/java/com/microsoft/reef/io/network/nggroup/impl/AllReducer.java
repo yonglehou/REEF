@@ -43,6 +43,8 @@ import com.microsoft.reef.driver.parameters.DriverIdentifier;
 import com.microsoft.reef.driver.task.TaskConfigurationOptions;
 import com.microsoft.reef.exception.evaluator.NetworkException;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
+import com.microsoft.reef.io.network.group.operators.AllReduceResult;
+import com.microsoft.reef.io.network.group.operators.AllReduceResultList;
 import com.microsoft.reef.io.network.group.operators.Reduce.ReduceFunction;
 import com.microsoft.reef.io.network.impl.NetworkService;
 import com.microsoft.reef.io.network.nggroup.api.CommGroupNetworkHandler;
@@ -456,12 +458,12 @@ public class AllReducer<T> implements AllReduce<T>,
   }
 
   @Override
-  public synchronized T apply(T aElement) throws InterruptedException,
-    NetworkException {
+  public synchronized AllReduceResult<T> apply(T aElement)
+    throws InterruptedException, NetworkException {
     startWorking();
     if (isCurrentIterationFailed.get()) {
       finishWorking();
-      return null;
+      return new AllReduceResult<T>(null);
     }
     int ite = iteration.get();
     int commID = iteCommID.get();
@@ -516,7 +518,7 @@ public class AllReducer<T> implements AllReduce<T>,
       iteCommID.incrementAndGet();
     }
     finishWorking();
-    return reducedValue;
+    return new AllReduceResult<T>(reducedValue);
   }
 
   private boolean applyInDim(T reducedValue, List<byte[]> valBytes,
@@ -847,14 +849,14 @@ public class AllReducer<T> implements AllReduce<T>,
     return msgList;
   }
 
-  public synchronized List<T> apply(List<T> elements)
+  public synchronized AllReduceResultList<T> apply(List<T> elements)
     throws InterruptedException, NetworkException {
     // We need to change the interface to make chunking automatic.
     // Assume the elements are ordered.
     startWorking();
     if (isCurrentIterationFailed.get()) {
       finishWorking();
-      return null;
+      return new AllReduceResultList<T>(null);
     }
     // Data structure for allreduce
     Map<Integer, T> reducedValMap = new TreeMap<>();
@@ -904,7 +906,7 @@ public class AllReducer<T> implements AllReduce<T>,
       iteCommID.addAndGet(2);
     }
     finishWorking();
-    return reducedVals;
+    return new AllReduceResultList<T>(reducedVals);
   }
 
   private boolean reduceScatter(Map<Integer, T> reducedValMap,

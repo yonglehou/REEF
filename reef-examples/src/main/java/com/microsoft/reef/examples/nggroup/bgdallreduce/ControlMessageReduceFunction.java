@@ -29,9 +29,11 @@ public class ControlMessageReduceFunction implements
   @Override
   public ControlMessage apply(final Iterable<ControlMessage> evals) {
     int maxIte = Integer.MIN_VALUE;
-    int maxOp = Integer.MIN_VALUE;
+    // maxOp is intialized with the smallest ordinal
+    Operation maxOp = Operation.ComputeGradient;
     int minIte = Integer.MAX_VALUE;
-    int minOp = Integer.MAX_VALUE;
+    // minOp is initialized with largest ordinal
+    Operation minOp = Operation.DoLineSearch;
     int numRunningTasks = 0;
     int fullIteration = -1;
     boolean stop = false;
@@ -47,12 +49,13 @@ public class ControlMessageReduceFunction implements
         taskID = eval.taskID;
       }
       if (maxIte == eval.iteration) {
-        if (maxOp < eval.operation) {
+        if (maxOp.ordinal() < eval.operation.ordinal()) {
           maxOp = eval.operation;
           taskID = eval.taskID;
         }
       }
-      if (maxIte == eval.iteration && maxOp == eval.operation) {
+      if (maxIte == eval.iteration
+        && maxOp.ordinal() == eval.operation.ordinal()) {
         if (taskID.compareTo(eval.taskID) < 0) {
           taskID = eval.taskID;
         }
@@ -62,7 +65,7 @@ public class ControlMessageReduceFunction implements
         minOp = eval.operation;
       }
       if (minIte == eval.iteration) {
-        if (minOp > eval.operation) {
+        if (minOp.ordinal() > eval.operation.ordinal()) {
           minOp = eval.operation;
         }
       }
@@ -84,7 +87,7 @@ public class ControlMessageReduceFunction implements
       syncData = true;
     }
     // If in the same iteration, but not the same op, set syncData to true.
-    if (maxIte == minIte && maxOp != minOp) {
+    if (maxIte == minIte && maxOp.ordinal() != minOp.ordinal()) {
       syncData = true;
     }
     // If iteration and op are all equal,see which eval says true.

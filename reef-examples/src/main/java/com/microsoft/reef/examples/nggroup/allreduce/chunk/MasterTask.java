@@ -28,6 +28,8 @@ import com.microsoft.reef.examples.nggroup.bgd.math.Vector;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.AllCommunicationGroup;
 import com.microsoft.reef.examples.nggroup.bgd.parameters.ModelDimensions;
 import com.microsoft.reef.io.network.group.operators.AllReduce;
+import com.microsoft.reef.io.network.group.operators.AllReduceResult;
+import com.microsoft.reef.io.network.group.operators.AllReduceResultList;
 import com.microsoft.reef.io.network.nggroup.api.CommunicationGroupClient;
 import com.microsoft.reef.io.network.nggroup.api.GroupCommClient;
 import com.microsoft.reef.task.Task;
@@ -66,7 +68,6 @@ public class MasterTask implements Task {
       Vector model = new DenseVector(new double[] { 1, 1 });
       models.add(model);
     }
-    List<Vector> newModels = null;
     final int numIters = 10;
     int ite = 0;
     int op = 0;
@@ -74,9 +75,9 @@ public class MasterTask implements Task {
     while (ite < numIters) {
       checkAndUpdate();
       System.out.println("SYNC ITERATION ");
-      Integer recvIte = controlMsgAllReducer.apply(ite);
+      AllReduceResult<Integer> recvIte = controlMsgAllReducer.apply(ite);
       if (recvIte != null) {
-        ite = recvIte.intValue();
+        ite = recvIte.getValue().intValue();
         op = 1;
         System.out.println("GET ITERATION " + ite);
       } else {
@@ -84,13 +85,13 @@ public class MasterTask implements Task {
       }
       if (op == 1) {
         System.out.println("ITERATION " + ite + " STARTS.");
-        newModels = modelAllReducer.apply(models);
-        if (newModels != null) {
+        AllReduceResultList<Vector> newModels = modelAllReducer.apply(models);
+        if (!newModels.isEmpty()) {
           StringBuffer sb = new StringBuffer();
-          for (int j = 0; j < newModels.size(); j++) {
+          for (int j = 0; j < newModels.getValues().size(); j++) {
             sb.append('[');
-            for (int k = 0; k < newModels.get(j).size(); k++) {
-              sb.append(newModels.get(j).get(k) + ",");
+            for (int k = 0; k < newModels.getValues().get(j).size(); k++) {
+              sb.append(newModels.getValues().get(j).get(k) + ",");
             }
             sb.setCharAt(sb.length() - 1, ']');
           }

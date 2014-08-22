@@ -22,14 +22,14 @@ public class ControlMessage implements Serializable {
   private static final long serialVersionUID = 1L;
 
   public int iteration;
-  public int operation;
+  public Operation operation;
   public String taskID;
   public boolean syncData;
   public boolean stop;
   public int numRunningTasks;
   public int fullIteration;
 
-  public ControlMessage(int ite, int op, String tID, boolean syncD,
+  public ControlMessage(int ite, Operation op, String tID, boolean syncD,
     boolean stp, int numTasks, int fullIte) {
     iteration = ite;
     operation = op;
