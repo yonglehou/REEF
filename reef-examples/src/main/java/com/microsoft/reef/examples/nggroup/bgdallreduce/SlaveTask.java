@@ -205,6 +205,7 @@ public class SlaveTask implements Task {
               }
             }
           }
+          //TODO: Do you need the outer if?
           if (!syncModel || (recvModel != null && !recvModel.isEmpty())) {
             if (recvModel != null && !recvModel.isEmpty()) {
               model = recvModel.getValue();

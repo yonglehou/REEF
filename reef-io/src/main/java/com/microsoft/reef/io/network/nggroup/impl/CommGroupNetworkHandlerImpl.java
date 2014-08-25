@@ -46,7 +46,7 @@ public class CommGroupNetworkHandlerImpl implements
     new ConcurrentHashMap<>();
   private final Map<Class<? extends Name<String>>, BlockingQueue<GroupCommMessage>> topologyNotifications =
     new ConcurrentHashMap<>();
-    
+
   // Synchronize SourceDead and SourceAdd message processing on allreduce
   // topologies.
   private final Map<Class<? extends Name<String>>, GroupCommMessage> allreducerTopoMsgMap =
@@ -98,7 +98,7 @@ public class CommGroupNetworkHandlerImpl implements
       || msg.getType() == Type.SourceDead) {
       handleAllReducerTopoMsg(msg);
     } else {
-      EventHandler<GroupCommMessage> operHandler = operHandlers.get(operName);
+      final EventHandler<GroupCommMessage> operHandler = operHandlers.get(operName);
       if (operHandler != null) {
         operHandler.onNext(msg);
       }
@@ -123,7 +123,7 @@ public class CommGroupNetworkHandlerImpl implements
     final Class<? extends Name<String>> operName) {
     try {
       LOG.info("Waiting for topology update msg for " + operName);
-      GroupCommMessage msg = topologyNotifications.get(operName).take();
+      final GroupCommMessage msg = topologyNotifications.get(operName).take();
       LOG.info("Get topology update msg for " + operName);
       return msg;
     } catch (final InterruptedException e) {
@@ -151,25 +151,25 @@ public class CommGroupNetworkHandlerImpl implements
     // Accumulate the messages until all the allreducers get the same message.
     // If these messages are not processed, driver won't send new messages.
 
-    List<Class<? extends Name<String>>> rmKeys = new LinkedList<>();
+    final List<Class<? extends Name<String>>> rmKeys = new LinkedList<>();
     boolean isOldMsg = false;
-    for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
-      .entrySet()) {
+    for (final Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap.entrySet()) {
       if (entry.getValue().getVersion() < msg.getVersion()) {
         rmKeys.add(entry.getKey());
       }
       if (entry.getValue().getVersion() > msg.getVersion()) {
         isOldMsg = true;
+        //TODO: Can you not break?
+        //break;
       }
-      if (entry.getValue().getVersion() == msg.getVersion()
-        && entry.getValue().getType() != msg.getType()) {
+      if (entry.getValue().getVersion() == msg.getVersion() && entry.getValue().getType() != msg.getType()) {
         rmKeys.add(entry.getKey());
       }
     }
     if (!isOldMsg) {
       // Remove
-      for (Class<? extends Name<String>> rmKey : rmKeys) {
-        GroupCommMessage rmMsg = allreducerTopoMsgMap.remove(rmKey);
+      for (final Class<? extends Name<String>> rmKey : rmKeys) {
+        final GroupCommMessage rmMsg = allreducerTopoMsgMap.remove(rmKey);
         printLog("Remove msg with opername " + rmKey + " with type "
           + rmMsg.getType() + " with version " + rmMsg.getVersion());
       }
@@ -188,11 +188,11 @@ public class CommGroupNetworkHandlerImpl implements
     if (allreducerTopoMsgMap.size() == totalNumAllReducers.get()) {
       printLog("Topo msg map size: " + allreducerTopoMsgMap.size()
         + ", process topo messages on all the allreduce topologies.");
-      for (Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
+      for (final Entry<Class<? extends Name<String>>, GroupCommMessage> entry : allreducerTopoMsgMap
         .entrySet()) {
         try {
           operHandlers.get(entry.getKey()).onNext(entry.getValue());
-        } catch (Exception e) {
+        } catch (final Exception e) {
         }
       }
       allreducerTopoMsgMap.clear();
@@ -203,7 +203,7 @@ public class CommGroupNetworkHandlerImpl implements
     }
   }
 
-  private void printLog(String log) {
+  private void printLog(final String log) {
     // System.out.println("CommGroupNetworkHandler - " + log);
     // LOG.info("CommGroupNetworkHandler - " + log);
   }
