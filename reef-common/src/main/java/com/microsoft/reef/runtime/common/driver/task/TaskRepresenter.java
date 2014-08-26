@@ -76,7 +76,13 @@ public final class TaskRepresenter {
       throw new RuntimeException("Received a message for task " + taskStatusProto.getTaskId() +
           " in the TaskRepresenter for Task " + this.taskId);
     }
-
+    if(taskStatusProto.getRecovery())
+    {
+      // when a recovered heartbeat is received, we will take its word for it
+      LOG.log(Level.INFO, "Received task status {0} for RECOVERED task {1}.",
+          new Object[]{ taskStatusProto.getState(), this.taskId });
+      this.setState(taskStatusProto.getState());
+    }
     // Dispatch the message to the right method.
     switch (taskStatusProto.getState()) {
       case INIT:
@@ -119,6 +125,14 @@ public final class TaskRepresenter {
     if (this.isNotRunning()) {
       throw new IllegalStateException("Received a task status message from task " + this.taskId +
           " that is believed to be RUNNING on the Evaluator, but the Driver thinks it is in state " + this.state);
+    }
+
+    // fire driver restart task running handler if this is a recovery heartbeat
+    if(taskStatusProto.getRecovery())
+    {
+      final RunningTask runningTask = new RunningTaskImpl(
+          this.evaluatorManager, this.taskId, this.context, this);
+      this.messageDispatcher.onDriverRestartTaskRunning(runningTask);
     }
 
     for (final ReefServiceProtos.TaskStatusProto.TaskMessageProto taskMessageProto : taskStatusProto.getTaskMessageList()) {

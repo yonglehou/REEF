@@ -17,7 +17,6 @@ package com.microsoft.reef.runtime.common.driver.evaluator;
 
 import com.microsoft.reef.annotations.audience.DriverSide;
 import com.microsoft.reef.annotations.audience.Private;
-import com.microsoft.reef.driver.catalog.NodeDescriptor;
 import com.microsoft.reef.driver.context.ActiveContext;
 import com.microsoft.reef.driver.context.FailedContext;
 import com.microsoft.reef.driver.evaluator.AllocatedEvaluator;
@@ -29,12 +28,11 @@ import com.microsoft.reef.io.naming.Identifiable;
 import com.microsoft.reef.proto.DriverRuntimeProtocol;
 import com.microsoft.reef.proto.EvaluatorRuntimeProtocol;
 import com.microsoft.reef.proto.ReefServiceProtos;
-import com.microsoft.reef.runtime.common.driver.DriverExceptionHandler;
+import com.microsoft.reef.runtime.common.driver.DriverStatusManager;
 import com.microsoft.reef.runtime.common.driver.api.ResourceLaunchHandler;
 import com.microsoft.reef.runtime.common.driver.api.ResourceReleaseHandler;
 import com.microsoft.reef.runtime.common.driver.context.ContextControlHandler;
-import com.microsoft.reef.runtime.common.driver.context.ContextMessageImpl;
-import com.microsoft.reef.runtime.common.driver.context.EvaluatorContext;
+import com.microsoft.reef.runtime.common.driver.context.ContextRepresenters;
 import com.microsoft.reef.runtime.common.driver.task.TaskRepresenter;
 import com.microsoft.reef.runtime.common.utils.ExceptionCodec;
 import com.microsoft.reef.runtime.common.utils.RemoteManager;
@@ -50,7 +48,7 @@ import com.microsoft.wake.time.event.Alarm;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.util.*;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -74,19 +72,17 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
   private final EvaluatorHeartBeatSanityChecker sanityChecker = new EvaluatorHeartBeatSanityChecker();
   private final Clock clock;
-  private final Evaluators evaluators;
   private final ResourceReleaseHandler resourceReleaseHandler;
   private final ResourceLaunchHandler resourceLaunchHandler;
   private final String evaluatorId;
   private final EvaluatorDescriptorImpl evaluatorDescriptor;
-  private final List<EvaluatorContext> activeContextList = new ArrayList<>();
-  private final Set<String> activeContextIds = new HashSet<>();
+  private final ContextRepresenters contextRepresenters;
   private final EvaluatorMessageDispatcher messageDispatcher;
-  private final ConfigurationSerializer configurationSerializer;
   private final EvaluatorControlHandler evaluatorControlHandler;
   private final ContextControlHandler contextControlHandler;
   private final EvaluatorStatusManager stateManager;
   private final ExceptionCodec exceptionCodec;
+  private final DriverStatusManager driverStatusManager;
 
 
   // Mutable fields
@@ -94,48 +90,41 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   private boolean isResourceReleased = false;
 
   @Inject
-  EvaluatorManager(
+  private EvaluatorManager(
       final Clock clock,
       final RemoteManager remoteManager,
-      final Evaluators evaluators,
       final ResourceReleaseHandler resourceReleaseHandler,
       final ResourceLaunchHandler resourceLaunchHandler,
       final @Parameter(EvaluatorIdentifier.class) String evaluatorId,
       final @Parameter(EvaluatorDescriptorName.class) EvaluatorDescriptorImpl evaluatorDescriptor,
-      final DriverExceptionHandler driverExceptionHandler,
+      final ContextRepresenters contextRepresenters,
       final ConfigurationSerializer configurationSerializer,
       final EvaluatorMessageDispatcher messageDispatcher,
       final EvaluatorControlHandler evaluatorControlHandler,
       final ContextControlHandler contextControlHandler,
       final EvaluatorStatusManager stateManager,
+      final DriverStatusManager driverStatusManager,
       final ExceptionCodec exceptionCodec) {
+    this.contextRepresenters = contextRepresenters;
     LOG.log(Level.FINEST, "Instantiating 'EvaluatorManager' for evaluator: {0}", evaluatorId);
     this.clock = clock;
-    this.evaluators = evaluators;
     this.resourceReleaseHandler = resourceReleaseHandler;
     this.resourceLaunchHandler = resourceLaunchHandler;
     this.evaluatorId = evaluatorId;
     this.evaluatorDescriptor = evaluatorDescriptor;
-    this.configurationSerializer = configurationSerializer;
 
     this.messageDispatcher = messageDispatcher;
     this.evaluatorControlHandler = evaluatorControlHandler;
     this.contextControlHandler = contextControlHandler;
     this.stateManager = stateManager;
+    this.driverStatusManager = driverStatusManager;
     this.exceptionCodec = exceptionCodec;
 
     final AllocatedEvaluator allocatedEvaluator =
-        new AllocatedEvaluatorImpl(this, remoteManager.getMyIdentifier(), this.configurationSerializer, this.getJobIdentifier());
+        new AllocatedEvaluatorImpl(this, remoteManager.getMyIdentifier(), configurationSerializer, getJobIdentifier());
     LOG.log(Level.FINEST, "Firing AllocatedEvaluator event for Evaluator with ID [{0}]", evaluatorId);
     this.messageDispatcher.onEvaluatorAllocated(allocatedEvaluator);
     LOG.log(Level.FINEST, "Instantiated 'EvaluatorManager' for evaluator: [{0}]", this.getId());
-  }
-
-  /**
-   * @return NodeDescriptor for the node executing this evaluator
-   */
-  public NodeDescriptor getNodeDescriptor() {
-    return this.getEvaluatorDescriptor().getNodeDescriptor();
   }
 
   @Override
@@ -191,8 +180,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
               DriverRuntimeProtocol.ResourceReleaseProto.newBuilder()
                   .setIdentifier(EvaluatorManager.this.evaluatorId).build()
           );
-        } finally {
-          EvaluatorManager.this.evaluators.remove(EvaluatorManager.this);
         }
       }
     }
@@ -207,23 +194,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
         (this.stateManager.isDoneOrFailedOrKilled());
   }
 
-  public EvaluatorContext getEvaluatorContext(final String id) {
-    for (final EvaluatorContext context : this.activeContextList) {
-      if (context.getId().equals(id)) return context;
-    }
-    throw new RuntimeException("Unknown evaluator context " + id);
-  }
-
-  private void addEvaluatorContext(final EvaluatorContext context) {
-    this.activeContextList.add(context);
-    this.activeContextIds.add(context.getId());
-  }
-
-  private void removeEvaluatorContext(final EvaluatorContext context) {
-    this.activeContextList.remove(context);
-    this.activeContextIds.remove(context.getId());
-  }
-
   /**
    * EvaluatorException will trigger is FailedEvaluator and state transition to FAILED
    *
@@ -232,6 +202,8 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   public void onEvaluatorException(final EvaluatorException exception) {
     synchronized (this.evaluatorDescriptor) {
       if (this.stateManager.isDoneOrFailedOrKilled()) {
+        LOG.log(Level.FINE, "Ignoring an exception receivedfor Evaluator {0} which is already in state {1}.",
+            new Object[]{this.getId(), this.stateManager});
         return;
       }
 
@@ -239,19 +211,13 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
       try {
 
-        final List<FailedContext> failedContextList = new ArrayList<>();
-        final List<EvaluatorContext> activeContexts = new ArrayList<>(this.activeContextList);
-        Collections.reverse(activeContexts);
-
-        for (final EvaluatorContext context : activeContexts) {
-          failedContextList.add(context.getFailedContextForEvaluatorFailure());
-        }
+        final List<FailedContext> failedContextList = this.contextRepresenters.getFailedContextsForEvaluatorFailure();
 
         final Optional<FailedTask> failedTaskOptional;
         if (this.task.isPresent()) {
           final String taskId = this.task.get().getId();
-          final Optional<ActiveContext> evaluatorContext = Optional.<ActiveContext>empty();
-          final Optional<byte[]> bytes = Optional.<byte[]>empty();
+          final Optional<ActiveContext> evaluatorContext = Optional.empty();
+          final Optional<byte[]> bytes = Optional.empty();
           final Optional<Throwable> taskException = Optional.<Throwable>of(new Exception("Evaluator crash"));
           final String message = "Evaluator crash";
           final Optional<String> description = Optional.empty();
@@ -278,14 +244,43 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
     final EvaluatorRuntimeProtocol.EvaluatorHeartbeatProto evaluatorHeartbeatProto =
         evaluatorHeartbeatProtoRemoteMessage.getMessage();
-
     LOG.log(Level.FINEST, "Evaluator heartbeat: {0}", evaluatorHeartbeatProto);
 
+    if (this.stateManager.isDoneOrFailedOrKilled()) {
+      LOG.log(Level.FINE, "Ignoring an heartbeat received for Evaluator {0} which is already in state {1}.",
+          new Object[]{this.getId(), this.stateManager});
+      return;
+    }
+
     this.sanityChecker.check(evaluatorId, evaluatorHeartbeatProto.getTimestamp());
+    final String evaluatorRID = evaluatorHeartbeatProtoRemoteMessage.getIdentifier().toString();
+
+    // first message from a running evaluator trying to re-establish communications
+    if (evaluatorHeartbeatProto.getRecovery()) {
+      this.evaluatorControlHandler.setRemoteID(evaluatorRID);
+      this.stateManager.setRunning();
+
+      this.driverStatusManager.oneContainerRecovered();
+      final int numRecoveredContainers = this.driverStatusManager.getNumRecoveredContainers();
+
+      LOG.log(Level.FINE, "Received recovery heartbeat from evaluator {0}.", this.evaluatorId);
+      final int expectedEvaluatorsNumber = this.driverStatusManager.getNumPreviousContainers();
+
+      if (numRecoveredContainers > expectedEvaluatorsNumber) {
+        LOG.log(Level.SEVERE, "expecting only [{0}] recovered evaluators, but [{1}] evaluators have checked in.",
+            new Object[]{expectedEvaluatorsNumber, numRecoveredContainers});
+        throw new RuntimeException("More then expected number of evaluators are checking in during recovery.");
+      } else if (numRecoveredContainers == expectedEvaluatorsNumber) {
+        LOG.log(Level.INFO, "All [{0}] expected evaluators have checked in. Recovery completed.", expectedEvaluatorsNumber);
+        this.driverStatusManager.setRestartCompleted();
+      } else {
+        LOG.log(Level.INFO, "expecting [{0}] recovered evaluators, [{1}] evaluators have checked in.",
+            new Object[]{expectedEvaluatorsNumber, numRecoveredContainers});
+      }
+    }
 
     // If this is the first message from this Evaluator, register it.
     if (this.stateManager.isSubmitted()) {
-      final String evaluatorRID = evaluatorHeartbeatProtoRemoteMessage.getIdentifier().toString();
       this.evaluatorControlHandler.setRemoteID(evaluatorRID);
       this.stateManager.setRunning();
       LOG.log(Level.FINEST, "Evaluator {0} is running", this.evaluatorId);
@@ -297,9 +292,9 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     }
 
     // Process the Context status message(s)
-    for (final ReefServiceProtos.ContextStatusProto contextStatusProto : evaluatorHeartbeatProto.getContextStatusList()) {
-      this.onContextStatusMessage(contextStatusProto, !evaluatorHeartbeatProto.hasTaskStatus());
-    }
+    final boolean informClientOfNewContexts = !evaluatorHeartbeatProto.hasTaskStatus();
+    this.contextRepresenters.onContextStatusMessages(evaluatorHeartbeatProto.getContextStatusList(),
+        informClientOfNewContexts);
 
     // Process the Task status message
     if (evaluatorHeartbeatProto.hasTaskStatus()) {
@@ -327,10 +322,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
       case RUNNING:
       case SUSPEND:
         break;
-    }
-
-    if (message.getState() == ReefServiceProtos.State.FAILED) {
-      this.onEvaluatorFailed(message);
     }
   }
 
@@ -374,7 +365,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
         this.stateManager.setSubmitted();
         this.resourceLaunchHandler.onNext(resourceLaunchProto);
       } else {
-        throw new RuntimeException("Evaluator manager expected " + State.ALLOCATED +
+        throw new RuntimeException("Evaluator manager expected " + EvaluatorState.ALLOCATED +
             " state but instead is in state " + this.stateManager);
       }
     }
@@ -397,7 +388,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
    *
    * @param evaluatorControlProto message contains evaluator control information.
    */
-  public void sendEvaluatorControlMessage(final EvaluatorRuntimeProtocol.EvaluatorControlProto evaluatorControlProto) {
+  void sendEvaluatorControlMessage(final EvaluatorRuntimeProtocol.EvaluatorControlProto evaluatorControlProto) {
     synchronized (this.evaluatorDescriptor) {
       this.evaluatorControlHandler.send(evaluatorControlProto);
     }
@@ -406,7 +397,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   /**
    * Get the id of current job/application
    */
-  private String getJobIdentifier() {
+  public static String getJobIdentifier() {
     // TODO: currently we obtain the job id directly by parsing execution (container) directory path
     // #845 is open to get the id from RM properly
     for (File directory = new File(System.getProperty("user.dir"));
@@ -422,69 +413,6 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   }
 
   /**
-   * Handle a context status update
-   *
-   * @param contextStatusProto indicating the current status of the context
-   */
-  private synchronized void onContextStatusMessage(
-      final ReefServiceProtos.ContextStatusProto contextStatusProto,
-      final boolean notifyClientOnNewActiveContext) {
-
-    final String contextID = contextStatusProto.getContextId();
-    final Optional<String> parentID = contextStatusProto.hasParentId() ?
-        Optional.of(contextStatusProto.getParentId()) : Optional.<String>empty();
-
-    if (ReefServiceProtos.ContextStatusProto.State.READY == contextStatusProto.getContextState()) {
-
-      if (!this.activeContextIds.contains(contextID)) {
-        final EvaluatorContext context = new EvaluatorContext(contextID,
-            this.evaluatorId, this.evaluatorDescriptor, parentID, this.configurationSerializer,
-            this.contextControlHandler, this, this.messageDispatcher, this.exceptionCodec);
-        addEvaluatorContext(context);
-        if (notifyClientOnNewActiveContext) {
-          this.messageDispatcher.onContextActive(context);
-        }
-      }
-
-      for (final ReefServiceProtos.ContextStatusProto.ContextMessageProto contextMessageProto : contextStatusProto.getContextMessageList()) {
-        final byte[] theMessage = contextMessageProto.getMessage().toByteArray();
-        final String sourceID = contextMessageProto.getSourceId();
-        this.messageDispatcher.onContextMessage(new ContextMessageImpl(theMessage, contextID, sourceID));
-      }
-
-    } else {
-      if (!this.activeContextIds.contains(contextID)) {
-        if (ReefServiceProtos.ContextStatusProto.State.FAIL == contextStatusProto.getContextState()) {
-          // It failed right away
-          addEvaluatorContext(new EvaluatorContext(contextID, this.evaluatorId,
-              this.evaluatorDescriptor, parentID, this.configurationSerializer,
-              this.contextControlHandler, this, this.messageDispatcher, this.exceptionCodec));
-        } else {
-          throw new RuntimeException("unknown context signaling state " + contextStatusProto.getContextState());
-        }
-      }
-
-      final EvaluatorContext context = getEvaluatorContext(contextID);
-      final EvaluatorContext parentContext = context.getParentId().isPresent() ?
-          getEvaluatorContext(context.getParentId().get()) : null;
-      removeEvaluatorContext(context);
-
-      if (ReefServiceProtos.ContextStatusProto.State.FAIL == contextStatusProto.getContextState()) {
-        context.onContextFailure(contextStatusProto);
-      } else if (ReefServiceProtos.ContextStatusProto.State.DONE == contextStatusProto.getContextState()) {
-        if (null != parentContext) {
-          this.messageDispatcher.onContextClose(context.getClosedContext(parentContext));
-        } else {
-          LOG.info("Root context closed. Evaluator closed will trigger final shutdown.");
-        }
-      } else {
-        throw new RuntimeException("Unknown context state "
-            + contextStatusProto.getContextState() + " for context " + contextID);
-      }
-    }
-  }
-
-  /**
    * Handle task status messages.
    *
    * @param taskStatusProto message contains the current task status.
@@ -493,12 +421,14 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
 
     if (!(this.task.isPresent() && this.task.get().getId().equals(taskStatusProto.getTaskId()))) {
       if (taskStatusProto.getState() == ReefServiceProtos.State.INIT ||
-          taskStatusProto.getState() == ReefServiceProtos.State.FAILED) {
+          taskStatusProto.getState() == ReefServiceProtos.State.FAILED ||
+          taskStatusProto.getRecovery() // for task from recovered evaluators
+          ) {
 
         // FAILED is a legal first state of a Task as it could have failed during construction.
         this.task = Optional.of(
             new TaskRepresenter(taskStatusProto.getTaskId(),
-                getEvaluatorContext(taskStatusProto.getContextId()),
+                this.contextRepresenters.getContext(taskStatusProto.getContextId()),
                 this.messageDispatcher,
                 this,
                 this.exceptionCodec));
@@ -522,8 +452,11 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
   public void onResourceStatusMessage(final DriverRuntimeProtocol.ResourceStatusProto resourceStatusProto) {
     synchronized (this.evaluatorDescriptor) {
       LOG.log(Level.FINEST, "Resource manager state update: {0}", resourceStatusProto.getState());
-
-      if ((resourceStatusProto.getState() == ReefServiceProtos.State.DONE ||
+      if (this.stateManager.isDoneOrFailedOrKilled()) {
+        LOG.log(Level.FINE, "Ignoring resource status update for Evaluator {0} which is already in state {1}.",
+            new Object[]{this.getId(), this.stateManager});
+        return;
+      } else if ((resourceStatusProto.getState() == ReefServiceProtos.State.DONE ||
           resourceStatusProto.getState() == ReefServiceProtos.State.FAILED) &&
           this.stateManager.isAllocatedOrSubmittedOrRunning()) {
         // something is wrong. The resource manager reports that the Evaluator is done or failed, but the Driver assumes
@@ -564,22 +497,7 @@ public final class EvaluatorManager implements Identifiable, AutoCloseable {
     return "EvaluatorManager:"
         + " id=" + this.evaluatorId
         + " state=" + this.stateManager
-        + " contexts=" + this.activeContextIds
         + " task=" + this.task;
-  }
-
-  /**
-   * Various states that the EvaluatorManager could be in. The EvaluatorManager is
-   * created when a resource has been allocated by the ResourceManager.
-   */
-  static enum State {
-    ALLOCATED,  // initial state
-    SUBMITTED,  // client called AllocatedEvaluator.submitTask() and we're waiting for first contact
-    RUNNING,    // first contact received, all communication channels established, Evaluator sent to client.
-    // TODO: Add CLOSING state
-    DONE,       // clean shutdown
-    FAILED,     // some failure occurred.
-    KILLED      // unclean shutdown
   }
 
   // Dynamic Parameters

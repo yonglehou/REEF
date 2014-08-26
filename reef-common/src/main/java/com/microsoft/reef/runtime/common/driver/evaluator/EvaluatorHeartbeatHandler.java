@@ -35,10 +35,12 @@ import java.util.logging.Logger;
 public final class EvaluatorHeartbeatHandler implements EventHandler<RemoteMessage<EvaluatorRuntimeProtocol.EvaluatorHeartbeatProto>> {
   private static final Logger LOG = Logger.getLogger(EvaluatorHeartbeatHandler.class.getName());
   private final Evaluators evaluators;
+  private final EvaluatorManagerFactory evaluatorManagerFactory;
 
   @Inject
-  EvaluatorHeartbeatHandler(final Evaluators evaluators) {
+  EvaluatorHeartbeatHandler(final Evaluators evaluators, final EvaluatorManagerFactory evaluatorManagerFactory) {
     this.evaluators = evaluators;
+    this.evaluatorManagerFactory = evaluatorManagerFactory;
   }
 
   @Override

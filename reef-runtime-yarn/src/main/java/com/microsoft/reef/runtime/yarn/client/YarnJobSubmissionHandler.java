@@ -19,10 +19,9 @@ import com.microsoft.reef.annotations.audience.ClientSide;
 import com.microsoft.reef.annotations.audience.Private;
 import com.microsoft.reef.proto.ClientRuntimeProtocol;
 import com.microsoft.reef.runtime.common.client.api.JobSubmissionHandler;
+import com.microsoft.reef.runtime.common.files.ClasspathProvider;
 import com.microsoft.reef.runtime.common.files.JobJarMaker;
-import com.microsoft.reef.runtime.common.files.REEFClasspath;
 import com.microsoft.reef.runtime.common.files.REEFFileNames;
-import com.microsoft.reef.runtime.common.files.YarnClasspath;
 import com.microsoft.reef.runtime.common.launch.JavaLaunchCommandBuilder;
 import com.microsoft.reef.runtime.common.parameters.JVMHeapSlack;
 import com.microsoft.reef.runtime.yarn.driver.YarnDriverConfiguration;
@@ -36,6 +35,7 @@ import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse;
 import org.apache.hadoop.yarn.api.records.*;
@@ -65,7 +65,7 @@ final class YarnJobSubmissionHandler implements JobSubmissionHandler {
   private final YarnClient yarnClient;
   private final JobJarMaker jobJarMaker;
   private final REEFFileNames filenames;
-  private final REEFClasspath classpath;
+  private final ClasspathProvider classpath;
   private final FileSystem fileSystem;
   private final ConfigurationSerializer configurationSerializer;
   private final double jvmSlack;
@@ -75,7 +75,7 @@ final class YarnJobSubmissionHandler implements JobSubmissionHandler {
       final YarnConfiguration yarnConfiguration,
       final JobJarMaker jobJarMaker,
       final REEFFileNames filenames,
-      final YarnClasspath classpath,
+      final ClasspathProvider classpath,
       final ConfigurationSerializer configurationSerializer,
       final @Parameter(JVMHeapSlack.class) double jvmSlack) throws IOException {
 
@@ -148,7 +148,7 @@ final class YarnJobSubmissionHandler implements JobSubmissionHandler {
           .setErrorHandlerRID(jobSubmissionProto.getRemoteId())
           .setLaunchID(jobSubmissionProto.getIdentifier())
           .setConfigurationFileName(this.filenames.getDriverConfigurationPath())
-          .setClassPath(this.classpath.getClasspath())
+          .setClassPath(this.classpath.getDriverClasspath())
           .setMemory(amMemory)
           .setStandardOut(ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/" + this.filenames.getDriverStdoutFileName())
           .setStandardErr(ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/" + this.filenames.getDriverStderrFileName())
@@ -165,6 +165,21 @@ final class YarnJobSubmissionHandler implements JobSubmissionHandler {
 
       if (LOG.isLoggable(Level.FINEST)) {
         LOG.log(Level.FINEST, "REEF app command: {0}", StringUtils.join(launchCommand, ' '));
+      }
+
+      // TODO: this is currently being developed on a hacked 2.4.0 bits, should be 2.4.1
+      final String minVersionKeepContainerOptionAvailable = "2.4.0";
+
+      // when supported, set KeepContainersAcrossApplicationAttempts to be true
+      // so that when driver (AM) crashes, evaluators will still be running and we can recover later.
+      if(YarnTypes.isAtOrAfterVersion(minVersionKeepContainerOptionAvailable))
+      {
+        LOG.log(
+            Level.FINE,
+            "Hadoop version is {0} or after with KeepContainersAcrossApplicationAttempts supported, will set it to true.",
+            minVersionKeepContainerOptionAvailable);
+
+        applicationSubmissionContext.setKeepContainersAcrossApplicationAttempts(true);
       }
 
       this.yarnClient.submitApplication(applicationSubmissionContext);

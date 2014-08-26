@@ -8,7 +8,7 @@
     <parent>
         <groupId>com.microsoft.reef</groupId>
         <artifactId>reef-project</artifactId>
-        <version>0.7-SNAPSHOT</version>
+        <version>0.8-SNAPSHOT</version>
     </parent>
 
     <dependencies>
@@ -49,9 +49,13 @@
             <version>${project.version}</version>
         </dependency>
         <!-- End of REEF -->
-
         <dependency>
-            <groupId>junit</groupId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+        <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
