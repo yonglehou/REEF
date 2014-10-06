@@ -13,9 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package com.microsoft.reef.exception;
+
 /**
- * This package contains example of a distributed matrix multiplication operation
- * achieved using MPI style Group Communication Operators provided by the
- * {@link com.microsoft.reef.io.network.impl.NetworkService}
+ * Reported as part of a FailedEvaluator when the resource manager killed the Evaluator
  */
-package com.microsoft.reef.examples.groupcomm.matmul;
+public final class EvaluatorKilledByResourceManagerException extends EvaluatorException {
+
+  public EvaluatorKilledByResourceManagerException(final String evaluatorId, final String message) {
+    super(evaluatorId, message);
+  }
+}
