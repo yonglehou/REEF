@@ -17,6 +17,8 @@ package com.microsoft.reef.io.network.naming;
 
 import com.microsoft.reef.io.naming.NameAssignment;
 import com.microsoft.reef.io.network.naming.serialization.*;
+import com.microsoft.reef.webserver.AvroReefServiceInfo;
+import com.microsoft.reef.webserver.ReefEventStateManager;
 import com.microsoft.tang.annotations.Parameter;
 import com.microsoft.wake.EventHandler;
 import com.microsoft.wake.Identifier;
@@ -46,20 +48,22 @@ public class NameServer implements Stage {
 
   private final Transport transport;
   private final Map<Identifier, InetSocketAddress> idToAddrMap;
-
+  private final ReefEventStateManager reefEventStateManager;
   private final int port;
 
   /**
+   * @deprecated inject the NameServer instead of new it up
    * Constructs a name server
    *
    * @param port    a listening port number
    * @param factory an identifier factory
    */
-  @Inject
-  public NameServer(
-      final @Parameter(NameServerParameters.NameServerPort.class) int port,
-      final @Parameter(NameServerParameters.NameServerIdentifierFactory.class) IdentifierFactory factory) {
+  // TODO: All existing NameServer usage is currently new-up, need to make them injected as well.
+  @Deprecated public NameServer(
+      final int port,
+      final IdentifierFactory factory) {
 
+    this.reefEventStateManager = null;
     final Codec<NamingMessage> codec = NamingCodecFactory.createFullCodec(factory);
     final EventHandler<NamingMessage> handler = createEventHandler(codec);
 
@@ -72,6 +76,38 @@ public class NameServer implements Stage {
     LOG.log(Level.FINE, "NameServer starting, listening at port {0}", this.port);
   }
 
+
+  /**
+   * Constructs a name server
+   *
+   * @param port    a listening port number
+   * @param factory an identifier factory
+   * @param reefEventStateManager the event state manager used to register name server info
+   */
+  @Inject
+  public NameServer(
+      final @Parameter(NameServerParameters.NameServerPort.class) int port,
+      final @Parameter(NameServerParameters.NameServerIdentifierFactory.class) IdentifierFactory factory,
+      final ReefEventStateManager reefEventStateManager) {
+
+    this.reefEventStateManager = reefEventStateManager;
+    final Codec<NamingMessage> codec = NamingCodecFactory.createFullCodec(factory);
+    final EventHandler<NamingMessage> handler = createEventHandler(codec);
+
+    this.transport = new NettyMessagingTransport(NetUtils.getLocalAddress(), port, null,
+        new SyncStage<>(new NamingServerHandler(handler, codec)), 3, 10000);
+
+    this.port = transport.getListeningPort();
+    this.idToAddrMap = Collections.synchronizedMap(new HashMap<Identifier, InetSocketAddress>());
+
+    this.reefEventStateManager.registerServiceInfo(
+        AvroReefServiceInfo.newBuilder()
+            .setServiceName("NameServer")
+            .setServiceInfo(getNameServerId())
+            .build());
+    LOG.log(Level.FINE, "NameServer starting, listening at port {0}", this.port);
+  }
+
   private EventHandler<NamingMessage> createEventHandler(final Codec<NamingMessage> codec) {
 
     final Map<Class<? extends NamingMessage>, EventHandler<? extends NamingMessage>>
@@ -80,7 +116,7 @@ public class NameServer implements Stage {
     clazzToHandlerMap.put(NamingLookupRequest.class, new NamingLookupRequestHandler(this, codec));
     clazzToHandlerMap.put(NamingRegisterRequest.class, new NamingRegisterRequestHandler(this, codec));
     clazzToHandlerMap.put(NamingUnregisterRequest.class, new NamingUnregisterRequestHandler(this));
-    EventHandler<NamingMessage> handler = new MultiEventHandler<>(clazzToHandlerMap);
+    final EventHandler<NamingMessage> handler = new MultiEventHandler<>(clazzToHandlerMap);
 
     return handler;
   }
@@ -106,7 +142,7 @@ public class NameServer implements Stage {
    * @param id   an identifier
    * @param addr an Internet socket address
    */
-  public void register(Identifier id, InetSocketAddress addr) {
+  public void register(final Identifier id, final InetSocketAddress addr) {
     LOG.log(Level.FINE, "id: " + id + " addr: " + addr);
     idToAddrMap.put(id, addr);
   }
@@ -116,7 +152,7 @@ public class NameServer implements Stage {
    *
    * @param id an identifier
    */
-  public void unregister(Identifier id) {
+  public void unregister(final Identifier id) {
     LOG.log(Level.FINE, "id: " + id);
     idToAddrMap.remove(id);
   }
@@ -150,6 +186,11 @@ public class NameServer implements Stage {
     }
     return nas;
   }
+
+  private String getNameServerId()
+  {
+    return NetUtils.getLocalAddress() + ":" + getPort();
+  }
 }
 
 /**
@@ -160,15 +201,15 @@ class NamingServerHandler implements EventHandler<TransportEvent> {
   private final Codec<NamingMessage> codec;
   private final EventHandler<NamingMessage> handler;
 
-  NamingServerHandler(EventHandler<NamingMessage> handler, Codec<NamingMessage> codec) {
+  NamingServerHandler(final EventHandler<NamingMessage> handler, final Codec<NamingMessage> codec) {
     this.codec = codec;
     this.handler = handler;
   }
 
   @Override
-  public void onNext(TransportEvent value) {
-    byte[] data = value.getData();
-    NamingMessage message = (NamingMessage) codec.decode(data);
+  public void onNext(final TransportEvent value) {
+    final byte[] data = value.getData();
+    final NamingMessage message = codec.decode(data);
     message.setLink(value.getLink());
     handler.onNext(message);
   }
@@ -179,22 +220,27 @@ class NamingServerHandler implements EventHandler<TransportEvent> {
  */
 class NamingLookupRequestHandler implements EventHandler<NamingLookupRequest> {
 
+  private static final Logger LOG = Logger.getLogger(NamingLookupRequestHandler.class.getName());
+
+
   private final NameServer server;
   private final Codec<NamingMessage> codec;
 
-  public NamingLookupRequestHandler(NameServer server, Codec<NamingMessage> codec) {
+  public NamingLookupRequestHandler(final NameServer server, final Codec<NamingMessage> codec) {
     this.server = server;
     this.codec = codec;
   }
 
   @Override
-  public void onNext(NamingLookupRequest value) {
-    List<NameAssignment> nas = server.lookup(value.getIdentifiers());
-    byte[] resp = codec.encode(new NamingLookupResponse(nas));
+  public void onNext(final NamingLookupRequest value) {
+    final List<NameAssignment> nas = server.lookup(value.getIdentifiers());
+    final byte[] resp = codec.encode(new NamingLookupResponse(nas));
     try {
       value.getLink().write(resp);
-    } catch (IOException e) {
-      e.printStackTrace();
+    } catch (final IOException e) {
+      //Actually, there is no way Link.write can throw and IOException
+      //after netty4 merge. This needs to cleaned up
+      LOG.throwing("NamingLookupRequestHandler", "onNext", e);
     }
   }
 }
@@ -204,22 +250,27 @@ class NamingLookupRequestHandler implements EventHandler<NamingLookupRequest> {
  */
 class NamingRegisterRequestHandler implements EventHandler<NamingRegisterRequest> {
 
+  private static final Logger LOG = Logger.getLogger(NamingRegisterRequestHandler.class.getName());
+
+
   private final NameServer server;
   private final Codec<NamingMessage> codec;
 
-  public NamingRegisterRequestHandler(NameServer server, Codec<NamingMessage> codec) {
+  public NamingRegisterRequestHandler(final NameServer server, final Codec<NamingMessage> codec) {
     this.server = server;
     this.codec = codec;
   }
 
   @Override
-  public void onNext(NamingRegisterRequest value) {
+  public void onNext(final NamingRegisterRequest value) {
     server.register(value.getNameAssignment().getIdentifier(), value.getNameAssignment().getAddress());
-    byte[] resp = codec.encode(new NamingRegisterResponse(value));
+    final byte[] resp = codec.encode(new NamingRegisterResponse(value));
     try {
       value.getLink().write(resp);
-    } catch (IOException e) {
-      e.printStackTrace();
+    } catch (final IOException e) {
+      //Actually, there is no way Link.write can throw and IOException
+      //after netty4 merge. This needs to cleaned up
+      LOG.throwing("NamingRegisterRequestHandler", "onNext", e);
     }
   }
 }
@@ -231,12 +282,12 @@ class NamingUnregisterRequestHandler implements EventHandler<NamingUnregisterReq
 
   private final NameServer server;
 
-  public NamingUnregisterRequestHandler(NameServer server) {
+  public NamingUnregisterRequestHandler(final NameServer server) {
     this.server = server;
   }
 
   @Override
-  public void onNext(NamingUnregisterRequest value) {
+  public void onNext(final NamingUnregisterRequest value) {
     server.unregister(value.getIdentifier());
   }
 }

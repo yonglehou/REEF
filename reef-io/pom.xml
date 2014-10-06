@@ -4,7 +4,7 @@
     <parent>
         <groupId>com.microsoft.reef</groupId>
         <artifactId>reef-project</artifactId>
-        <version>0.8-SNAPSHOT</version>
+        <version>0.9-SNAPSHOT</version>
     </parent>
     <artifactId>reef-io</artifactId>
     <name>REEF IO</name>
@@ -23,7 +23,6 @@
                                 <exec executable="protoc">
                                     <arg value="--proto_path=src/main/proto/" />
                                     <arg value="--java_out=target/generated-sources/proto" />
-                                    <arg value="src/main/proto/group_comm_protocol.proto" />
                                     <arg value="src/main/proto/ns_protocol.proto" />
                                 </exec>
                             </tasks>
@@ -120,6 +119,11 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>reef-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>reef-webserver</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

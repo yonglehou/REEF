@@ -24,7 +24,6 @@ import com.microsoft.wake.EventHandler;
 
 import javax.inject.Inject;
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -86,13 +85,12 @@ public final class HttpServerReefEventHandler implements HttpHandler {
    */
   @Override
   public void onHttpRequest(
-      final HttpServletRequest request,
+      final ParsedHttpRequest parsedHttpRequest,
       final HttpServletResponse response) throws IOException, ServletException {
 
     LOG.log(Level.INFO, "HttpServerReefEventHandler in webserver onHttpRequest is called: {0}",
-        request.getRequestURI());
+        parsedHttpRequest.getRequestUri());
 
-    final ParsedHttpRequest parsedHttpRequest = new ParsedHttpRequest(request);
     final String version = parsedHttpRequest.getVersion().toLowerCase();
     final String target = parsedHttpRequest.getTargetEntity().toLowerCase();
 
@@ -211,6 +209,8 @@ public final class HttpServerReefEventHandler implements HttpHandler {
         writer.write("<br/>");
         writer.println("Evaluator Memory: " + evaluatorDescriptor.getMemory());
         writer.write("<br/>");
+        writer.println("Evaluator Core: " + evaluatorDescriptor.getNumberOfCores());
+        writer.write("<br/>");
         writer.println("Evaluator Type: " + evaluatorDescriptor.getType());
         writer.write("<br/>");
       } else {
@@ -276,7 +276,7 @@ public final class HttpServerReefEventHandler implements HttpHandler {
       final DriverInfoSerializer serializer =
           Tang.Factory.getTang().newInjector().getInstance(DriverInfoSerializer.class);
       final AvroDriverInfo driverInfo = serializer.toAvro(
-          this.reefStateManager.getDriverEndpointIdentifier(), this.reefStateManager.getStartTime());
+          this.reefStateManager.getDriverEndpointIdentifier(), this.reefStateManager.getStartTime(), this.reefStateManager.getServicesInfo());
       writeResponse(response, serializer.toString(driverInfo));
     } catch (final InjectionException e) {
       LOG.log(Level.SEVERE, "Error in injecting DriverInfoSerializer.", e);
@@ -305,8 +305,15 @@ public final class HttpServerReefEventHandler implements HttpHandler {
 
     writer.println(String.format("Driver Remote Identifier:[%s]",
         this.reefStateManager.getDriverEndpointIdentifier()));
-
     writer.write("<br/><br/>");
+
+    writer.println(String.format("Services registered on Driver:"));
+    writer.write("<br/><br/>");
+    for(final AvroReefServiceInfo service : this.reefStateManager.getServicesInfo()){
+      writer.println(String.format("Service: [%s] , Information: [%s]", service.getServiceName(), service.getServiceInfo()));
+      writer.write("<br/><br/>");
+    }
+
     writer.println(String.format("Driver Start Time:[%s]", this.reefStateManager.getStartTime()));
   }
 }

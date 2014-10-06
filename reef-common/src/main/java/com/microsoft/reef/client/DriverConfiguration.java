@@ -27,6 +27,7 @@ import com.microsoft.reef.driver.evaluator.CompletedEvaluator;
 import com.microsoft.reef.driver.evaluator.FailedEvaluator;
 import com.microsoft.reef.driver.parameters.*;
 import com.microsoft.reef.driver.task.*;
+import com.microsoft.reef.runtime.common.DriverRestartCompleted;
 import com.microsoft.reef.runtime.common.driver.DriverRuntimeConfiguration;
 import com.microsoft.tang.formats.*;
 import com.microsoft.wake.EventHandler;
@@ -71,6 +72,13 @@ public final class DriverConfiguration extends ConfigurationModuleBuilder {
    * Libraries to be made available on the Driver only.
    */
   public static final OptionalParameter<String> LOCAL_LIBRARIES = new OptionalParameter<>();
+
+  /**
+   * Job submission directory to be used by driver. This is the folder on the DFS used to stage the files
+   * for the Driver and subsequently for the Evaluators. It will be created if it doesn't exist yet.
+   * If this is set by the user, user must make sure its uniqueness across different jobs.
+   */
+  public static final OptionalParameter<String> DRIVER_JOB_SUBMISSION_DIRECTORY = new OptionalParameter<>();
 
   /**
    * The event handler invoked right after the driver boots up.
@@ -187,12 +195,18 @@ public final class DriverConfiguration extends ConfigurationModuleBuilder {
   public static final OptionalParameter<Integer> EVALUATOR_DISPATCHER_THREADS = new OptionalParameter<>();
 
   /**
+   * Event handler for the event of driver restart completion, default to logging if not bound.
+   */
+  public static final OptionalImpl<EventHandler<DriverRestartCompleted>> ON_DRIVER_RESTART_COMPLETED = new OptionalImpl<>();
+
+  /**
    * ConfigurationModule to fill out to get a legal Driver Configuration.
    */
   public static final ConfigurationModule CONF = new DriverConfiguration().merge(DriverRuntimeConfiguration.CONF)
 
       .bindNamedParameter(DriverIdentifier.class, DRIVER_IDENTIFIER)
       .bindNamedParameter(DriverMemory.class, DRIVER_MEMORY)
+      .bindNamedParameter(DriverJobSubmissionDirectory.class, DRIVER_JOB_SUBMISSION_DIRECTORY)
       .bindSetEntry(JobGlobalFiles.class, GLOBAL_FILES)
       .bindSetEntry(JobGlobalLibraries.class, GLOBAL_LIBRARIES)
       .bindSetEntry(DriverLocalFiles.class, LOCAL_FILES)
@@ -231,5 +245,6 @@ public final class DriverConfiguration extends ConfigurationModuleBuilder {
 
           // Various parameters
       .bindNamedParameter(EvaluatorDispatcherThreads.class, EVALUATOR_DISPATCHER_THREADS)
+      .bindSetEntry(DriverRestartCompletedHandlers.class, ON_DRIVER_RESTART_COMPLETED)
       .build();
 }
