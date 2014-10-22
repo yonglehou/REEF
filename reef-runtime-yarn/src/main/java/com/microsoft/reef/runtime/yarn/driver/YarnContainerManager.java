@@ -43,6 +43,7 @@ import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.impl.NMClientAsyncImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.util.Records;
 
 import javax.inject.Inject;
 import java.io.*;
@@ -77,6 +78,8 @@ final class YarnContainerManager
   private final ContainerRequestCounter containerRequestCounter;
   private final DriverStatusManager driverStatusManager;
   private final TrackingURLProvider trackingURLProvider;
+
+  private int lastContainerMemory = -1;
 
   @Inject
   YarnContainerManager(
@@ -402,7 +405,8 @@ final class YarnContainerManager
       }
       if (queueWasEmpty && containerRequests.length != 0) {
         AMRMClient.ContainerRequest firstRequest = outstandingContainerRequests.peek();
-        LOG.log(Level.FINEST, "Requesting first container from YARN: {0}", firstRequest);
+        LOG.log(Level.INFO, "Requesting first container from YARN: {0}", firstRequest);
+        this.lastContainerMemory = firstRequest.getCapability().getMemory();
         this.resourceManager.addContainerRequest(firstRequest);
       }
     }
@@ -420,22 +424,31 @@ final class YarnContainerManager
     LOG.log(Level.FINE, "allocated container: id[ {0} ]", container.getId());
     // recovered container is not new allocation, it is just checking back from previous driver failover
     if (!isRecoveredContainer) {
-      logContainerAddition(container.getId().toString());
       synchronized (this) {
         this.containerRequestCounter.decrement();
         if (!this.outstandingContainerRequests.isEmpty()) {
           this.containers.add(container);
-          // to be safe we need to make sure that previous request is no longer in async AMRM client's queue
-          // it is ok if the request is no longer there
-          try {
-            this.resourceManager.removeContainerRequest(this.outstandingContainerRequests.remove());
-          } catch (final Exception e) {
-            LOG.log(Level.FINEST, "Nothing to remove from Async AMRM client's queue, removal attempt failed with exception", e);
-          }
           final AMRMClient.ContainerRequest requestToBeSubmitted = this.outstandingContainerRequests.peek();
+          final int currentRequestMemory = requestToBeSubmitted.getCapability().getMemory();
+
+          AMRMClient.ContainerRequest removedRequest = this.outstandingContainerRequests.remove();
+          if (this.lastContainerMemory == currentRequestMemory) {
+            // to be safe we need to make sure that previous request is no longer in async AMRM client's queue
+            // it is ok if the request is no longer there
+            try {
+              LOG.log(Level.INFO,
+                "Requesting same amount of memory {0}, make sure previous request {1} is removed from AMRM client queue",
+                new Object[]{currentRequestMemory, removedRequest});
+              this.resourceManager.removeContainerRequest(removedRequest);
+            } catch (final Exception e) {
+              LOG.log(Level.WARNING, "Nothing to remove from Async AMRM client's queue, removal attempt failed with exception", e);
+            }
+          }
+
           if (requestToBeSubmitted != null) {
-            LOG.log(Level.FINEST, "Requesting 1 additional container from YARN: {0}", requestToBeSubmitted);
+            LOG.log(Level.INFO, "Requesting 1 additional container from YARN: {0}", requestToBeSubmitted);
             this.resourceManager.addContainerRequest(requestToBeSubmitted);
+            this.lastContainerMemory = currentRequestMemory;
           }
           LOG.log(Level.FINEST, "Allocated Container: memory = {0}, core number = {1}", new Object[]{container.getResource().getMemory(), container.getResource().getVirtualCores()});
           this.reefEventHandlers.onResourceAllocation(ResourceAllocationProto.newBuilder()
@@ -444,12 +457,17 @@ final class YarnContainerManager
               .setResourceMemory(container.getResource().getMemory())
               .setVirtualCores(container.getResource().getVirtualCores())
               .build());
-
+          // we only add this to Container log after the Container has been registered as an REEF Evaluator.
+          logContainerAddition(container.getId().toString());
           this.updateRuntimeStatus();
         } else {
           // since no request is removed from local queue until new container is allocated
-          // the queue should not be empty at the beginning of this call
-          LOG.warning("outstandingContainerRequests is empty upon container allocation.");
+          // the queue should not be empty at the beginning of this call, as a failsafe, we release the
+          // unexpected container
+          LOG.log(Level.WARNING,
+            "outstandingContainerRequests is empty upon allocation of unexpected container {0}, releasing...",
+            container.getId());
+          this.resourceManager.releaseAssignedContainer(container.getId());
         }
       }
     }
